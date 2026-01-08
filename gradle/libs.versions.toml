@@ -1,0 +1,18 @@
+[versions]
+paper = "1.21.8-R0.1-SNAPSHOT"
+shadow = "9.1.0"
+jetbrainsAnnotations = "24.1.0"
+junit = "5.10.1"
+mockito = "5.7.0"
+checkstyle = "10.12.4"
+
+[libraries]
+paper-api = { group = "io.papermc.paper", name = "paper-api", version.ref = "paper" }
+jetbrains-annotations = { group = "org.jetbrains", name = "annotations", version.ref = "jetbrainsAnnotations" }
+junit-bom = { group = "org.junit", name = "junit-bom", version.ref = "junit" }
+junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter" }
+mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockito" }
+mockito-junit-jupiter = { group = "org.mockito", name = "mockito-junit-jupiter", version.ref = "mockito" }
+
+[plugins]
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }

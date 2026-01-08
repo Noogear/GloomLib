@@ -1,0 +1,15 @@
+plugins {
+    alias(libs.plugins.shadow) apply false
+}
+
+allprojects {
+    group = 'gloomlib'
+    version = '1.0.0.0'
+
+    repositories {
+        mavenCentral()
+        maven { url = "https://repo.papermc.io/repository/maven-public/" }
+        maven { url = "https://oss.sonatype.org/content/groups/public/" }
+        maven { url = 'https://repo.extendedclip.com/releases/' }
+    }
+}
