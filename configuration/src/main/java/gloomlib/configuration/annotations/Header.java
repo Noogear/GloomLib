@@ -8,7 +8,7 @@ import java.lang.annotation.Target;
 /**
  * Adds header comments to the top of the YAML file.
  * <p>
- * This annotation should be applied to the configuration class.
+ * This annotation should be applied to the {@link gloomlib.configuration.ConfigurationFile} class.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
