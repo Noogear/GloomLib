@@ -23,6 +23,7 @@ import java.util.regex.Pattern;
  * <p>
  * This class handles the lifecycle of configuration files, including loading, saving,
  * serialization, deserialization, and synchronization between Java objects and YAML files.
+ * </p>
  * <p>
  * <b>Key Features:</b>
  * <ul>
@@ -31,45 +32,28 @@ import java.util.regex.Pattern;
  * <li><b>Type Safety:</b> Supports Java Records, Enums, UUIDs, and Bukkit Serialization.</li>
  * <li><b>Robustness:</b> Provides detailed error logging and auto-recovery for invalid values.</li>
  * </ul>
+ * </p>
  */
 public class ConfigurationManager {
 
     private static final Pattern CAMEL_PATTERN = Pattern.compile("([a-z])([A-Z]+)");
-    /**
-     * Cache for reflection metadata to avoid repetitive lookups.
-     */
+
     private static final Map<Class<?>, List<FieldMeta>> META_CACHE = new ConcurrentHashMap<>();
-    /**
-     * Cache for file metadata to skip unnecessary I/O reads.
-     */
     private static final Map<String, FileCacheEntry> FILE_CACHE = new ConcurrentHashMap<>();
-    /**
-     * Cache for validator instances.
-     */
     private static final Map<Class<?>, Check.Validator<?>> VALIDATOR_CACHE = new ConcurrentHashMap<>();
-    /**
-     * Cache for reflected validation methods.
-     */
     private static final Map<String, Method> METHOD_CACHE = new ConcurrentHashMap<>();
-    /**
-     * Registry for custom type adapters.
-     */
     private static final Map<Class<?>, TypeAdapter<?>> ADAPTERS = new ConcurrentHashMap<>();
-    /**
-     * Cache for checking if a class overrides toString().
-     */
     private static final Map<Class<?>, Boolean> TO_STRING_CACHE = new ConcurrentHashMap<>();
-    private static ComponentLogger LOGGER;
+
+    private static ComponentLogger logger;
 
     /**
      * Enables logging for the configuration manager.
-     * <p>
-     * It is highly recommended to call this in your plugin's onEnable logic.
      *
-     * @param logger the plugin's ComponentLogger
+     * @param componentLogger the plugin's ComponentLogger
      */
-    public static void enableLogging(ComponentLogger logger) {
-        LOGGER = logger;
+    public static void enableLogging(ComponentLogger componentLogger) {
+        logger = componentLogger;
     }
 
     /**
@@ -86,17 +70,20 @@ public class ConfigurationManager {
     /**
      * Loads a configuration file into a Java object.
      * <p>
-     * If the file does not exist, it will be created with default values.
+     * If the file does not exist, it will be created with default values based on the class structure.
+     * </p>
      *
-     * @param clazz the configuration class (must extend ConfigurationFile)
-     * @param file  the target file on disk
-     * @param <T>   the type of the configuration class
-     * @return the loaded configuration instance
-     * @throws Exception if loading fails (IO error, Syntax error, etc.)
+     * @param clazz the class of the configuration object
+     * @param file  the file to load from
+     * @param <T>   the type of the configuration object
+     * @return the loaded configuration object
+     * @throws Exception if an error occurs during loading
      */
     @SuppressWarnings("unchecked")
     public static <T extends ConfigurationFile> T load(Class<T> clazz, File file) throws Exception {
-        if (!file.exists()) return (T) saveDefault(clazz, file);
+        if (!file.exists()) {
+            return saveDefault(clazz, file);
+        }
 
         YamlConfiguration yaml = loadYaml(file);
         T instance = createInstance(clazz);
@@ -108,16 +95,33 @@ public class ConfigurationManager {
     }
 
     /**
-     * Reloads an existing configuration instance from disk.
+     * Creates the file and delegates to load mechanism to populate and save defaults.
      * <p>
-     * This forces a read from the disk, bypassing the cache check.
+     * This avoids running hooks multiple times.
+     * </p>
+     *
+     * @param clazz the class of the configuration object
+     * @param file  the file to create and save to
+     * @param <T>   the type of the configuration object
+     * @return the loaded configuration object with default values
+     * @throws Exception if an error occurs during saving or loading
+     */
+    public static <T extends ConfigurationFile> T saveDefault(Class<T> clazz, File file) throws Exception {
+        createIfNotExist(file);
+        return load(clazz, file);
+    }
+
+    /**
+     * Reloads the configuration from the file system.
      *
      * @param instance the configuration instance to reload
-     * @throws Exception if reloading fails
+     * @throws Exception if an error occurs during reloading
      */
     public static void reload(ConfigurationFile instance) throws Exception {
         File file = instance.getFile();
-        if (file == null || !file.exists()) throw new IllegalStateException("Config file does not exist: " + file);
+        if (file == null || !file.exists()) {
+            throw new IllegalStateException("Config file does not exist: " + file);
+        }
 
         YamlConfiguration yaml = new YamlConfiguration();
         try {
@@ -133,16 +137,17 @@ public class ConfigurationManager {
     }
 
     /**
-     * Saves the current state of a configuration instance to disk.
+     * Saves the configuration instance to the file system.
      *
-     * @param instance the configuration instance
-     * @param file     the target file
-     * @throws Exception if saving fails
+     * @param instance the configuration instance to save
+     * @param file     the file to save to
+     * @throws Exception if an error occurs during saving
      */
     public static void save(ConfigurationFile instance, File file) throws Exception {
         YamlConfiguration yaml = new YamlConfiguration();
-        if (instance.getClass().isAnnotationPresent(Header.class))
+        if (instance.getClass().isAnnotationPresent(Header.class)) {
             yaml.options().setHeader(List.of(instance.getClass().getAnnotation(Header.class).value()));
+        }
 
         runHooks(instance, PreLoad.class);
         writeSection(yaml, instance);
@@ -152,30 +157,12 @@ public class ConfigurationManager {
         FILE_CACHE.put(file.getAbsolutePath(), new FileCacheEntry(file.lastModified(), file.length(), yaml));
     }
 
-    /**
-     * Creates and saves a default configuration file based on the Java class structure.
-     *
-     * @param clazz the configuration class
-     * @param file  the target file
-     * @return the newly created configuration instance
-     * @throws Exception if creation fails
-     */
-    public static ConfigurationFile saveDefault(Class<? extends ConfigurationFile> clazz, File file) throws Exception {
-        createIfNotExist(file);
-        ConfigurationFile instance = createInstance(clazz);
-        instance.setFile(file);
-
-        processTemplates(instance);
-        runHooks(instance, PreLoad.class);
-
-        save(instance, file);
-        return load(clazz, file);
-    }
-
     private static YamlConfiguration loadYaml(File file) throws Exception {
         String path = file.getAbsolutePath();
         FileCacheEntry cached = FILE_CACHE.get(path);
-        if (cached != null && cached.isFresh(file)) return cached.yaml;
+        if (cached != null && cached.isFresh(file)) {
+            return cached.yaml;
+        }
 
         YamlConfiguration yaml = new YamlConfiguration();
         try {
@@ -207,9 +194,6 @@ public class ConfigurationManager {
         runHooks(instance, PostLoad.class);
     }
 
-    /**
-     * Processes @Template annotations to auto-populate Maps with default values.
-     */
     @SuppressWarnings("unchecked")
     private static void processTemplates(Object instance) throws Exception {
         for (FieldMeta meta : getCachedMeta(instance.getClass())) {
@@ -217,6 +201,7 @@ public class ConfigurationManager {
             if (Map.class.isAssignableFrom(field.getType())) {
                 Type genericType = field.getGenericType();
                 Class<?> valueType = getGenericType(genericType, 1);
+
                 if (valueType.isAnnotationPresent(Template.class)) {
                     Template template = valueType.getAnnotation(Template.class);
                     String defaultKey = template.name();
@@ -245,10 +230,6 @@ public class ConfigurationManager {
         }
     }
 
-    /**
-     * Synchronizes the YAML section with the Java object.
-     * Handles reading values, writing defaults, and recursive parsing.
-     */
     @SuppressWarnings("unchecked")
     private static void syncSection(ConfigurationSection section, ConfigurationPart obj, AtomicBoolean isDirty) throws Exception {
         List<FieldMeta> metas = getCachedMeta(obj.getClass());
@@ -265,16 +246,24 @@ public class ConfigurationManager {
                 continue;
             }
 
-            if (meta.hasComment()) section.setComments(key, List.of(meta.getAnnotation(Comment.class).value()));
-            if (meta.hasInline()) section.setInlineComments(key, List.of(meta.getAnnotation(Inline.class).value()));
+            if (meta.hasComment()) {
+                section.setComments(key, List.of(meta.getAnnotation(Comment.class).value()));
+            }
+            if (meta.hasInline()) {
+                section.setInlineComments(key, List.of(meta.getAnnotation(Inline.class).value()));
+            }
 
             try {
                 if (ConfigurationPart.class.isAssignableFrom(meta.field.getType())) {
                     ConfigurationPart part = (ConfigurationPart) defaultVal;
-                    if (part == null) part = createInstance((Class<? extends ConfigurationPart>) meta.field.getType());
+                    if (part == null) {
+                        part = createInstance((Class<? extends ConfigurationPart>) meta.field.getType());
+                    }
 
                     ConfigurationSection sub = section.getConfigurationSection(key);
-                    if (sub == null) sub = section.createSection(key);
+                    if (sub == null) {
+                        sub = section.createSection(key);
+                    }
 
                     syncSection(sub, part, isDirty);
                     meta.set(obj, part);
@@ -283,7 +272,9 @@ public class ConfigurationManager {
 
                 Object loadedVal = deserialize(section.get(key), meta.field.getType(), meta.field.getGenericType());
 
-                if (meta.hasCheck()) loadedVal = runCheck(meta, loadedVal);
+                if (meta.hasCheck()) {
+                    loadedVal = runCheck(meta, loadedVal);
+                }
 
                 meta.set(obj, loadedVal);
             } catch (Exception e) {
@@ -300,94 +291,113 @@ public class ConfigurationManager {
     }
 
     private static void writeSection(ConfigurationSection section, ConfigurationPart obj) throws Exception {
-        for (FieldMeta meta : getCachedMeta(obj.getClass())) writeField(section, meta.key(), meta.get(obj), meta);
+        for (FieldMeta meta : getCachedMeta(obj.getClass())) {
+            writeField(section, meta.key(), meta.get(obj), meta);
+        }
     }
 
     private static void writeField(ConfigurationSection section, String key, Object val, FieldMeta meta) throws Exception {
-        if (val == null) return;
+        if (val == null) {
+            return;
+        }
 
         if (val instanceof ConfigurationPart part) {
             ConfigurationSection sub = section.createSection(key);
             writeSection(sub, part);
-        }
-        else if (val instanceof Map<?, ?> map) {
+        } else if (val instanceof Map<?, ?> map) {
             ConfigurationSection sub = section.createSection(key);
             writeMap(sub, map);
-        }
-        else {
+        } else {
             section.set(key, serialize(val));
         }
 
-        if (meta.hasComment()) section.setComments(key, List.of(meta.getAnnotation(Comment.class).value()));
-        if (meta.hasInline()) section.setInlineComments(key, List.of(meta.getAnnotation(Inline.class).value()));
+        if (meta.hasComment()) {
+            section.setComments(key, List.of(meta.getAnnotation(Comment.class).value()));
+        }
+        if (meta.hasInline()) {
+            section.setInlineComments(key, List.of(meta.getAnnotation(Inline.class).value()));
+        }
     }
 
     private static void writeMap(ConfigurationSection section, Map<?, ?> map) throws Exception {
         for (Map.Entry<?, ?> entry : map.entrySet()) {
-            Object keyObj = serialize(entry.getKey());
+            Object keyObj = entry.getKey();
+            String k = (keyObj instanceof Enum<?> e) ? e.name() : keyObj.toString();
 
-            if (keyObj instanceof String k) {
-                Object serializedVal = serialize(entry.getValue());
-                if (serializedVal instanceof Map<?, ?> subMap) {
-                    ConfigurationSection sub = section.createSection(k);
-                    writeMap(sub, subMap);
-                } else {
-                    section.set(k, serializedVal);
-                }
+            Object serializedVal = serialize(entry.getValue());
+            if (serializedVal instanceof Map<?, ?> subMap) {
+                ConfigurationSection sub = section.createSection(k);
+                writeMap(sub, subMap);
+            } else {
+                section.set(k, serializedVal);
             }
         }
     }
 
     @SuppressWarnings("unchecked")
     private static Object serialize(Object val) throws Exception {
-        if (val == null) return null;
+        if (val == null) {
+            return null;
+        }
         Class<?> type = val.getClass();
 
-        if (ADAPTERS.containsKey(type)) return ((TypeAdapter<Object>) ADAPTERS.get(type)).serialize(val);
+        if (ADAPTERS.containsKey(type)) {
+            return ((TypeAdapter<Object>) ADAPTERS.get(type)).serialize(val);
+        }
 
         if (type.isRecord()) {
             Map<String, Object> map = new LinkedHashMap<>();
-            for (RecordComponent rc : type.getRecordComponents())
+            for (RecordComponent rc : type.getRecordComponents()) {
                 map.put(camelToKebab(rc.getName()), serialize(rc.getAccessor().invoke(val)));
+            }
             return map;
         }
 
-        return switch (val) {
-            case ConfigurationPart part -> {
-                Map<String, Object> map = new LinkedHashMap<>();
-                for (FieldMeta meta : getCachedMeta(part.getClass())) map.put(meta.key(), serialize(meta.get(part)));
-                yield map;
+        if (val instanceof ConfigurationPart part) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            for (FieldMeta meta : getCachedMeta(part.getClass())) {
+                map.put(meta.key(), serialize(meta.get(part)));
             }
-            case Map<?, ?> map -> {
-                Map<String, Object> newMap = new LinkedHashMap<>();
-                for (Map.Entry<?, ?> e : map.entrySet())
-                    if (e.getKey() instanceof String k) newMap.put(k, serialize(e.getValue()));
-                yield newMap;
+            return map;
+        } else if (val instanceof Map<?, ?> map) {
+            Map<String, Object> newMap = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> e : map.entrySet()) {
+                Object key = e.getKey();
+                String keyStr = (key instanceof Enum<?> en) ? en.name() : key.toString();
+                newMap.put(keyStr, serialize(e.getValue()));
             }
-            case Collection<?> col -> {
-                List<Object> list = new ArrayList<>();
-                for (Object o : col) list.add(serialize(o));
-                yield list;
+            return newMap;
+        } else if (val instanceof Collection<?> col) {
+            List<Object> list = new ArrayList<>();
+            for (Object o : col) {
+                list.add(serialize(o));
             }
-            case Enum<?> e -> e.name();
-            case UUID uuid -> uuid.toString();
-            case ConfigurationSerializable serializable -> serializable;
-            default -> {
-                if (val instanceof Number || val instanceof Boolean || val instanceof String || val instanceof Character) {
-                    yield val;
-                }
-                if (hasToString(type)) {
-                    yield val.toString();
-                }
-                yield val;
+            return list;
+        } else if (val instanceof Enum<?> e) {
+            return e.name();
+        } else if (val instanceof UUID uuid) {
+            return uuid.toString();
+        } else if (val instanceof ConfigurationSerializable serializable) {
+            return serializable;
+        } else {
+            if (val instanceof Number || val instanceof Boolean || val instanceof String || val instanceof Character) {
+                return val;
             }
-        };
+            if (hasToString(type)) {
+                return val.toString();
+            }
+            return val;
+        }
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static Object deserialize(Object raw, Class<?> type, Type genericType) throws Exception {
-        if (raw == null) return null;
-        if (ADAPTERS.containsKey(type)) return ADAPTERS.get(type).deserialize(raw);
+        if (raw == null) {
+            return null;
+        }
+        if (ADAPTERS.containsKey(type)) {
+            return ADAPTERS.get(type).deserialize(raw);
+        }
 
         if (type.isRecord()) {
             Map<String, Object> map = (raw instanceof ConfigurationSection cs) ? cs.getValues(false) : (Map) raw;
@@ -407,8 +417,13 @@ public class ConfigurationManager {
         if (ConfigurationPart.class.isAssignableFrom(type)) {
             ConfigurationPart inst = createInstance((Class<? extends ConfigurationPart>) type);
             ConfigurationSection tmp = new MemoryConfiguration();
-            if (raw instanceof ConfigurationSection cs) tmp = cs;
-            else if (raw instanceof Map map) for (Object k : map.keySet()) tmp.set(k.toString(), map.get(k));
+            if (raw instanceof ConfigurationSection cs) {
+                tmp = cs;
+            } else if (raw instanceof Map map) {
+                for (Object k : map.keySet()) {
+                    tmp.set(k.toString(), map.get(k));
+                }
+            }
 
             syncSection(tmp, inst, new AtomicBoolean());
             return inst;
@@ -423,13 +438,15 @@ public class ConfigurationManager {
             if (raw instanceof ConfigurationSection cs) {
                 for (String k : cs.getKeys(false)) {
                     Object val = cs.get(k);
-                    map.put(convertPrimitive(k, kType), deserialize(val, vType, vType));
+                    Object keyVal = convertPrimitive(k, kType);
+                    map.put(keyVal, deserialize(val, vType, vType));
                 }
             } else if (raw instanceof Map<?, ?> rawMap) {
                 for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
                     String k = entry.getKey().toString();
                     Object val = entry.getValue();
-                    map.put(convertPrimitive(k, kType), deserialize(val, vType, vType));
+                    Object keyVal = convertPrimitive(k, kType);
+                    map.put(keyVal, deserialize(val, vType, vType));
                 }
             } else {
                 return raw;
@@ -440,12 +457,16 @@ public class ConfigurationManager {
         if (List.class.isAssignableFrom(type) && raw instanceof List<?> list) {
             List<Object> newList = new ArrayList<>();
             Class<?> iType = getGenericType(genericType, 0);
-            for (Object o : list) newList.add(deserialize(o, iType, iType));
+            for (Object o : list) {
+                newList.add(deserialize(o, iType, iType));
+            }
             return newList;
         }
 
         if (ConfigurationSerializable.class.isAssignableFrom(type)) {
-            if (type.isInstance(raw)) return raw;
+            if (type.isInstance(raw)) {
+                return raw;
+            }
             if (raw instanceof Map map) {
                 try {
                     return ConfigurationSerialization.deserializeObject(map, (Class<? extends ConfigurationSerializable>) type);
@@ -465,11 +486,12 @@ public class ConfigurationManager {
                 String key = annotation.cls().getName() + "#" + annotation.method();
                 Method m = METHOD_CACHE.computeIfAbsent(key, k -> {
                     try {
-                        for (Method me : annotation.cls().getDeclaredMethods())
+                        for (Method me : annotation.cls().getDeclaredMethods()) {
                             if (me.getName().equals(annotation.method()) && me.getParameterCount() == 1) {
                                 me.setAccessible(true);
                                 return me;
                             }
+                        }
                         throw new RuntimeException("Method not found");
                     } catch (Exception e) {
                         throw new RuntimeException(e);
@@ -499,8 +521,9 @@ public class ConfigurationManager {
         return META_CACHE.computeIfAbsent(clazz, k -> {
             List<FieldMeta> list = new ArrayList<>();
             for (Field f : k.getFields()) {
-                if (f.isAnnotationPresent(Ignore.class) || Modifier.isStatic(f.getModifiers()) || Modifier.isTransient(f.getModifiers()) || Modifier.isFinal(f.getModifiers()))
+                if (f.isAnnotationPresent(Ignore.class) || Modifier.isStatic(f.getModifiers()) || Modifier.isTransient(f.getModifiers()) || Modifier.isFinal(f.getModifiers())) {
                     continue;
+                }
                 f.setAccessible(true);
                 list.add(new FieldMeta(f, camelToKebab(f.getName()), f.isAnnotationPresent(Check.class), f.isAnnotationPresent(Comment.class), f.isAnnotationPresent(Inline.class)));
             }
@@ -510,7 +533,11 @@ public class ConfigurationManager {
 
     private static void runHooks(Object inst, Class<? extends Annotation> anno) throws Exception {
         List<Method> ms = new ArrayList<>();
-        for (Method m : inst.getClass().getMethods()) if (m.isAnnotationPresent(anno)) ms.add(m);
+        for (Method m : inst.getClass().getMethods()) {
+            if (m.isAnnotationPresent(anno)) {
+                ms.add(m);
+            }
+        }
         ms.sort(Comparator.comparingInt(m -> {
             try {
                 return (int) anno.getMethod("priority").invoke(m.getAnnotation(anno));
@@ -518,7 +545,9 @@ public class ConfigurationManager {
                 return 0;
             }
         }));
-        for (Method m : ms) m.invoke(inst);
+        for (Method m : ms) {
+            m.invoke(inst);
+        }
     }
 
     private static <T> T createInstance(Class<T> c) throws Exception {
@@ -557,10 +586,24 @@ public class ConfigurationManager {
     }
 
     private static Class<?> getGenericType(Type t, int i) {
-        if (!(t instanceof ParameterizedType pt)) return Object.class;
-        Type arg = pt.getActualTypeArguments()[i];
-        if (arg instanceof Class<?> c) return c;
-        if (arg instanceof ParameterizedType ipt) return (Class<?>) ipt.getRawType();
+        if (t instanceof ParameterizedType pt) {
+            Type[] args = pt.getActualTypeArguments();
+            if (i < args.length) {
+                Type arg = args[i];
+                if (arg instanceof Class<?> c) {
+                    return c;
+                }
+                if (arg instanceof ParameterizedType ipt) {
+                    return (Class<?>) ipt.getRawType();
+                }
+                if (arg instanceof WildcardType wt && wt.getUpperBounds().length > 0) {
+                    Type ub = wt.getUpperBounds()[0];
+                    if (ub instanceof Class<?> c) {
+                        return c;
+                    }
+                }
+            }
+        }
         return Object.class;
     }
 
@@ -583,47 +626,86 @@ public class ConfigurationManager {
         if (Number.class.isAssignableFrom(primitiveToWrapper(type)) || type.isPrimitive()) {
             String s = raw.toString();
             try {
-                if (type == int.class || type == Integer.class) return (int) Double.parseDouble(s);
-                if (type == double.class || type == Double.class) return Double.parseDouble(s);
-                if (type == boolean.class || type == Boolean.class) return Boolean.parseBoolean(s);
-                if (type == long.class || type == Long.class) return (long) Double.parseDouble(s);
-                if (type == float.class || type == Float.class) return Float.parseFloat(s);
+                if (type == int.class || type == Integer.class) {
+                    return (int) Double.parseDouble(s);
+                }
+                if (type == double.class || type == Double.class) {
+                    return Double.parseDouble(s);
+                }
+                if (type == boolean.class || type == Boolean.class) {
+                    return Boolean.parseBoolean(s);
+                }
+                if (type == long.class || type == Long.class) {
+                    return (long) Double.parseDouble(s);
+                }
+                if (type == float.class || type == Float.class) {
+                    return Float.parseFloat(s);
+                }
             } catch (Exception ignored) {
+                // Ignore parsing errors for numbers
             }
         }
         return raw;
     }
 
     private static Class<?> primitiveToWrapper(Class<?> type) {
-        if (!type.isPrimitive()) return type;
-        if (type == int.class) return Integer.class;
-        if (type == double.class) return Double.class;
-        if (type == boolean.class) return Boolean.class;
-        if (type == long.class) return Long.class;
-        if (type == float.class) return Float.class;
+        if (!type.isPrimitive()) {
+            return type;
+        }
+        if (type == int.class) {
+            return Integer.class;
+        }
+        if (type == double.class) {
+            return Double.class;
+        }
+        if (type == boolean.class) {
+            return Boolean.class;
+        }
+        if (type == long.class) {
+            return Long.class;
+        }
+        if (type == float.class) {
+            return Float.class;
+        }
         return type;
     }
 
     private static Object getPrimitiveDefault(Class<?> t) {
-        if (t == int.class) return 0;
-        if (t == boolean.class) return false;
-        if (t == double.class) return 0.0;
-        if (t == long.class) return 0L;
-        if (t == float.class) return 0.0f;
+        if (t == int.class) {
+            return 0;
+        }
+        if (t == boolean.class) {
+            return false;
+        }
+        if (t == double.class) {
+            return 0.0;
+        }
+        if (t == long.class) {
+            return 0L;
+        }
+        if (t == float.class) {
+            return 0.0f;
+        }
         return null;
     }
 
     private static void logError(String m, Throwable e) {
-        if (LOGGER != null) LOGGER.error(m, e);
-        else {
+        if (logger != null) {
+            logger.error(m, e);
+        } else {
             System.err.println("[Config] [ERROR] " + m);
-            if (e != null) e.printStackTrace();
+            if (e != null) {
+                e.printStackTrace();
+            }
         }
     }
 
     private static void logWarn(String m) {
-        if (LOGGER != null) LOGGER.warn(m);
-        else System.out.println("[Config] [WARN] " + m);
+        if (logger != null) {
+            logger.warn(m);
+        } else {
+            System.out.println("[Config] [WARN] " + m);
+        }
     }
 
     /**
@@ -632,8 +714,20 @@ public class ConfigurationManager {
      * @param <T> the target type
      */
     public interface TypeAdapter<T> {
+        /**
+         * Serializes the value into a YAML-compatible object.
+         *
+         * @param value the value to serialize
+         * @return the serialized object
+         */
         Object serialize(T value);
 
+        /**
+         * Deserializes the YAML value into the target type.
+         *
+         * @param yamlValue the YAML value to deserialize
+         * @return the deserialized object
+         */
         T deserialize(Object yamlValue);
     }
 
