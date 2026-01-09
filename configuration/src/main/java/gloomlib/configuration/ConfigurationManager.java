@@ -305,14 +305,37 @@ public class ConfigurationManager {
 
     private static void writeField(ConfigurationSection section, String key, Object val, FieldMeta meta) throws Exception {
         if (val == null) return;
+
         if (val instanceof ConfigurationPart part) {
             ConfigurationSection sub = section.createSection(key);
             writeSection(sub, part);
-        } else {
+        }
+        else if (val instanceof Map<?, ?> map) {
+            ConfigurationSection sub = section.createSection(key);
+            writeMap(sub, map);
+        }
+        else {
             section.set(key, serialize(val));
         }
+
         if (meta.hasComment()) section.setComments(key, List.of(meta.getAnnotation(Comment.class).value()));
         if (meta.hasInline()) section.setInlineComments(key, List.of(meta.getAnnotation(Inline.class).value()));
+    }
+
+    private static void writeMap(ConfigurationSection section, Map<?, ?> map) throws Exception {
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            Object keyObj = serialize(entry.getKey());
+
+            if (keyObj instanceof String k) {
+                Object serializedVal = serialize(entry.getValue());
+                if (serializedVal instanceof Map<?, ?> subMap) {
+                    ConfigurationSection sub = section.createSection(k);
+                    writeMap(sub, subMap);
+                } else {
+                    section.set(k, serializedVal);
+                }
+            }
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -392,19 +415,21 @@ public class ConfigurationManager {
         }
 
         if (Map.class.isAssignableFrom(type)) {
-            Map<String, Object> map = new LinkedHashMap<>();
+            Map<Object, Object> map = new LinkedHashMap<>();
+
+            Class<?> kType = getGenericType(genericType, 0);
             Class<?> vType = getGenericType(genericType, 1);
 
             if (raw instanceof ConfigurationSection cs) {
                 for (String k : cs.getKeys(false)) {
                     Object val = cs.get(k);
-                    map.put(k, deserialize(val, vType, vType));
+                    map.put(convertPrimitive(k, kType), deserialize(val, vType, vType));
                 }
             } else if (raw instanceof Map<?, ?> rawMap) {
                 for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
                     String k = entry.getKey().toString();
                     Object val = entry.getValue();
-                    map.put(k, deserialize(val, vType, vType));
+                    map.put(convertPrimitive(k, kType), deserialize(val, vType, vType));
                 }
             } else {
                 return raw;
