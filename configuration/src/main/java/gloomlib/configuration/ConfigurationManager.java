@@ -165,8 +165,8 @@ public class ConfigurationManager {
         ConfigurationFile instance = createInstance(clazz);
         instance.setFile(file);
 
-        runHooks(instance, PreLoad.class);
         processTemplates(instance);
+        runHooks(instance, PreLoad.class);
 
         save(instance, file);
         return load(clazz, file);
@@ -189,8 +189,8 @@ public class ConfigurationManager {
     }
 
     private static void populateInstance(ConfigurationFile instance, YamlConfiguration yaml, File file) throws Exception {
-        runHooks(instance, PreLoad.class);
         processTemplates(instance);
+        runHooks(instance, PreLoad.class);
 
         AtomicBoolean isDirty = new AtomicBoolean(false);
         try {
@@ -391,10 +391,24 @@ public class ConfigurationManager {
             return inst;
         }
 
-        if (Map.class.isAssignableFrom(type) && raw instanceof ConfigurationSection cs) {
+        if (Map.class.isAssignableFrom(type)) {
             Map<String, Object> map = new LinkedHashMap<>();
             Class<?> vType = getGenericType(genericType, 1);
-            for (String k : cs.getKeys(false)) map.put(k, deserialize(cs.get(k), vType, vType));
+
+            if (raw instanceof ConfigurationSection cs) {
+                for (String k : cs.getKeys(false)) {
+                    Object val = cs.get(k);
+                    map.put(k, deserialize(val, vType, vType));
+                }
+            } else if (raw instanceof Map<?, ?> rawMap) {
+                for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+                    String k = entry.getKey().toString();
+                    Object val = entry.getValue();
+                    map.put(k, deserialize(val, vType, vType));
+                }
+            } else {
+                return raw;
+            }
             return map;
         }
 
@@ -518,7 +532,11 @@ public class ConfigurationManager {
     }
 
     private static Class<?> getGenericType(Type t, int i) {
-        return (t instanceof ParameterizedType pt && pt.getActualTypeArguments()[i] instanceof Class<?> c) ? c : Object.class;
+        if (!(t instanceof ParameterizedType pt)) return Object.class;
+        Type arg = pt.getActualTypeArguments()[i];
+        if (arg instanceof Class<?> c) return c;
+        if (arg instanceof ParameterizedType ipt) return (Class<?>) ipt.getRawType();
+        return Object.class;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
