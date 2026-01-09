@@ -56,5 +56,3 @@ public @interface Template {
         STRICT
     }
 }
-
-

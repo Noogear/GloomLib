@@ -45,6 +45,3 @@ public abstract class ConfigurationPart {
         return null;
     }
 }
-
-
-
