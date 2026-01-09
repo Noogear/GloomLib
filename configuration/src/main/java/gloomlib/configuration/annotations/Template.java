@@ -22,6 +22,13 @@ public @interface Template {
     Strategy value() default Strategy.FORCE;
 
     /**
+     * The key name to use for the default entry.
+     *
+     * @return the default key name, defaults to "default"
+     */
+    String name() default "default";
+
+    /**
      * Strategies for generating default keys in configuration maps.
      */
     enum Strategy {

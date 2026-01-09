@@ -11,6 +11,7 @@ import org.bukkit.configuration.serialization.ConfigurationSerialization;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,35 +21,79 @@ import java.util.regex.Pattern;
 /**
  * High-Performance Configuration Manager.
  * <p>
- * Features:
+ * This class handles the lifecycle of configuration files, including loading, saving,
+ * serialization, deserialization, and synchronization between Java objects and YAML files.
+ * <p>
+ * <b>Key Features:</b>
  * <ul>
- * <li>Smart caching to minimize I/O.</li>
- * <li>Auto-trimming of unused keys.</li>
- * <li>Support for Java Records and Bukkit Serialization.</li>
- * <li>Robust error handling and logging.</li>
+ * <li><b>Smart Caching:</b> Minimizes I/O operations by checking file modification times.</li>
+ * <li><b>Auto-Trim:</b> Automatically removes unused keys from the YAML file to keep it clean.</li>
+ * <li><b>Type Safety:</b> Supports Java Records, Enums, UUIDs, and Bukkit Serialization.</li>
+ * <li><b>Robustness:</b> Provides detailed error logging and auto-recovery for invalid values.</li>
  * </ul>
  */
 public class ConfigurationManager {
 
     private static final Pattern CAMEL_PATTERN = Pattern.compile("([a-z])([A-Z]+)");
-    // --- Caches ---
+    /**
+     * Cache for reflection metadata to avoid repetitive lookups.
+     */
     private static final Map<Class<?>, List<FieldMeta>> META_CACHE = new ConcurrentHashMap<>();
+    /**
+     * Cache for file metadata to skip unnecessary I/O reads.
+     */
     private static final Map<String, FileCacheEntry> FILE_CACHE = new ConcurrentHashMap<>();
+    /**
+     * Cache for validator instances.
+     */
     private static final Map<Class<?>, Check.Validator<?>> VALIDATOR_CACHE = new ConcurrentHashMap<>();
+    /**
+     * Cache for reflected validation methods.
+     */
     private static final Map<String, Method> METHOD_CACHE = new ConcurrentHashMap<>();
+    /**
+     * Registry for custom type adapters.
+     */
     private static final Map<Class<?>, TypeAdapter<?>> ADAPTERS = new ConcurrentHashMap<>();
+    /**
+     * Cache for checking if a class overrides toString().
+     */
+    private static final Map<Class<?>, Boolean> TO_STRING_CACHE = new ConcurrentHashMap<>();
     private static ComponentLogger LOGGER;
 
+    /**
+     * Enables logging for the configuration manager.
+     * <p>
+     * It is highly recommended to call this in your plugin's onEnable logic.
+     *
+     * @param logger the plugin's ComponentLogger
+     */
     public static void enableLogging(ComponentLogger logger) {
         LOGGER = logger;
     }
 
+    /**
+     * Registers a custom type adapter.
+     *
+     * @param type    the class type to adapt
+     * @param adapter the adapter implementation
+     * @param <T>     the type
+     */
     public static <T> void registerAdapter(Class<T> type, TypeAdapter<T> adapter) {
         ADAPTERS.put(type, adapter);
     }
 
-    // --- API ---
-
+    /**
+     * Loads a configuration file into a Java object.
+     * <p>
+     * If the file does not exist, it will be created with default values.
+     *
+     * @param clazz the configuration class (must extend ConfigurationFile)
+     * @param file  the target file on disk
+     * @param <T>   the type of the configuration class
+     * @return the loaded configuration instance
+     * @throws Exception if loading fails (IO error, Syntax error, etc.)
+     */
     @SuppressWarnings("unchecked")
     public static <T extends ConfigurationFile> T load(Class<T> clazz, File file) throws Exception {
         if (!file.exists()) return (T) saveDefault(clazz, file);
@@ -62,6 +107,14 @@ public class ConfigurationManager {
         return instance;
     }
 
+    /**
+     * Reloads an existing configuration instance from disk.
+     * <p>
+     * This forces a read from the disk, bypassing the cache check.
+     *
+     * @param instance the configuration instance to reload
+     * @throws Exception if reloading fails
+     */
     public static void reload(ConfigurationFile instance) throws Exception {
         File file = instance.getFile();
         if (file == null || !file.exists()) throw new IllegalStateException("Config file does not exist: " + file);
@@ -79,6 +132,13 @@ public class ConfigurationManager {
         populateInstance(instance, yaml, file);
     }
 
+    /**
+     * Saves the current state of a configuration instance to disk.
+     *
+     * @param instance the configuration instance
+     * @param file     the target file
+     * @throws Exception if saving fails
+     */
     public static void save(ConfigurationFile instance, File file) throws Exception {
         YamlConfiguration yaml = new YamlConfiguration();
         if (instance.getClass().isAnnotationPresent(Header.class))
@@ -92,8 +152,14 @@ public class ConfigurationManager {
         FILE_CACHE.put(file.getAbsolutePath(), new FileCacheEntry(file.lastModified(), file.length(), yaml));
     }
 
-    // --- Load / Reload / Save ---
-
+    /**
+     * Creates and saves a default configuration file based on the Java class structure.
+     *
+     * @param clazz the configuration class
+     * @param file  the target file
+     * @return the newly created configuration instance
+     * @throws Exception if creation fails
+     */
     public static ConfigurationFile saveDefault(Class<? extends ConfigurationFile> clazz, File file) throws Exception {
         createIfNotExist(file);
         ConfigurationFile instance = createInstance(clazz);
@@ -141,6 +207,9 @@ public class ConfigurationManager {
         runHooks(instance, PostLoad.class);
     }
 
+    /**
+     * Processes @Template annotations to auto-populate Maps with default values.
+     */
     @SuppressWarnings("unchecked")
     private static void processTemplates(Object instance) throws Exception {
         for (FieldMeta meta : getCachedMeta(instance.getClass())) {
@@ -150,6 +219,8 @@ public class ConfigurationManager {
                 Class<?> valueType = getGenericType(genericType, 1);
                 if (valueType.isAnnotationPresent(Template.class)) {
                     Template template = valueType.getAnnotation(Template.class);
+                    String defaultKey = template.name();
+
                     Map<String, Object> map = (Map<String, Object>) meta.get(instance);
                     if (map == null) {
                         map = new HashMap<>();
@@ -158,13 +229,13 @@ public class ConfigurationManager {
 
                     boolean shouldAddDefault = false;
                     switch (template.value()) {
-                        case FORCE -> shouldAddDefault = !map.containsKey("default");
+                        case FORCE -> shouldAddDefault = !map.containsKey(defaultKey);
                         case SMART -> shouldAddDefault = map.isEmpty();
                         case STRICT -> shouldAddDefault = false;
                     }
                     if (shouldAddDefault) {
                         try {
-                            map.put("default", createInstance(valueType));
+                            map.put(defaultKey, createInstance(valueType));
                         } catch (Exception e) {
                             logWarn("Failed to create template for " + valueType.getSimpleName() + ": " + e.getMessage());
                         }
@@ -174,8 +245,10 @@ public class ConfigurationManager {
         }
     }
 
-    // --- Internal Logic ---
-
+    /**
+     * Synchronizes the YAML section with the Java object.
+     * Handles reading values, writing defaults, and recursive parsing.
+     */
     @SuppressWarnings("unchecked")
     private static void syncSection(ConfigurationSection section, ConfigurationPart obj, AtomicBoolean isDirty) throws Exception {
         List<FieldMeta> metas = getCachedMeta(obj.getClass());
@@ -186,19 +259,16 @@ public class ConfigurationManager {
             validKeys.add(key);
             Object defaultVal = meta.get(obj);
 
-            // Handle missing keys
             if (!section.contains(key)) {
                 writeField(section, key, defaultVal, meta);
                 isDirty.set(true);
                 continue;
             }
 
-            // Update comments
             if (meta.hasComment()) section.setComments(key, List.of(meta.getAnnotation(Comment.class).value()));
             if (meta.hasInline()) section.setInlineComments(key, List.of(meta.getAnnotation(Inline.class).value()));
 
             try {
-                // Optimize recursive parts to preserve instances
                 if (ConfigurationPart.class.isAssignableFrom(meta.field.getType())) {
                     ConfigurationPart part = (ConfigurationPart) defaultVal;
                     if (part == null) part = createInstance((Class<? extends ConfigurationPart>) meta.field.getType());
@@ -214,13 +284,13 @@ public class ConfigurationManager {
                 Object loadedVal = deserialize(section.get(key), meta.field.getType(), meta.field.getGenericType());
 
                 if (meta.hasCheck()) loadedVal = runCheck(meta, loadedVal);
+
                 meta.set(obj, loadedVal);
             } catch (Exception e) {
                 logWarn("Failed to load '" + key + "': " + e.getMessage());
             }
         }
 
-        // Auto Trim
         for (String yamlKey : section.getKeys(false)) {
             if (!validKeys.contains(yamlKey)) {
                 section.set(yamlKey, null);
@@ -249,6 +319,7 @@ public class ConfigurationManager {
     private static Object serialize(Object val) throws Exception {
         if (val == null) return null;
         Class<?> type = val.getClass();
+
         if (ADAPTERS.containsKey(type)) return ((TypeAdapter<Object>) ADAPTERS.get(type)).serialize(val);
 
         if (type.isRecord()) {
@@ -257,33 +328,37 @@ public class ConfigurationManager {
                 map.put(camelToKebab(rc.getName()), serialize(rc.getAccessor().invoke(val)));
             return map;
         }
-        switch (val) {
+
+        return switch (val) {
             case ConfigurationPart part -> {
                 Map<String, Object> map = new LinkedHashMap<>();
                 for (FieldMeta meta : getCachedMeta(part.getClass())) map.put(meta.key(), serialize(meta.get(part)));
-                return map;
+                yield map;
             }
             case Map<?, ?> map -> {
                 Map<String, Object> newMap = new LinkedHashMap<>();
                 for (Map.Entry<?, ?> e : map.entrySet())
                     if (e.getKey() instanceof String k) newMap.put(k, serialize(e.getValue()));
-                return newMap;
+                yield newMap;
             }
             case Collection<?> col -> {
                 List<Object> list = new ArrayList<>();
                 for (Object o : col) list.add(serialize(o));
-                return list;
+                yield list;
             }
-            case Enum<?> e -> {
-                return e.name();
-            }
-            case UUID uuid -> {
-                return uuid.toString();
-            }
+            case Enum<?> e -> e.name();
+            case UUID uuid -> uuid.toString();
+            case ConfigurationSerializable serializable -> serializable;
             default -> {
-                return val;
+                if (val instanceof Number || val instanceof Boolean || val instanceof String || val instanceof Character) {
+                    yield val;
+                }
+                if (hasToString(type)) {
+                    yield val.toString();
+                }
+                yield val;
             }
-        }
+        };
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -394,7 +469,7 @@ public class ConfigurationManager {
         });
     }
 
-    private static void runHooks(Object inst, Class<? extends java.lang.annotation.Annotation> anno) throws Exception {
+    private static void runHooks(Object inst, Class<? extends Annotation> anno) throws Exception {
         List<Method> ms = new ArrayList<>();
         for (Method m : inst.getClass().getMethods()) if (m.isAnnotationPresent(anno)) ms.add(m);
         ms.sort(Comparator.comparingInt(m -> {
@@ -428,6 +503,16 @@ public class ConfigurationManager {
         }
     }
 
+    private static boolean hasToString(Class<?> type) {
+        return TO_STRING_CACHE.computeIfAbsent(type, k -> {
+            try {
+                return k.getMethod("toString").getDeclaringClass() != Object.class;
+            } catch (Exception e) {
+                return false;
+            }
+        });
+    }
+
     private static String camelToKebab(String s) {
         return CAMEL_PATTERN.matcher(s).replaceAll("$1-$2").toLowerCase();
     }
@@ -436,6 +521,7 @@ public class ConfigurationManager {
         return (t instanceof ParameterizedType pt && pt.getActualTypeArguments()[i] instanceof Class<?> c) ? c : Object.class;
     }
 
+    @SuppressWarnings({"unchecked", "rawtypes"})
     private static Object convertPrimitive(Object raw, Class<?> type) {
         if (type.isEnum() && raw instanceof String s) {
             try {
@@ -497,6 +583,11 @@ public class ConfigurationManager {
         else System.out.println("[Config] [WARN] " + m);
     }
 
+    /**
+     * Interface for custom type serialization logic.
+     *
+     * @param <T> the target type
+     */
     public interface TypeAdapter<T> {
         Object serialize(T value);
 
@@ -512,7 +603,7 @@ public class ConfigurationManager {
             field.set(instance, val);
         }
 
-        <A extends java.lang.annotation.Annotation> A getAnnotation(Class<A> annotationClass) {
+        <A extends Annotation> A getAnnotation(Class<A> annotationClass) {
             return field.getAnnotation(annotationClass);
         }
     }
