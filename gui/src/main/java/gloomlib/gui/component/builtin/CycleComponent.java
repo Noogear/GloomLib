@@ -1,87 +1,83 @@
 package gloomlib.gui.component.builtin;
 
+import gloomlib.gui.api.GloomGui;
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.interaction.InteractionContext;
 import gloomlib.gui.state.ReactiveState;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
- * 循環切換組件。
+ * A component that cycles state on click (e.g., ON/OFF button).
  */
-public class CycleComponent<T> implements GloomComponent {
+public class CycleComponent implements GloomComponent {
 
-    private final ReactiveState<T> state;
-    private final List<T> values;
-    private final Function<T, ItemStack> renderer;
-    private final Consumer<T> changeListener;
+    private final List<ItemStack> states;
+    private final ReactiveState<Integer> currentIndex;
+    private Consumer<Integer> onStateChange;
+    private GloomGui parent;
 
-    private boolean dirty = true;
-    private ItemStack cachedItem;
+    public CycleComponent(List<ItemStack> states, int initialIndex) {
+        this.states = new ArrayList<>(states);
+        this.currentIndex = new ReactiveState<>(initialIndex);
+    }
 
-    // [Fix] 類型修正：匹配泛型 T
-    private final Consumer<T> stateListener;
-
-    public CycleComponent(ReactiveState<T> state, List<T> values,
-                          Function<T, ItemStack> renderer,
-                          Consumer<T> changeListener) {
-        this.state = state;
-        this.values = values;
-        this.renderer = renderer;
-        this.changeListener = changeListener;
-
-        this.stateListener = (val) -> dirty = true;
-        this.state.subscribe(this.stateListener);
+    public void setOnStateChange(Consumer<Integer> callback) {
+        this.onStateChange = callback;
+        // Listen to internal state changes to trigger redraws
+        this.currentIndex.subscribe(newVal -> {
+            if (parent != null) parent.redraw();
+        });
     }
 
     @Override
-    public @NotNull ItemStack render(int index) {
-        if (dirty || cachedItem == null) {
-            cachedItem = renderer.apply(state.get());
-            dirty = false;
-        }
-        return cachedItem;
+    public @NotNull ItemStack render() {
+        int idx = currentIndex.get() % states.size();
+        return states.get(idx);
     }
 
     @Override
-    public void onClick(InteractionContext context) {
-        T current = state.get();
-        int index = values.indexOf(current);
-        int nextIndex = (index + 1) % values.size();
-        T next = values.get(nextIndex);
+    public void handleClick(@NotNull InteractionContext context) {
+        int next = (currentIndex.get() + 1) % states.size();
+        currentIndex.set(next);
 
-        state.set(next);
-
-        if (changeListener != null) {
-            changeListener.accept(next);
+        if (onStateChange != null) {
+            onStateChange.accept(next);
         }
     }
 
     @Override
-    public boolean onTick() {
-        return false;
+    public void setParent(@Nullable GloomGui gui) {
+        this.parent = gui;
     }
 
     @Override
-    public void dispose() {
-        state.unsubscribe(stateListener);
-    }
-
-    @Override
-    public CycleComponent<T> clone() {
+    public @NotNull CycleComponent clone() {
         try {
-            CycleComponent<T> clone = (CycleComponent<T>) super.clone();
-            clone.dirty = true;
-            clone.cachedItem = null;
-            // 這裡重新訂閱到共享的 state
-            this.state.subscribe(clone.stateListener);
-            return clone;
-        } catch (CloneNotSupportedException e) {
-            throw new RuntimeException(e);
+            CycleComponent cloned = (CycleComponent) super.clone();
+
+            // CRITICAL: Deep clone the state.
+            // We want a FRESH state starting at 0 (or original initial), not a shared reference.
+            // Using reflection here implies we treat 'currentIndex' as a mutable field in the clone logic.
+            var field = CycleComponent.class.getDeclaredField("currentIndex");
+            field.setAccessible(true);
+            field.set(cloned, new ReactiveState<>(0));
+
+            cloned.parent = null;
+
+            // Re-hook the internal redraw listener for the NEW parent
+            cloned.currentIndex.subscribe(val -> {
+                if (cloned.parent != null) cloned.parent.redraw();
+            });
+
+            return cloned;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to clone CycleComponent", e);
         }
     }
 }

@@ -1,93 +1,66 @@
 package gloomlib.gui.component;
 
+import gloomlib.gui.api.GloomGui;
 import gloomlib.gui.interaction.InteractionContext;
-import gloomlib.gui.state.ReactiveState;
-import org.bukkit.Material;
+import gloomlib.gui.util.ItemBuilder;
 import org.bukkit.inventory.ItemStack;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 public class SimpleGloomComponent implements GloomComponent {
 
-    private final BiFunction<ReactiveState<?>, Integer, ItemStack> renderer;
-    private final ReactiveState<?> bindState;
-    private final Consumer<InteractionContext> clickHandler;
-    private final Consumer<GloomComponent> tickHandler;
+    // Transient reference to avoid memory leaks during cloning.
+    // This will be re-assigned when the component is added to a new GUI.
+    protected GloomGui parent;
+    private ItemStack item;
+    private Consumer<InteractionContext> action;
 
-    private boolean dirty = true;
-    private ItemStack cachedItem;
-
-    // [Fix] 基礎組件處理未知類型，使用 Object 通用監聽器
-    private Consumer<Object> stateListener;
-
-    public SimpleGloomComponent(BiFunction<ReactiveState<?>, Integer, ItemStack> renderer,
-                                ReactiveState<?> bindState,
-                                Consumer<InteractionContext> clickHandler,
-                                Consumer<GloomComponent> tickHandler) {
-        this.renderer = renderer;
-        this.bindState = bindState;
-        this.clickHandler = clickHandler;
-        this.tickHandler = tickHandler;
-        setupListener();
+    public SimpleGloomComponent(@NotNull ItemStack item) {
+        this.item = item;
     }
 
-    @SuppressWarnings("unchecked")
-    private void setupListener() {
-        if (this.bindState != null) {
-            // [Fix] 這是類型擦除邊界，我們需要監聽任意類型的變化
-            this.stateListener = (val) -> this.dirty = true;
-            // 強制轉換為 <Object> 以匹配 Consumer<Object>
-            ((ReactiveState<Object>) this.bindState).subscribe(this.stateListener);
+    public SimpleGloomComponent(@NotNull ItemBuilder builder) {
+        this.item = builder.build();
+    }
+
+    public void setAction(@NotNull Consumer<InteractionContext> action) {
+        this.action = action;
+    }
+
+    @Override
+    public @NotNull ItemStack render() {
+        return item;
+    }
+
+    @Override
+    public void handleClick(@NotNull InteractionContext context) {
+        if (action != null) {
+            action.accept(context);
         }
     }
 
     @Override
-    public ItemStack render(int index) {
-        if (dirty || cachedItem == null) {
-            if (renderer != null) {
-                cachedItem = renderer.apply(bindState, index);
-            } else {
-                cachedItem = new ItemStack(Material.AIR);
-            }
-            dirty = false;
-        }
-        return cachedItem;
+    public void setParent(@Nullable GloomGui gui) {
+        this.parent = gui;
     }
 
     @Override
-    public void onClick(InteractionContext context) {
-        if (clickHandler != null) clickHandler.accept(context);
-    }
-
-    @Override
-    public boolean onTick() {
-        if (tickHandler != null) {
-            tickHandler.accept(this);
-            this.dirty = true;
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public void dispose() {
-        if (bindState != null && stateListener != null) {
-            ((ReactiveState<Object>) bindState).unsubscribe(stateListener);
-        }
-    }
-
-    @Override
+    @NotNull
     public SimpleGloomComponent clone() {
         try {
-            SimpleGloomComponent clone = (SimpleGloomComponent) super.clone();
-            clone.dirty = true;
-            clone.cachedItem = null;
-            clone.setupListener(); // 為新實例重新設置監聽器
-            return clone;
+            SimpleGloomComponent cloned = (SimpleGloomComponent) super.clone();
+            // ItemStack is mutable in Bukkit, make sure we have a fresh copy
+            if (this.item != null) {
+                cloned.item = this.item.clone();
+            }
+            // Actions are functional interfaces (usually stateless logic), so shallow copy is acceptable.
+            // Reset parent, as the cloned component belongs to a new context until assigned.
+            cloned.parent = null;
+            return cloned;
         } catch (CloneNotSupportedException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Failed to clone component", e);
         }
     }
 }

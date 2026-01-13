@@ -1,78 +1,113 @@
 package gloomlib.gui.component.builtin;
 
+import gloomlib.gui.api.GloomGui;
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.interaction.InteractionContext;
 import gloomlib.gui.state.ReactiveState;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Consumer;
 
 /**
- * 標籤頁組件。
+ * A container that switches visible content based on an active tab index.
  */
 public class TabComponent implements GloomComponent {
 
-    private final ReactiveState<String> tabState;
-    private final Map<String, GloomComponent> tabs = new HashMap<>();
-    private final GloomComponent fallback;
+    private final Map<Integer, GloomComponent> tabs;
+    private final ReactiveState<Integer> activeTab;
+    private GloomGui parent;
 
-    // [Fix] 類型修正：監聽 String 類型的狀態
-    private final Consumer<String> listener;
+    public TabComponent() {
+        this.tabs = new HashMap<>();
+        this.activeTab = new ReactiveState<>(0);
 
-    public TabComponent(String initialTab) {
-        this.tabState = new ReactiveState<>(initialTab);
-        this.fallback = GloomComponent.builder().icon(new ItemStack(Material.AIR)).build();
-
-        this.listener = (val) -> { /* 觸發重繪邏輯由組件系統處理，這裡主要確保訂閱關係 */ };
-        this.tabState.subscribe(this.listener);
+        this.activeTab.subscribe(tab -> {
+            if (parent != null) parent.redraw();
+        });
     }
 
-    public void addTab(String id, GloomComponent component) {
-        tabs.put(id, component);
+    public void setTab(int index, GloomComponent component) {
+        tabs.put(index, component);
+        // If parent exists, set it now
+        if (parent != null) component.setParent(parent);
     }
 
-    public void setTab(String id) {
-        tabState.set(id);
+    public void switchTo(int index) {
+        if (tabs.containsKey(index)) {
+            activeTab.set(index);
+        }
     }
 
-    private GloomComponent getCurrent() {
-        return tabs.getOrDefault(tabState.get(), fallback);
+    public ReactiveState<Integer> getState() {
+        return activeTab;
     }
 
-    @Override
-    public @NotNull ItemStack render(int index) {
-        return getCurrent().render(index);
-    }
-
-    @Override
-    public void onClick(InteractionContext context) {
-        getCurrent().onClick(context);
-    }
-
-    @Override
-    public boolean onTick() {
-        return getCurrent().onTick();
+    /**
+     * Gets the component for the currently active tab.
+     */
+    public @Nullable GloomComponent getCurrentComponent() {
+        return tabs.get(activeTab.get());
     }
 
     @Override
-    public void dispose() {
-        tabState.unsubscribe(listener);
-        tabs.values().forEach(GloomComponent::dispose);
+    public @NotNull ItemStack render() {
+        GloomComponent current = getCurrentComponent();
+        return current != null ? current.render() : new ItemStack(Material.AIR);
     }
 
     @Override
-    public GloomComponent clone() {
+    public void tick() {
+        GloomComponent current = getCurrentComponent();
+        if (current != null) current.tick();
+    }
+
+    @Override
+    public void handleClick(@NotNull InteractionContext context) {
+        GloomComponent current = getCurrentComponent();
+        if (current != null) {
+            current.handleClick(context);
+        }
+    }
+
+    @Override
+    public void setParent(@Nullable GloomGui gui) {
+        this.parent = gui;
+        for (GloomComponent child : tabs.values()) {
+            child.setParent(gui);
+        }
+    }
+
+    @Override
+    public @NotNull TabComponent clone() {
         try {
-            TabComponent clone = (TabComponent) super.clone();
-            clone.tabs.clear();
-            this.tabs.forEach((k, v) -> clone.tabs.put(k, v.clone()));
-            return clone;
-        } catch (CloneNotSupportedException e) {
-            throw new RuntimeException(e);
+            TabComponent cloned = (TabComponent) super.clone();
+
+            // Deep copy tabs
+            Map<Integer, GloomComponent> clonedTabs = new HashMap<>();
+            this.tabs.forEach((id, comp) -> clonedTabs.put(id, comp.clone()));
+
+            var tabsField = TabComponent.class.getDeclaredField("tabs");
+            tabsField.setAccessible(true);
+            tabsField.set(cloned, clonedTabs);
+
+            // Reset state
+            var stateField = TabComponent.class.getDeclaredField("activeTab");
+            stateField.setAccessible(true);
+            stateField.set(cloned, new ReactiveState<>(0)); // Default to tab 0
+
+            cloned.parent = null;
+
+            cloned.getState().subscribe(val -> {
+                if (cloned.parent != null) cloned.parent.redraw();
+            });
+
+            return cloned;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to clone TabComponent", e);
         }
     }
 }

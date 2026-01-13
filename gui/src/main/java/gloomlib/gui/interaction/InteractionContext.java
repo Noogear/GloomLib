@@ -1,30 +1,35 @@
 package gloomlib.gui.interaction;
 
-import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
-import org.bukkit.event.inventory.ClickType;
-import org.bukkit.event.inventory.InventoryAction;
-import org.bukkit.inventory.ItemStack;
-import org.jetbrains.annotations.Nullable;
+import org.bukkit.event.inventory.InventoryClickEvent;
 
 /**
- * 交互上下文 (Record)。
- * 封裝了點擊事件的相關信息。
+ * Wraps context about a click interaction.
  */
-public record InteractionContext(
-        Player player,
-        ClickType clickType,
-        InventoryAction action,
-        int slot,
-        @Nullable ItemStack clickedItem,
-        @Nullable Object componentState // 組件內部狀態 (如列表索引)
-) {
+public record InteractionContext(InventoryClickEvent event, Player player) {
 
-    public boolean isLeftClick() { return clickType.isLeftClick(); }
-    public boolean isRightClick() { return clickType.isRightClick(); }
-    public boolean isShiftClick() { return clickType.isShiftClick(); }
+    public boolean isLeftClick() {
+        return event.isLeftClick();
+    }
 
-    public void reply(Component message) {
-        player.sendMessage(message);
+    public boolean isRightClick() {
+        return event.isRightClick();
+    }
+
+    public boolean isShiftClick() {
+        return event.isShiftClick();
+    }
+
+    public void setCancelled(boolean cancelled) {
+        event.setCancelled(cancelled);
+    }
+
+    /**
+     * Updates the GUI if necessary (wrapper around standard Bukkit behavior)
+     */
+    public void refresh() {
+        // GloomGui typically handles auto-refresh via ReactiveState,
+        // but explicit refresh might be needed for non-reactive logic.
+        // This would require holding a reference to GloomGui here or firing an event.
     }
 }

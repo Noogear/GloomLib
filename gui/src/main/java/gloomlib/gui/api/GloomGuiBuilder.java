@@ -2,72 +2,55 @@ package gloomlib.gui.api;
 
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.template.GloomGuiTemplate;
-import net.kyori.adventure.text.Component;
-import org.bukkit.event.inventory.InventoryType;
-import org.bukkit.inventory.ItemStack;
+import org.bukkit.plugin.Plugin;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Builder for creating GloomGuiTemplates.
+ */
 public class GloomGuiBuilder {
 
-    private Component title;
+    private final Plugin plugin;
+    private final Map<Integer, GloomComponent> components = new HashMap<>();
+    private String title = "Gloom GUI";
     private int rows = 3;
-    private InventoryType type = InventoryType.CHEST;
-    private String[] structure;
 
-    private final Map<Character, GloomComponent> charComponents = new HashMap<>();
-    private final Map<Integer, GloomComponent> slotComponents = new HashMap<>();
-
-    private GloomGuiBuilder() {}
-
-    public static GloomGuiBuilder create() {
-        return new GloomGuiBuilder();
+    public GloomGuiBuilder(Plugin plugin) {
+        this.plugin = plugin;
     }
 
-    public GloomGuiBuilder title(Component title) {
+    public GloomGuiBuilder title(String title) {
         this.title = title;
         return this;
     }
 
     public GloomGuiBuilder rows(int rows) {
+        if (rows < 1 || rows > 6) throw new IllegalArgumentException("Rows must be between 1 and 6");
         this.rows = rows;
         return this;
     }
 
-    public GloomGuiBuilder type(InventoryType type) {
-        this.type = type;
+    public GloomGuiBuilder setItem(int slot, @NotNull GloomComponent component) {
+        components.put(slot, component);
         return this;
     }
 
-    public GloomGuiBuilder structure(String... pattern) {
-        this.structure = pattern;
-        this.rows = pattern.length;
-        return this;
-    }
-
-    public GloomGuiBuilder setComponent(char key, GloomComponent component) {
-        this.charComponents.put(key, component);
-        return this;
-    }
-
-    public GloomGuiBuilder setIngredient(char key, ItemStack item) {
-        return setComponent(key, GloomComponent.builder().icon(item).build());
-    }
-
-    public GloomGuiBuilder setItem(int slot, GloomComponent component) {
-        this.slotComponents.put(slot, component);
-        return this;
-    }
-
-    public GloomGuiBuilder setItem(int slot, ItemStack item) {
-        return setItem(slot, GloomComponent.builder().icon(item).build());
-    }
-
-    public GloomGuiTemplate buildTemplate() {
-        if (title == null) {
-            title = Component.text("GloomGui");
+    /**
+     * Fills specific slots with a component.
+     */
+    public GloomGuiBuilder fill(GloomComponent component, int... slots) {
+        for (int slot : slots) {
+            // We store the same prototype reference for multiple slots in the Builder.
+            // The Template will clone it multiple times when creating the GUI.
+            setItem(slot, component);
         }
-        return new GloomGuiTemplate(title, rows, type, structure, charComponents, slotComponents);
+        return this;
+    }
+
+    public GloomGuiTemplate build() {
+        return new GloomGuiTemplate(plugin, title, rows, components);
     }
 }

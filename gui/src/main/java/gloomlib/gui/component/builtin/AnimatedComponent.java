@@ -1,92 +1,74 @@
 package gloomlib.gui.component.builtin;
 
+import gloomlib.gui.api.GloomGui;
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.interaction.InteractionContext;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Consumer;
 
 /**
- * 動畫組件。
+ * A component that cycles through a list of items every X ticks.
  */
 public class AnimatedComponent implements GloomComponent {
 
     private final List<ItemStack> frames;
-    private final long tickRate;
-    private final Consumer<InteractionContext> clickHandler;
-
+    private final int speed; // Ticks per frame
+    private int currentTick = 0;
     private int currentFrameIndex = 0;
-    private long tickCounter = 0;
+    private GloomGui parent;
 
-    public AnimatedComponent(List<ItemStack> frames, long tickRate, Consumer<InteractionContext> clickHandler) {
+    public AnimatedComponent(List<ItemStack> frames, int speed) {
         this.frames = new ArrayList<>(frames);
-        this.tickRate = Math.max(1, tickRate);
-        this.clickHandler = clickHandler;
+        this.speed = speed;
     }
 
     @Override
-    public @NotNull ItemStack render(int index) {
+    public void tick() {
+        currentTick++;
+        if (currentTick >= speed) {
+            currentTick = 0;
+            currentFrameIndex = (currentFrameIndex + 1) % frames.size();
+
+            // Trigger a redraw if the frame changed
+            if (parent != null) {
+                // In an optimized system, we would ask to redraw only this slot.
+                // For now, full redraw is safe.
+                parent.redraw();
+            }
+        }
+    }
+
+    @Override
+    public @NotNull ItemStack render() {
         if (frames.isEmpty()) return null;
         return frames.get(currentFrameIndex);
     }
 
     @Override
-    public boolean onTick() {
-        tickCounter++;
-        if (tickCounter >= tickRate) {
-            tickCounter = 0;
-            currentFrameIndex = (currentFrameIndex + 1) % frames.size();
-            return true;
-        }
-        return false;
+    public void handleClick(@NotNull InteractionContext context) {
+        // Animation typically passes clicks through or does nothing
     }
 
     @Override
-    public void onClick(InteractionContext context) {
-        if (clickHandler != null) {
-            clickHandler.accept(context);
-        }
+    public void setParent(@Nullable GloomGui gui) {
+        this.parent = gui;
     }
 
     @Override
-    public AnimatedComponent clone() {
+    public @NotNull AnimatedComponent clone() {
         try {
-            AnimatedComponent clone = (AnimatedComponent) super.clone();
-            clone.currentFrameIndex = 0;
-            clone.tickCounter = 0;
-            return clone;
+            AnimatedComponent cloned = (AnimatedComponent) super.clone();
+            // Reset state for the new instance
+            cloned.currentTick = 0;
+            cloned.currentFrameIndex = 0;
+            cloned.parent = null;
+            return cloned;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    public static Builder builder() { return new Builder(); }
-
-    public static class Builder {
-        private final List<ItemStack> frames = new ArrayList<>();
-        private long tickRate = 20;
-        private Consumer<InteractionContext> clickHandler;
-
-        public Builder addFrame(ItemStack item) {
-            frames.add(item);
-            return this;
-        }
-
-        public Builder speed(long ticks) {
-            this.tickRate = ticks;
-            return this;
-        }
-
-        public Builder onClick(Consumer<InteractionContext> handler) {
-            this.clickHandler = handler;
-            return this;
-        }
-
-        public AnimatedComponent build() {
-            return new AnimatedComponent(frames, tickRate, clickHandler);
         }
     }
 }

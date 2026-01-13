@@ -1,65 +1,59 @@
 package gloomlib.gui;
 
-import gloomlib.gui.api.GloomGui;
-import gloomlib.gui.listener.GloomGuiListener;
+import gloomlib.gui.api.GloomGuiListener;
 import org.bukkit.Bukkit;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
-
-import java.util.Collections;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import org.bukkit.event.HandlerList;
+import org.bukkit.plugin.Plugin;
+import org.jetbrains.annotations.NotNull;
 
 /**
- * 全局管理器。
- * 負責註冊 Bukkit 監聽器，管理全局 GUI 狀態，並處理線程調度。
+ * The entry point for the GloomGui framework.
+ * Handles listener registration and global cleanup.
  */
 public class GloomGuiManager {
 
-    private static JavaPlugin plugin;
-    private static final Set<GloomGui> activeGuis = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private static GloomGuiManager instance;
+    private final Plugin plugin;
+    private final GloomGuiListener listener;
 
-    private GloomGuiManager() {}
+    private GloomGuiManager(Plugin plugin) {
+        this.plugin = plugin;
+        this.listener = new GloomGuiListener();
+    }
 
     /**
-     * 初始化框架。必須在插件啟動時調用。
+     * Initializes the GUI framework.
+     * Must be called in your plugin's onEnable().
+     *
+     * @param plugin The hosting plugin.
      */
-    public static void register(JavaPlugin javaPlugin) {
-        if (plugin != null) return;
-        plugin = javaPlugin;
-
-        Bukkit.getPluginManager().registerEvents(new GloomGuiListener(), plugin);
-
-        // 啟動全局動畫 Ticker (每 1 tick 運行一次)
-        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            for (GloomGui gui : activeGuis) {
-                gui.tick();
-            }
-        }, 1L, 1L);
+    public static void init(@NotNull Plugin plugin) {
+        if (instance != null) {
+            throw new IllegalStateException("GloomGuiManager is already initialized!");
+        }
+        instance = new GloomGuiManager(plugin);
+        Bukkit.getPluginManager().registerEvents(instance.listener, plugin);
     }
 
-    public static JavaPlugin getPlugin() {
-        if (plugin == null) {
-            throw new IllegalStateException("GloomGui 未初始化！請在 onEnable 中調用 GloomGuiManager.register(this);");
+    /**
+     * Gets the singleton instance.
+     */
+    public static GloomGuiManager getInstance() {
+        if (instance == null) {
+            throw new IllegalStateException("GloomGuiManager is not initialized! Call init() first.");
         }
+        return instance;
+    }
+
+    /**
+     * Disables the framework and unregisters listeners.
+     */
+    public void disable() {
+        HandlerList.unregisterAll(listener);
+        instance = null;
+    }
+
+    public Plugin getPlugin() {
         return plugin;
-    }
-
-    public static void track(GloomGui gui) {
-        activeGuis.add(gui);
-    }
-
-    public static void untrack(GloomGui gui) {
-        activeGuis.remove(gui);
-    }
-
-    public static void closeAll() {
-        for (GloomGui gui : activeGuis) {
-            Player viewer = gui.getViewer();
-            if (viewer != null && viewer.isOnline()) {
-                viewer.closeInventory();
-            }
-        }
-        activeGuis.clear();
     }
 }
