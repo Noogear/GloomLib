@@ -23,6 +23,7 @@ public class ScrollComponent implements GloomComponent {
     private final int viewSize; // How many items are visible at once
     private final int stepSize; // How many columns/rows usually (e.g. 9 for vertical list)
     private GloomGui parent;
+
     public ScrollComponent(List<GloomComponent> content, int viewSize, int stepSize) {
         this.content = new ArrayList<>(content);
         this.viewSize = viewSize;

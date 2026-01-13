@@ -2,17 +2,22 @@ package gloomlib.gui.api;
 
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.component.builtin.PagedComponent;
-import gloomlib.gui.holder.GuiHolder;
 import gloomlib.gui.interaction.InteractionContext;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.Bukkit;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
+import org.bukkit.inventory.InventoryView;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -20,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * The core GUI implementation.
  * Handles rendering, interaction dispatching, and thread safety.
  */
-public class GloomGui implements GuiHolder {
+public class GloomGui implements InventoryHolder {
 
     private final Inventory inventory;
     private final Map<Integer, GloomComponent> slotMap = new ConcurrentHashMap<>();
@@ -34,6 +39,24 @@ public class GloomGui implements GuiHolder {
         // Since GloomGui implements GuiHolder (which extends InventoryHolder),
         // we pass 'this' as the owner.
         this.inventory = Bukkit.createInventory(this, rows * 9, net.kyori.adventure.text.Component.text(title));
+    }
+
+
+    public void updateTitle(final Component title) {
+        final List<HumanEntity> viewers = getInventory().getViewers();
+        if (!viewers.isEmpty()) {
+            final String legacyTitle = LegacyComponentSerializer.legacySection().serialize(title);
+            for (HumanEntity humanEntity : viewers) {
+                humanEntity.getOpenInventory().setTitle(legacyTitle);
+            }
+        }
+    }
+
+    public void updateTitle(@NotNull final HumanEntity viewer, final Component title) {
+        final InventoryView openView = viewer.getOpenInventory();
+        if (openView.getTopInventory().equals(getInventory())) {
+            openView.setTitle(LegacyComponentSerializer.legacySection().serialize(title));
+        }
     }
 
     public void open() {
