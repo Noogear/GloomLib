@@ -2,44 +2,40 @@ package gloomlib.gui.template;
 
 import gloomlib.gui.api.GloomGui;
 import gloomlib.gui.component.GloomComponent;
+import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
-import org.jetbrains.annotations.NotNull;
+import org.bukkit.event.inventory.InventoryType;
 
+import java.util.HashMap;
 import java.util.Map;
 
-/**
- * A reusable template for creating GloomGui instances.
- * Stores the layout and components as prototypes.
- */
 public class GloomGuiTemplate {
 
-    private final Plugin plugin;
-    private final String title;
+    private final Component title;
     private final int rows;
-    private final Map<Integer, GloomComponent> prototypeComponents;
+    private final InventoryType type;
+    private final String[] structure;
+    private final Map<Character, GloomComponent> charComponents;
+    private final Map<Integer, GloomComponent> slotComponents;
 
-    public GloomGuiTemplate(Plugin plugin, String title, int rows, Map<Integer, GloomComponent> components) {
-        this.plugin = plugin;
+    public GloomGuiTemplate(Component title, int rows, InventoryType type, String[] structure,
+                            Map<Character, GloomComponent> charComponents,
+                            Map<Integer, GloomComponent> slotComponents) {
         this.title = title;
         this.rows = rows;
-        this.prototypeComponents = components;
+        this.type = type;
+        this.structure = structure;
+        this.charComponents = charComponents;
+        this.slotComponents = slotComponents;
     }
 
-    /**
-     * Creates a unique GUI session for a player based on this template.
-     */
-    public GloomGui create(@NotNull Player player) {
-        GloomGui gui = new GloomGui(plugin, player, title, rows);
+    public GloomGui create(Player player) {
+        Map<Character, GloomComponent> clonedCharMap = new HashMap<>();
+        charComponents.forEach((k, v) -> clonedCharMap.put(k, v.clone()));
 
-        // Apply components using Deep Copy (Clone)
-        prototypeComponents.forEach((slot, componentPrototype) -> {
-            // CRITICAL: Must clone to ensure thread safety and state isolation per player.
-            // If we didn't clone, one player clicking a button would affect all other players' GUIs.
-            GloomComponent instance = componentPrototype.clone();
-            gui.setComponent(slot, instance);
-        });
+        Map<Integer, GloomComponent> clonedSlotMap = new HashMap<>();
+        slotComponents.forEach((k, v) -> clonedSlotMap.put(k, v.clone()));
 
-        return gui;
+        return new GloomGui(player, title, rows, type, structure, clonedCharMap, clonedSlotMap);
     }
 }

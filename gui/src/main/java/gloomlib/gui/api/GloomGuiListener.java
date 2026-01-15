@@ -1,36 +1,37 @@
-package gloomlib.gui.api;
+package gloomlib.gui.listener;
 
+import gloomlib.gui.api.GloomGui;
+import gloomlib.gui.util.GuiSecurity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.inventory.InventoryOpenEvent;
-import org.bukkit.inventory.Inventory;
+import org.bukkit.event.player.PlayerDropItemEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.inventory.InventoryHolder;
 
-/**
- * Listens for Bukkit inventory events and delegates them to GloomGui.
- */
 public class GloomGuiListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onClick(InventoryClickEvent event) {
-        Inventory inventory = event.getInventory();
-        InventoryHolder holder = inventory.getHolder(false);
-
+        InventoryHolder holder = event.getInventory().getHolder();
         if (holder instanceof GloomGui gui) {
-
-            gui.handleInteraction(event);
+            gui.handleClick(event);
+        } else {
+            if (GuiSecurity.isLocked(event.getCurrentItem()) || GuiSecurity.isLocked(event.getCursor())) {
+                event.setCancelled(true);
+                event.setCurrentItem(null);
+                event.getWhoClicked().setItemOnCursor(null);
+            }
         }
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onDrag(InventoryDragEvent event) {
-        Inventory inventory = event.getInventory();
-        InventoryHolder holder = inventory.getHolder(false);
-
+        InventoryHolder holder = event.getInventory().getHolder();
         if (holder instanceof GloomGui gui) {
             gui.handleDrag(event);
         }
@@ -38,17 +39,30 @@ public class GloomGuiListener implements Listener {
 
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
-        Inventory inventory = event.getInventory();
-        InventoryHolder holder = inventory.getHolder(false);
-
+        InventoryHolder holder = event.getInventory().getHolder();
         if (holder instanceof GloomGui gui) {
-            // Stop animations/tickers when closed to save resources
-            gui.close();
+            gui.destroy();
+            GuiSecurity.cleanInventory((org.bukkit.entity.Player) event.getPlayer());
         }
     }
 
     @EventHandler
-    public void onOpen(InventoryOpenEvent event) {
-        // Optional: Hooks for open events if needed in the future
+    public void onDrop(PlayerDropItemEvent event) {
+        if (GuiSecurity.isLocked(event.getItemDrop().getItemStack())) {
+            event.getItemDrop().remove();
+        }
+    }
+
+    @EventHandler
+    public void onSwapHand(PlayerSwapHandItemsEvent event) {
+        if (GuiSecurity.isLocked(event.getOffHandItem()) || GuiSecurity.isLocked(event.getMainHandItem())) {
+            event.setCancelled(true);
+            GuiSecurity.cleanInventory(event.getPlayer());
+        }
+    }
+
+    @EventHandler
+    public void onDeath(PlayerDeathEvent event) {
+        event.getDrops().removeIf(GuiSecurity::isLocked);
     }
 }

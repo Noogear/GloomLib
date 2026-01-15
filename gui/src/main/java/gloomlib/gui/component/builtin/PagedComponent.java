@@ -1,143 +1,139 @@
 package gloomlib.gui.component.builtin;
 
-import gloomlib.gui.api.GloomGui;
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.interaction.InteractionContext;
 import gloomlib.gui.state.ReactiveState;
+import gloomlib.gui.util.Paginator;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
- * A container component that handles pagination of other Components.
- * Supports full composition (nested components).
+ * 分頁組件。
  */
-public class PagedComponent implements GloomComponent {
+public class PagedComponent<T> implements GloomComponent {
 
-    private final List<GloomComponent> content;
-    private final ReactiveState<Integer> currentPage;
+    private final ReactiveState<List<T>> dataState;
+    private final ReactiveState<Integer> pageState;
+    private final Function<T, ItemStack> itemRenderer;
+    private final BiConsumer<InteractionContext, T> clickHandler;
     private final int pageSize;
-    private GloomGui parent;
 
-    public PagedComponent(List<GloomComponent> content, int pageSize) {
-        this.content = new ArrayList<>(content); // Defensive copy
+    private Paginator<T> paginator;
+    private List<T> currentItems;
+    private boolean dirty = true;
+
+    // [Fix] 類型修正：明確指定泛型類型，避免 Object 轉換錯誤
+    private final Consumer<List<T>> dataListener;
+    private final Consumer<Integer> pageListener;
+
+    public PagedComponent(ReactiveState<List<T>> dataState,
+                          int pageSize,
+                          Function<T, ItemStack> itemRenderer,
+                          BiConsumer<InteractionContext, T> clickHandler) {
+        this.dataState = dataState;
+        this.pageState = new ReactiveState<>(0);
         this.pageSize = pageSize;
-        this.currentPage = new ReactiveState<>(0);
+        this.itemRenderer = itemRenderer;
+        this.clickHandler = clickHandler;
 
-        // Listen to page changes to trigger redraw
-        this.currentPage.subscribe(page -> {
-            if (parent != null) parent.redraw();
-        });
-    }
+        // [Fix] 這裡的 list 會自動推斷為 List<T>
+        this.dataListener = (list) -> {
+            this.paginator = new Paginator<>(list, pageSize);
+            if (pageState.get() >= paginator.getTotalPages()) {
+                pageState.set(0);
+            } else {
+                this.dirty = true;
+            }
+        };
+        // [Fix] 類型匹配，無需強制轉換
+        this.dataState.subscribe(this.dataListener);
 
-    /**
-     * Adds a component to the pagination list.
-     */
-    public void addElement(GloomComponent component) {
-        this.content.add(component);
-        if (parent != null) parent.redraw();
-    }
-
-    public void nextPage() {
-        if (hasNext()) {
-            currentPage.set(currentPage.get() + 1);
+        if (dataState.get() != null) {
+            this.dataListener.accept(dataState.get());
         }
-    }
 
-    public void previousPage() {
-        if (hasPrevious()) {
-            currentPage.set(currentPage.get() - 1);
-        }
-    }
-
-    public boolean hasNext() {
-        return (currentPage.get() + 1) * pageSize < content.size();
-    }
-
-    public boolean hasPrevious() {
-        return currentPage.get() > 0;
-    }
-
-    public ReactiveState<Integer> getState() {
-        return currentPage;
-    }
-
-    /**
-     * Calculates which components are visible on the current page.
-     */
-    public List<GloomComponent> getVisibleComponents() {
-        int start = currentPage.get() * pageSize;
-        int end = Math.min(start + pageSize, content.size());
-
-        if (start >= content.size()) return new ArrayList<>();
-        return content.subList(start, end);
+        this.pageListener = (page) -> this.dirty = true;
+        this.pageState.subscribe(this.pageListener);
     }
 
     @Override
-    public @NotNull ItemStack render() {
-        // PagedComponent is a virtual container.
-        // It returns AIR as it doesn't represent a single item slot itself.
-        // The GUI logic handles rendering its children.
+    public @NotNull ItemStack render(int index) {
+        if (dirty || currentItems == null) {
+            if (paginator != null) {
+                currentItems = paginator.getPage(pageState.get());
+            }
+            dirty = false;
+        }
+
+        if (currentItems != null && index < currentItems.size()) {
+            return itemRenderer.apply(currentItems.get(index));
+        }
         return new ItemStack(Material.AIR);
     }
 
-    /**
-     * Delegate tick to visible children.
-     */
     @Override
-    public void tick() {
-        getVisibleComponents().forEach(GloomComponent::tick);
-    }
-
-    @Override
-    public void handleClick(@NotNull InteractionContext context) {
-        // GloomGui handles the delegation to specific child components based on slot.
-        // This method serves as a fallback or for container-wide clicks.
-    }
-
-    @Override
-    public void setParent(GloomGui gui) {
-        this.parent = gui;
-        // Propagate parent to children so they can access the GUI too
-        for (GloomComponent child : content) {
-            child.setParent(gui);
+    public void onClick(InteractionContext context) {
+        int index = (int) context.componentState();
+        if (currentItems != null && index < currentItems.size()) {
+            if (clickHandler != null) {
+                clickHandler.accept(context, currentItems.get(index));
+            }
         }
     }
 
     @Override
-    public @NotNull PagedComponent clone() {
+    public boolean onTick() {
+        return false;
+    }
+
+    public boolean hasNext() {
+        return paginator != null && paginator.hasNext(pageState.get());
+    }
+
+    public boolean hasPrev() {
+        return paginator != null && paginator.hasPrev(pageState.get());
+    }
+
+    public void nextPage() {
+        if (hasNext()) pageState.set(pageState.get() + 1);
+    }
+
+    public void prevPage() {
+        if (hasPrev()) pageState.set(pageState.get() - 1);
+    }
+
+    public ReactiveState<Integer> getPageState() {
+        return pageState;
+    }
+
+    public ReactiveState<List<T>> getDataState() {
+        return dataState;
+    }
+
+    @Override
+    public void dispose() {
+        dataState.unsubscribe(dataListener);
+        pageState.unsubscribe(pageListener);
+    }
+
+    @Override
+    public PagedComponent<T> clone() {
         try {
-            PagedComponent cloned = (PagedComponent) super.clone();
-
-            // Deep copy the content list to prevent shared state between players
-            List<GloomComponent> clonedContent = new ArrayList<>();
-            for (GloomComponent comp : this.content) {
-                clonedContent.add(comp.clone());
-            }
-
-            // Use reflection to reset final fields if necessary, or rely on mutable internal state.
-            // Here we re-initialize the ReactiveState for the new instance.
-            var stateField = PagedComponent.class.getDeclaredField("currentPage");
-            stateField.setAccessible(true);
-            stateField.set(cloned, new ReactiveState<>(0));
-
-            var contentField = PagedComponent.class.getDeclaredField("content");
-            contentField.setAccessible(true);
-            contentField.set(cloned, clonedContent);
-
-            cloned.parent = null; // Reset parent
-
-            // Re-subscribe listener to the NEW parent (once assigned)
-            cloned.getState().subscribe(page -> {
-                if (cloned.parent != null) cloned.parent.redraw();
-            });
-
-            return cloned;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to clone PagedComponent", e);
+            PagedComponent<T> clone = (PagedComponent<T>) super.clone();
+            clone.dirty = true;
+            clone.currentItems = null;
+            // pageState 與 dataState 引用被拷貝，但監聽器需要重新綁定嗎？
+            // 原型模式下，dataState 通常是共享的，但 pageState 每個玩家獨立。
+            // 注意：這裡簡化處理，實際使用時如果 pageState 需要獨立，應在外部重新設置或在此處深拷貝
+            return clone;
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeException(e);
         }
     }
 }

@@ -1,138 +1,130 @@
 package gloomlib.gui.component.builtin;
 
-import gloomlib.gui.api.GloomGui;
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.interaction.InteractionContext;
 import gloomlib.gui.state.ReactiveState;
+import gloomlib.gui.util.Paginator;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
- * A component that handles scrolling through a list of items.
- * Can be used for vertical or horizontal scrolling.
+ * 滾動列表組件。
  */
-public class ScrollComponent implements GloomComponent {
+public class ScrollComponent<T> implements GloomComponent {
 
-    private final List<GloomComponent> content;
-    private final ReactiveState<Integer> scrollOffset;
-    private final int viewSize; // How many items are visible at once
-    private final int stepSize; // How many columns/rows usually (e.g. 9 for vertical list)
-    private GloomGui parent;
-    public ScrollComponent(List<GloomComponent> content, int viewSize, int stepSize) {
-        this.content = new ArrayList<>(content);
-        this.viewSize = viewSize;
-        this.stepSize = stepSize;
-        this.scrollOffset = new ReactiveState<>(0);
+    private final ReactiveState<List<T>> dataState;
+    private final ReactiveState<Integer> pageState;
+    private final Function<T, ItemStack> itemRenderer;
+    private final BiConsumer<InteractionContext, T> clickHandler;
 
-        // Auto-redraw on scroll
-        this.scrollOffset.subscribe(offset -> {
-            if (parent != null) parent.redraw();
-        });
-    }
+    private final int pageSize;
 
-    /**
-     * Adds an element dynamically.
-     */
-    public void addElement(GloomComponent element) {
-        content.add(element);
-        if (parent != null) parent.redraw();
-    }
+    private Paginator<T> paginator;
+    private List<T> currentItems;
+    private boolean dirty = true;
 
-    public void scroll(int delta) {
-        int next = scrollOffset.get() + delta;
-        int maxOffset = Math.max(0, (int) Math.ceil((double) (content.size() - viewSize) / stepSize) * stepSize);
+    // [Fix] 類型修正
+    private final Consumer<List<T>> dataListener;
+    private final Consumer<Integer> pageListener;
 
-        // Simple bounds check (can be refined based on strict row/column logic)
-        if (next < 0) next = 0;
-        if (next >= content.size()) next = content.size() - 1;
-        // Ideally we clamp to max scrollable rows
+    public ScrollComponent(ReactiveState<List<T>> dataState,
+                           int pageSize,
+                           Function<T, ItemStack> itemRenderer,
+                           BiConsumer<InteractionContext, T> clickHandler) {
+        this.dataState = dataState;
+        this.pageState = new ReactiveState<>(0);
+        this.pageSize = pageSize;
+        this.itemRenderer = itemRenderer;
+        this.clickHandler = clickHandler;
 
-        scrollOffset.set(next);
-    }
+        // [Fix] Lambda 參數類型推斷正確
+        this.dataListener = (list) -> {
+            this.paginator = new Paginator<>(list, pageSize);
+            if (pageState.get() >= paginator.getTotalPages()) {
+                pageState.set(0);
+            }
+            this.dirty = true;
+        };
+        this.dataState.subscribe(this.dataListener);
 
-    public void scrollUp() {
-        scroll(-stepSize);
-    }
+        // 初始加載
+        if (dataState.get() != null) {
+            this.dataListener.accept(dataState.get());
+        }
 
-    public void scrollDown() {
-        scroll(stepSize);
-    }
-
-    public ReactiveState<Integer> getState() {
-        return scrollOffset;
-    }
-
-    public List<GloomComponent> getVisibleComponents() {
-        int start = scrollOffset.get();
-        int end = Math.min(start + viewSize, content.size());
-
-        if (start >= content.size()) return new ArrayList<>();
-        return content.subList(start, end);
+        this.pageListener = (page) -> this.dirty = true;
+        this.pageState.subscribe(this.pageListener);
     }
 
     @Override
-    public @NotNull ItemStack render() {
-        // Virtual container, returns AIR or a placeholder
+    public @NotNull ItemStack render(int index) {
+        if (dirty || currentItems == null) {
+            if (paginator != null) {
+                currentItems = paginator.getPage(pageState.get());
+            }
+            dirty = false;
+        }
+
+        if (currentItems != null && index < currentItems.size()) {
+            return itemRenderer.apply(currentItems.get(index));
+        }
         return new ItemStack(Material.AIR);
     }
 
     @Override
-    public void tick() {
-        getVisibleComponents().forEach(GloomComponent::tick);
-    }
+    public void onClick(InteractionContext context) {
+        int index = (int) context.componentState();
 
-    @Override
-    public void handleClick(@NotNull InteractionContext context) {
-        // Delegation logic handled by GuiLayout or Parent
-    }
-
-    @Override
-    public void setParent(@Nullable GloomGui gui) {
-        this.parent = gui;
-        for (GloomComponent child : content) {
-            child.setParent(gui);
-        }
-    }
-
-    @Override
-    public @NotNull ScrollComponent clone() {
-        try {
-            ScrollComponent cloned = (ScrollComponent) super.clone();
-
-            // Deep copy content
-            List<GloomComponent> clonedContent = new ArrayList<>();
-            for (GloomComponent comp : this.content) {
-                clonedContent.add(comp.clone());
+        if (currentItems != null && index < currentItems.size()) {
+            T data = currentItems.get(index);
+            if (clickHandler != null) {
+                clickHandler.accept(context, data);
             }
-
-            // Reset state
-            var offsetField = ScrollComponent.class.getDeclaredField("scrollOffset");
-            offsetField.setAccessible(true);
-            offsetField.set(cloned, new ReactiveState<>(0));
-
-            var contentField = ScrollComponent.class.getDeclaredField("content");
-            contentField.setAccessible(true);
-            contentField.set(cloned, clonedContent);
-
-            cloned.parent = null;
-
-            cloned.getState().subscribe(val -> {
-                if (cloned.parent != null) cloned.parent.redraw();
-            });
-
-            return cloned;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to clone ScrollComponent", e);
         }
     }
 
-    public enum Orientation {
-        VERTICAL,
-        HORIZONTAL
+    @Override
+    public boolean onTick() {
+        return false;
+    }
+
+    public void nextPage() {
+        if (paginator != null && paginator.hasNext(pageState.get())) {
+            pageState.set(pageState.get() + 1);
+        }
+    }
+
+    public void prevPage() {
+        if (paginator != null && paginator.hasPrev(pageState.get())) {
+            pageState.set(pageState.get() - 1);
+        }
+    }
+
+    public ReactiveState<Integer> getPageState() {
+        return pageState;
+    }
+
+    @Override
+    public void dispose() {
+        dataState.unsubscribe(dataListener);
+        pageState.unsubscribe(pageListener);
+    }
+
+    @Override
+    public ScrollComponent<T> clone() {
+        try {
+            ScrollComponent<T> clone = (ScrollComponent<T>) super.clone();
+            clone.dirty = true;
+            clone.currentItems = null;
+            return clone;
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

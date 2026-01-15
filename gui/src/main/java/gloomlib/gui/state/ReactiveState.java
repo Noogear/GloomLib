@@ -14,15 +14,11 @@ import java.util.function.Supplier;
  */
 public class ReactiveState<T> implements Supplier<T> {
 
-    private final List<Consumer<T>> listeners = new ArrayList<>();
     private T value;
+    private final List<Consumer<T>> listeners = new ArrayList<>();
 
     public ReactiveState(T initialValue) {
         this.value = initialValue;
-    }
-
-    public static <T> ReactiveState<T> of(T value) {
-        return new ReactiveState<>(value);
     }
 
     @Override
@@ -50,5 +46,9 @@ public class ReactiveState<T> implements Supplier<T> {
         for (Consumer<T> listener : new ArrayList<>(listeners)) {
             listener.accept(value);
         }
+    }
+
+    public static <T> ReactiveState<T> of(T value) {
+        return new ReactiveState<>(value);
     }
 }

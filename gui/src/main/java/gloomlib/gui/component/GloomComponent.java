@@ -1,52 +1,68 @@
 package gloomlib.gui.component;
 
-import gloomlib.gui.api.GloomGui;
 import gloomlib.gui.interaction.InteractionContext;
+import gloomlib.gui.state.ReactiveState;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
- * Represents a UI element in the GUI.
- * Updated to support Composition, Animation, and Deep Cloning.
+ * 可復用組件接口。
+ * 支持多槽位渲染、克隆與響應式更新。
  */
 public interface GloomComponent extends Cloneable {
 
     /**
-     * Renders the component to an ItemStack.
-     *
-     * @return The display item.
+     * 渲染組件。
+     * @param index 組件內部的相對索引 (用於多格組件)。
      */
     @NotNull
-    ItemStack render();
+    ItemStack render(int index);
 
-    /**
-     * Called when a player clicks on this component.
-     *
-     * @param context The interaction context.
-     */
-    void handleClick(@NotNull InteractionContext context);
+    void onClick(InteractionContext context);
 
-    /**
-     * Called every tick (if the GUI supports ticking).
-     * Used for animations or dynamic updates.
-     */
-    default void tick() {
-    }
+    boolean onTick();
 
-    /**
-     * Sets the parent GUI holder.
-     * Essential for scheduling tasks or checking GUI state.
-     *
-     * @param gui The parent GUI.
-     */
-    default void setParent(@Nullable GloomGui gui) {
-    }
+    default void dispose() {}
 
-    /**
-     * Deep clone contract.
-     * Components MUST implement deep copying for mutable fields (Lists, States).
-     */
-    @NotNull
     GloomComponent clone();
+
+    static Builder builder() { return new Builder(); }
+
+    class Builder {
+        private Function<ReactiveState<?>, ItemStack> renderer;
+        private ReactiveState<?> bindState;
+        private Consumer<InteractionContext> clickHandler;
+        private Consumer<GloomComponent> tickHandler;
+
+        public <T> Builder onRender(Function<T, ItemStack> renderer, ReactiveState<T> state) {
+            this.renderer = (Function<ReactiveState<?>, ItemStack>) (Object) renderer;
+            this.bindState = state;
+            return this;
+        }
+
+        public Builder icon(ItemStack item) {
+            this.renderer = (ignored) -> item;
+            return this;
+        }
+
+        public Builder onClick(Consumer<InteractionContext> handler) {
+            this.clickHandler = handler;
+            return this;
+        }
+
+        public Builder onTick(Consumer<GloomComponent> handler) {
+            this.tickHandler = handler;
+            return this;
+        }
+
+        public GloomComponent build() {
+            return new SimpleGloomComponent(
+                    (state, idx) -> renderer != null ? renderer.apply(state) : null,
+                    bindState, clickHandler, tickHandler
+            );
+        }
+    }
 }
