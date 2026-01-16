@@ -4,21 +4,20 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
-/**
- * 響應式狀態容器。
- * 當值變化時，自動通知所有綁定的組件進行刷新。
- *
- * @param <T> 狀態類型
- */
 public class ReactiveState<T> implements Supplier<T> {
 
-    private T value;
     private final List<Consumer<T>> listeners = new ArrayList<>();
+    private T value;
 
     public ReactiveState(T initialValue) {
         this.value = initialValue;
+    }
+
+    public static <T> ReactiveState<T> of(T value) {
+        return new ReactiveState<>(value);
     }
 
     @Override
@@ -43,12 +42,19 @@ public class ReactiveState<T> implements Supplier<T> {
     }
 
     private void notifyListeners() {
-        for (Consumer<T> listener : new ArrayList<>(listeners)) {
+        List<Consumer<T>> snapShot = new ArrayList<>(listeners);
+        for (Consumer<T> listener : snapShot) {
             listener.accept(value);
         }
     }
 
-    public static <T> ReactiveState<T> of(T value) {
-        return new ReactiveState<>(value);
+    public <R> ReactiveState<R> map(Function<T, R> mapper) {
+        ReactiveState<R> mappedState = new ReactiveState<>(mapper.apply(this.value));
+        this.subscribe(newVal -> mappedState.set(mapper.apply(newVal)));
+        return mappedState;
+    }
+
+    public void observe(Consumer<T> observer) {
+        this.subscribe(observer);
     }
 }

@@ -4,6 +4,7 @@ import gloomlib.gui.interaction.InteractionContext;
 import gloomlib.gui.state.ReactiveState;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -18,7 +19,6 @@ public class SimpleGloomComponent implements GloomComponent {
     private boolean dirty = true;
     private ItemStack cachedItem;
 
-    // [Fix] 基礎組件處理未知類型，使用 Object 通用監聽器
     private Consumer<Object> stateListener;
 
     public SimpleGloomComponent(BiFunction<ReactiveState<?>, Integer, ItemStack> renderer,
@@ -35,15 +35,13 @@ public class SimpleGloomComponent implements GloomComponent {
     @SuppressWarnings("unchecked")
     private void setupListener() {
         if (this.bindState != null) {
-            // [Fix] 這是類型擦除邊界，我們需要監聽任意類型的變化
             this.stateListener = (val) -> this.dirty = true;
-            // 強制轉換為 <Object> 以匹配 Consumer<Object>
             ((ReactiveState<Object>) this.bindState).subscribe(this.stateListener);
         }
     }
 
     @Override
-    public ItemStack render(int index) {
+    public @NotNull ItemStack render(int index) {
         if (dirty || cachedItem == null) {
             if (renderer != null) {
                 cachedItem = renderer.apply(bindState, index);
@@ -84,7 +82,7 @@ public class SimpleGloomComponent implements GloomComponent {
             SimpleGloomComponent clone = (SimpleGloomComponent) super.clone();
             clone.dirty = true;
             clone.cachedItem = null;
-            clone.setupListener(); // 為新實例重新設置監聽器
+            clone.setupListener();
             return clone;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);

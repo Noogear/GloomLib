@@ -1,92 +1,50 @@
 package gloomlib.gui.component.builtin;
 
+import gloomlib.gui.animation.Animation;
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.interaction.InteractionContext;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Consumer;
-
-/**
- * 動畫組件。
- */
 public class AnimatedComponent implements GloomComponent {
 
-    private final List<ItemStack> frames;
-    private final long tickRate;
-    private final Consumer<InteractionContext> clickHandler;
+    private final Animation<ItemStack> animation;
+    private final int updateInterval;
+    private long startTick = -1;
 
-    private int currentFrameIndex = 0;
-    private long tickCounter = 0;
+    public AnimatedComponent(Animation<ItemStack> animation, int updateInterval) {
+        this.animation = animation;
+        this.updateInterval = Math.max(1, updateInterval);
+    }
 
-    public AnimatedComponent(List<ItemStack> frames, long tickRate, Consumer<InteractionContext> clickHandler) {
-        this.frames = new ArrayList<>(frames);
-        this.tickRate = Math.max(1, tickRate);
-        this.clickHandler = clickHandler;
+    public AnimatedComponent(Animation<ItemStack> animation) {
+        this(animation, 1);
     }
 
     @Override
     public @NotNull ItemStack render(int index) {
-        if (frames.isEmpty()) return null;
-        return frames.get(currentFrameIndex);
-    }
-
-    @Override
-    public boolean onTick() {
-        tickCounter++;
-        if (tickCounter >= tickRate) {
-            tickCounter = 0;
-            currentFrameIndex = (currentFrameIndex + 1) % frames.size();
-            return true;
-        }
-        return false;
+        if (startTick == -1) startTick = System.currentTimeMillis() / 50;
+        long currentTick = (System.currentTimeMillis() / 50);
+        return animation.getFrame(currentTick - startTick);
     }
 
     @Override
     public void onClick(InteractionContext context) {
-        if (clickHandler != null) {
-            clickHandler.accept(context);
-        }
     }
 
     @Override
-    public AnimatedComponent clone() {
-        try {
-            AnimatedComponent clone = (AnimatedComponent) super.clone();
-            clone.currentFrameIndex = 0;
-            clone.tickCounter = 0;
-            return clone;
-        } catch (CloneNotSupportedException e) {
-            throw new RuntimeException(e);
-        }
+    public boolean onTick() {
+        long currentTick = (System.currentTimeMillis() / 50);
+        return currentTick % updateInterval == 0;
     }
 
-    public static Builder builder() { return new Builder(); }
+    @Override
+    public int getTickRate() {
+        return updateInterval;
+    }
 
-    public static class Builder {
-        private final List<ItemStack> frames = new ArrayList<>();
-        private long tickRate = 20;
-        private Consumer<InteractionContext> clickHandler;
-
-        public Builder addFrame(ItemStack item) {
-            frames.add(item);
-            return this;
-        }
-
-        public Builder speed(long ticks) {
-            this.tickRate = ticks;
-            return this;
-        }
-
-        public Builder onClick(Consumer<InteractionContext> handler) {
-            this.clickHandler = handler;
-            return this;
-        }
-
-        public AnimatedComponent build() {
-            return new AnimatedComponent(frames, tickRate, clickHandler);
-        }
+    @Override
+    public GloomComponent clone() {
+        return new AnimatedComponent(animation, updateInterval);
     }
 }

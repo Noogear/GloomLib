@@ -41,8 +41,7 @@ public class GloomGuiListener implements Listener {
     public void onClose(InventoryCloseEvent event) {
         InventoryHolder holder = event.getInventory().getHolder();
         if (holder instanceof GloomGui gui) {
-            gui.destroy();
-            GuiSecurity.cleanInventory((org.bukkit.entity.Player) event.getPlayer());
+            gui.handleClose(event);
         }
     }
 

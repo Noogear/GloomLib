@@ -6,9 +6,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 
-/**
- * 利用 Paper PDC 防止物品竊取。
- */
 public class GuiSecurity {
 
     public static final NamespacedKey LOCK_KEY = new NamespacedKey(GloomGuiManager.getPlugin(), "gui_item_lock");

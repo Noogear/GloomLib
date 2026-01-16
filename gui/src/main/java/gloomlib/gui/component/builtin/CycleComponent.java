@@ -10,21 +10,15 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-/**
- * 循環切換組件。
- */
 public class CycleComponent<T> implements GloomComponent {
 
     private final ReactiveState<T> state;
     private final List<T> values;
     private final Function<T, ItemStack> renderer;
     private final Consumer<T> changeListener;
-
+    private final Consumer<T> stateListener;
     private boolean dirty = true;
     private ItemStack cachedItem;
-
-    // [Fix] 類型修正：匹配泛型 T
-    private final Consumer<T> stateListener;
 
     public CycleComponent(ReactiveState<T> state, List<T> values,
                           Function<T, ItemStack> renderer,
@@ -77,7 +71,6 @@ public class CycleComponent<T> implements GloomComponent {
             CycleComponent<T> clone = (CycleComponent<T>) super.clone();
             clone.dirty = true;
             clone.cachedItem = null;
-            // 這裡重新訂閱到共享的 state
             this.state.subscribe(clone.stateListener);
             return clone;
         } catch (CloneNotSupportedException e) {

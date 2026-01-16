@@ -13,9 +13,6 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-/**
- * 滾動列表組件。
- */
 public class ScrollComponent<T> implements GloomComponent {
 
     private final ReactiveState<List<T>> dataState;
@@ -24,14 +21,11 @@ public class ScrollComponent<T> implements GloomComponent {
     private final BiConsumer<InteractionContext, T> clickHandler;
 
     private final int pageSize;
-
+    private final Consumer<List<T>> dataListener;
+    private final Consumer<Integer> pageListener;
     private Paginator<T> paginator;
     private List<T> currentItems;
     private boolean dirty = true;
-
-    // [Fix] 類型修正
-    private final Consumer<List<T>> dataListener;
-    private final Consumer<Integer> pageListener;
 
     public ScrollComponent(ReactiveState<List<T>> dataState,
                            int pageSize,
@@ -43,7 +37,6 @@ public class ScrollComponent<T> implements GloomComponent {
         this.itemRenderer = itemRenderer;
         this.clickHandler = clickHandler;
 
-        // [Fix] Lambda 參數類型推斷正確
         this.dataListener = (list) -> {
             this.paginator = new Paginator<>(list, pageSize);
             if (pageState.get() >= paginator.getTotalPages()) {
@@ -53,7 +46,6 @@ public class ScrollComponent<T> implements GloomComponent {
         };
         this.dataState.subscribe(this.dataListener);
 
-        // 初始加載
         if (dataState.get() != null) {
             this.dataListener.accept(dataState.get());
         }

@@ -13,9 +13,6 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-/**
- * 分頁組件。
- */
 public class PagedComponent<T> implements GloomComponent {
 
     private final ReactiveState<List<T>> dataState;
@@ -23,14 +20,11 @@ public class PagedComponent<T> implements GloomComponent {
     private final Function<T, ItemStack> itemRenderer;
     private final BiConsumer<InteractionContext, T> clickHandler;
     private final int pageSize;
-
+    private final Consumer<List<T>> dataListener;
+    private final Consumer<Integer> pageListener;
     private Paginator<T> paginator;
     private List<T> currentItems;
     private boolean dirty = true;
-
-    // [Fix] 類型修正：明確指定泛型類型，避免 Object 轉換錯誤
-    private final Consumer<List<T>> dataListener;
-    private final Consumer<Integer> pageListener;
 
     public PagedComponent(ReactiveState<List<T>> dataState,
                           int pageSize,
@@ -42,7 +36,6 @@ public class PagedComponent<T> implements GloomComponent {
         this.itemRenderer = itemRenderer;
         this.clickHandler = clickHandler;
 
-        // [Fix] 這裡的 list 會自動推斷為 List<T>
         this.dataListener = (list) -> {
             this.paginator = new Paginator<>(list, pageSize);
             if (pageState.get() >= paginator.getTotalPages()) {
@@ -51,7 +44,6 @@ public class PagedComponent<T> implements GloomComponent {
                 this.dirty = true;
             }
         };
-        // [Fix] 類型匹配，無需強制轉換
         this.dataState.subscribe(this.dataListener);
 
         if (dataState.get() != null) {
@@ -128,9 +120,6 @@ public class PagedComponent<T> implements GloomComponent {
             PagedComponent<T> clone = (PagedComponent<T>) super.clone();
             clone.dirty = true;
             clone.currentItems = null;
-            // pageState 與 dataState 引用被拷貝，但監聽器需要重新綁定嗎？
-            // 原型模式下，dataState 通常是共享的，但 pageState 每個玩家獨立。
-            // 注意：這裡簡化處理，實際使用時如果 pageState 需要獨立，應在外部重新設置或在此處深拷貝
             return clone;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);

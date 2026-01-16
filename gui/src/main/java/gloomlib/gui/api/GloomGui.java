@@ -2,163 +2,219 @@ package gloomlib.gui.api;
 
 import gloomlib.gui.GloomGuiManager;
 import gloomlib.gui.component.GloomComponent;
+import gloomlib.gui.config.GuiConfiguration;
 import gloomlib.gui.holder.GuiHolder;
 import gloomlib.gui.interaction.InteractionContext;
+import gloomlib.gui.util.DirtyTracker;
 import gloomlib.gui.util.GuiSecurity;
+import gloomlib.gui.window.Window;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.function.Consumer;
 
 public class GloomGui implements GuiHolder {
 
     private final Player viewer;
-    private final Inventory inventory;
-    private Component title;
-    private final String[] structure;
-    private final Map<Character, GloomComponent> charComponents;
-    private final Map<Integer, GloomComponent> slotComponents;
-    private final Map<Integer, Integer> slotIndices = new HashMap<>();
+    private final Component title;
+    private final GuiConfiguration config;
+    private final Consumer<InventoryCloseEvent> closeAction;
     private final Map<Integer, GloomComponent> activeSlots = new HashMap<>();
+    private final Map<Integer, Integer> slotIndices = new HashMap<>();
+    private final List<GloomComponent> tickableComponents = new ArrayList<>();
+    private final DirtyTracker dirtyTracker;
+    private Window window;
     private boolean isDestroyed = false;
 
-    public GloomGui(Player viewer, Component title, int rows, InventoryType type, String[] structure,
-                    Map<Character, GloomComponent> charComponents,
-                    Map<Integer, GloomComponent> slotComponents) {
+    public GloomGui(Player viewer, Component title, int size, GuiConfiguration config,
+                    Consumer<InventoryCloseEvent> closeAction,
+                    Map<Integer, GloomComponent> layout,
+                    Map<Integer, Integer> indices) {
         this.viewer = viewer;
         this.title = title;
-        this.structure = structure;
-        this.charComponents = charComponents;
-        this.slotComponents = slotComponents;
+        this.config = config;
+        this.closeAction = closeAction;
+        this.activeSlots.putAll(layout);
+        this.slotIndices.putAll(indices);
+        this.dirtyTracker = new DirtyTracker(size);
 
-        if (type == InventoryType.CHEST) {
-            this.inventory = Bukkit.createInventory(this, rows * 9, title);
-        } else {
-            this.inventory = Bukkit.createInventory(this, type, title);
-        }
-
-        computeLayout();
-        redraw();
-    }
-
-
-    public void redraw() {
-        if (isDestroyed) return;
-        if (!Bukkit.isPrimaryThread()) {
-            Bukkit.getScheduler().runTask(GloomGuiManager.getPlugin(), this::redraw);
-            return;
-        }
-
-        activeSlots.forEach((slot, comp) -> {
-            int index = slotIndices.getOrDefault(slot, 0);
-            ItemStack item = comp.render(index);
-
-            if (item != null && !item.getType().isAir()) {
-                GuiSecurity.markAsGuiItem(item);
-            }
-
-            inventory.setItem(slot, item);
-        });
-    }
-
-    private void computeLayout() {
-        activeSlots.clear();
-        slotIndices.clear();
-
-        Map<GloomComponent, Integer> componentCounters = new HashMap<>();
-
-        int width = 9;
-        InventoryType type = inventory.getType();
-        if(type == InventoryType.HOPPER) width = 5;
-        else if(type == InventoryType.DISPENSER || type == InventoryType.DROPPER || type == InventoryType.WORKBENCH) width = 3;
-
-        if (structure != null) {
-            for (int row = 0; row < structure.length; row++) {
-                String rowStr = structure[row];
-                char[] chars = rowStr.replace(" ", "").toCharArray();
-                for (int col = 0; col < chars.length && col < width; col++) {
-                    char key = chars[col];
-                    GloomComponent comp = charComponents.get(key);
-                    if (comp != null) {
-                        int slot = row * width + col;
-                        int index = componentCounters.getOrDefault(comp, 0);
-                        activeSlots.put(slot, comp);
-                        slotIndices.put(slot, index);
-                        componentCounters.put(comp, index + 1);
-                    }
+        if (config.enableAnimations()) {
+            Set<GloomComponent> processed = new HashSet<>();
+            for (GloomComponent comp : layout.values()) {
+                if (processed.add(comp) && comp.getTickRate() > 0) {
+                    tickableComponents.add(comp);
                 }
             }
         }
-        slotComponents.forEach((slot, comp) -> {
-            activeSlots.put(slot, comp);
-            slotIndices.put(slot, 0);
-        });
+    }
+
+    public void bindToWindow(Window window) {
+        this.window = window;
+
+        dirtyTracker.markGlobal();
+        performRedraw();
+
+        if (config.updateStrategy() == GuiConfiguration.UpdateStrategy.PERIODIC) {
+            GloomGuiManager.register(window, config.tickRate());
+        }
     }
 
     public void tick() {
-        if (isDestroyed) return;
-        boolean needsUpdate = false;
-        for (GloomComponent comp : new java.util.HashSet<>(activeSlots.values())) {
-            if (comp.onTick()) needsUpdate = true;
+        if (isDestroyed || !config.enableAnimations()) return;
+
+        boolean visualChanged = false;
+        for (GloomComponent comp : tickableComponents) {
+            if (comp.onTick()) {
+                markComponentDirty(comp);
+                visualChanged = true;
+            }
         }
-        if (needsUpdate) redraw();
+
+        if (visualChanged) {
+            performRedraw();
+        }
     }
 
-    public void open() {
-        GloomGuiManager.track(this);
-        viewer.openInventory(inventory);
+    public void requestRedraw() {
+        dirtyTracker.markGlobal();
+        if (config.updateStrategy() == GuiConfiguration.UpdateStrategy.REACTIVE) {
+            if (Bukkit.isPrimaryThread()) {
+                performRedraw();
+            } else {
+                Bukkit.getScheduler().runTask(GloomGuiManager.getPlugin(), this::performRedraw);
+            }
+        }
     }
 
-    public void destroy() {
-        if (isDestroyed) return;
-        isDestroyed = true;
-        GloomGuiManager.untrack(this);
-        new java.util.HashSet<>(activeSlots.values()).forEach(GloomComponent::dispose);
-        activeSlots.clear();
-    }
+    private void performRedraw() {
+        if (isDestroyed || window == null) return;
 
-    public Player getViewer() { return viewer; }
+        Inventory inv = ((org.bukkit.inventory.InventoryHolder) window).getInventory();
 
-    public void handleClick(InventoryClickEvent event) {
-        event.setCancelled(true);
-        if (event.getClickedInventory() == null) return;
-        if (event.getClickedInventory() != inventory) {
-            if (event.isShiftClick()) event.setCancelled(true);
+        if (dirtyTracker.isGlobalDirty()) {
+            activeSlots.forEach((slot, comp) -> updateSlot(inv, slot, comp));
+            dirtyTracker.popDirtySlots();
             return;
         }
 
-        int slot = event.getSlot();
-        GloomComponent comp = activeSlots.get(slot);
+        BitSet dirty = dirtyTracker.popDirtySlots();
+        if (dirty.isEmpty()) return;
 
-        if (comp != null) {
+        for (int slot = dirty.nextSetBit(0); slot >= 0; slot = dirty.nextSetBit(slot + 1)) {
+            GloomComponent comp = activeSlots.get(slot);
+            if (comp != null) {
+                updateSlot(inv, slot, comp);
+            } else {
+                inv.setItem(slot, null);
+            }
+        }
+    }
+
+    private void updateSlot(Inventory inv, int slot, GloomComponent comp) {
+        if (!comp.canInteract()) {
             int index = slotIndices.getOrDefault(slot, 0);
-            InteractionContext ctx = new InteractionContext(
-                    (Player) event.getWhoClicked(),
-                    event.getClick(),
-                    event.getAction(),
-                    slot,
-                    event.getCurrentItem(),
-                    index
-            );
-            comp.onClick(ctx);
-            redraw();
+            ItemStack newItem = comp.render(index);
+
+            if (newItem != null && !newItem.getType().isAir()) {
+                GuiSecurity.markAsGuiItem(newItem);
+            }
+
+            ItemStack current = inv.getItem(slot);
+            if (current == null || !current.isSimilar(newItem) || current.getAmount() != newItem.getAmount()) {
+                inv.setItem(slot, newItem);
+            }
+        }
+    }
+
+    private void markComponentDirty(GloomComponent target) {
+        activeSlots.forEach((slot, comp) -> {
+            if (comp == target) {
+                dirtyTracker.mark(slot);
+            }
+        });
+    }
+
+    public void destroy() {
+        isDestroyed = true;
+        if (config.updateStrategy() == GuiConfiguration.UpdateStrategy.PERIODIC && window != null) {
+            GloomGuiManager.unregister(window);
+        }
+        activeSlots.clear();
+        tickableComponents.clear();
+    }
+
+    public void handleClick(InventoryClickEvent event) {
+        if (event.getClickedInventory() == null || window == null) return;
+
+        Inventory guiInventory = ((org.bukkit.inventory.InventoryHolder) window).getInventory();
+
+        if (event.getClickedInventory().equals(guiInventory)) {
+            int slot = event.getSlot();
+            GloomComponent comp = activeSlots.get(slot);
+
+            if (comp != null) {
+                event.setCancelled(!comp.canInteract());
+
+                int index = slotIndices.getOrDefault(slot, 0);
+                InteractionContext ctx = new InteractionContext(
+                        (Player) event.getWhoClicked(),
+                        event.getClick(),
+                        event.getAction(),
+                        slot,
+                        event.getCurrentItem(),
+                        index
+                );
+
+                comp.onClick(ctx);
+
+                if (!comp.canInteract()) {
+                    requestRedraw();
+                }
+            } else {
+                event.setCancelled(true);
+            }
+        } else {
+            event.setCancelled(event.isShiftClick());
         }
     }
 
     public void handleDrag(InventoryDragEvent event) {
-        boolean affectsGui = event.getRawSlots().stream()
-                .anyMatch(slot -> slot < inventory.getSize());
-        if (affectsGui) event.setCancelled(true);
+        if (window == null) return;
+        Inventory guiInventory = ((org.bukkit.inventory.InventoryHolder) window).getInventory();
+        int size = guiInventory.getSize();
+
+        boolean involvesReadOnly = event.getRawSlots().stream()
+                .filter(slot -> slot < size)
+                .anyMatch(slot -> {
+                    GloomComponent comp = activeSlots.get(slot);
+                    return comp == null || !comp.canInteract();
+                });
+
+        if (involvesReadOnly) {
+            event.setCancelled(true);
+        }
+    }
+
+    public void handleClose(InventoryCloseEvent event) {
+        if (closeAction != null) {
+            closeAction.accept(event);
+        }
+        destroy();
     }
 
     @Override
-    public @NotNull Inventory getInventory() { return inventory; }
+    public @NotNull Inventory getInventory() {
+        if (window instanceof org.bukkit.inventory.InventoryHolder h) {
+            return h.getInventory();
+        }
+        throw new IllegalStateException("GloomGui is not bound to a Bukkit InventoryHolder Window");
+    }
 }

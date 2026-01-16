@@ -11,23 +11,20 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 
-/**
- * 標籤頁組件。
- */
 public class TabComponent implements GloomComponent {
 
     private final ReactiveState<String> tabState;
     private final Map<String, GloomComponent> tabs = new HashMap<>();
     private final GloomComponent fallback;
 
-    // [Fix] 類型修正：監聽 String 類型的狀態
     private final Consumer<String> listener;
 
     public TabComponent(String initialTab) {
         this.tabState = new ReactiveState<>(initialTab);
         this.fallback = GloomComponent.builder().icon(new ItemStack(Material.AIR)).build();
 
-        this.listener = (val) -> { /* 觸發重繪邏輯由組件系統處理，這裡主要確保訂閱關係 */ };
+        this.listener = (val) -> {
+        };
         this.tabState.subscribe(this.listener);
     }
 

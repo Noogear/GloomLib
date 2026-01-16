@@ -8,16 +8,12 @@ import org.jetbrains.annotations.NotNull;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-/**
- * 可復用組件接口。
- * 支持多槽位渲染、克隆與響應式更新。
- */
 public interface GloomComponent extends Cloneable {
 
-    /**
-     * 渲染組件。
-     * @param index 組件內部的相對索引 (用於多格組件)。
-     */
+    static Builder builder() {
+        return new Builder();
+    }
+
     @NotNull
     ItemStack render(int index);
 
@@ -25,20 +21,29 @@ public interface GloomComponent extends Cloneable {
 
     boolean onTick();
 
-    default void dispose() {}
+    default boolean canInteract() {
+        return false;
+    }
+
+    default int getTickRate() {
+        return 0;
+    }
+
+    default void dispose() {
+    }
 
     GloomComponent clone();
-
-    static Builder builder() { return new Builder(); }
 
     class Builder {
         private Function<ReactiveState<?>, ItemStack> renderer;
         private ReactiveState<?> bindState;
         private Consumer<InteractionContext> clickHandler;
         private Consumer<GloomComponent> tickHandler;
+        private boolean editable = false;
+        private int tickRate = 0;
 
         public <T> Builder onRender(Function<T, ItemStack> renderer, ReactiveState<T> state) {
-            this.renderer = (Function<ReactiveState<?>, ItemStack>) (Object) renderer;
+            this.renderer = (Function<ReactiveState<?>, ItemStack>) renderer;
             this.bindState = state;
             return this;
         }
@@ -58,11 +63,31 @@ public interface GloomComponent extends Cloneable {
             return this;
         }
 
+        public Builder editable(boolean editable) {
+            this.editable = editable;
+            return this;
+        }
+
+        public Builder tickRate(int rate) {
+            this.tickRate = rate;
+            return this;
+        }
+
         public GloomComponent build() {
             return new SimpleGloomComponent(
                     (state, idx) -> renderer != null ? renderer.apply(state) : null,
                     bindState, clickHandler, tickHandler
-            );
+            ) {
+                @Override
+                public boolean canInteract() {
+                    return editable;
+                }
+
+                @Override
+                public int getTickRate() {
+                    return tickRate;
+                }
+            };
         }
     }
 }
