@@ -23,7 +23,10 @@ public class AnimatedComponent implements GloomComponent {
 
     @Override
     public @NotNull ItemStack render(int index) {
-        if (startTick == -1) startTick = System.currentTimeMillis() / 50;
+        if (startTick == -1) {
+            startTick = System.currentTimeMillis() / 50;
+        }
+
         long currentTick = (System.currentTimeMillis() / 50);
         return animation.getFrame(currentTick - startTick);
     }
@@ -35,6 +38,7 @@ public class AnimatedComponent implements GloomComponent {
     @Override
     public boolean onTick() {
         long currentTick = (System.currentTimeMillis() / 50);
+
         return currentTick % updateInterval == 0;
     }
 

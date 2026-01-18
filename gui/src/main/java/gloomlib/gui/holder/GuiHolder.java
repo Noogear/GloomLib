@@ -11,6 +11,7 @@ import java.util.List;
 
 public interface GuiHolder extends InventoryHolder {
 
+    @SuppressWarnings("deprecation")
     default void updateTitle(final Component title) {
         final List<HumanEntity> viewers = getInventory().getViewers();
         if (!viewers.isEmpty()) {
@@ -21,6 +22,7 @@ public interface GuiHolder extends InventoryHolder {
         }
     }
 
+    @SuppressWarnings("deprecation")
     default void updateTitle(@NotNull final HumanEntity viewer, final Component title) {
         final InventoryView openView = viewer.getOpenInventory();
         if (openView.getTopInventory().equals(getInventory())) {

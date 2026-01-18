@@ -3,78 +3,66 @@ package gloomlib.gui.component.builtin;
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.interaction.InteractionContext;
 import gloomlib.gui.state.ReactiveState;
-import gloomlib.gui.util.Paginator;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class ScrollComponent<T> implements GloomComponent {
 
     private final ReactiveState<List<T>> dataState;
-    private final ReactiveState<Integer> pageState;
-    private final Function<T, ItemStack> itemRenderer;
+    private final ReactiveState<Integer> scrollState;
+    private final int viewportSize;
+    private final Function<T, ItemStack> renderer;
     private final BiConsumer<InteractionContext, T> clickHandler;
 
-    private final int pageSize;
-    private final Consumer<List<T>> dataListener;
-    private final Consumer<Integer> pageListener;
-    private Paginator<T> paginator;
-    private List<T> currentItems;
-    private boolean dirty = true;
+    private List<T> currentData;
 
     public ScrollComponent(ReactiveState<List<T>> dataState,
-                           int pageSize,
-                           Function<T, ItemStack> itemRenderer,
+                           int viewportSize,
+                           Function<T, ItemStack> renderer,
                            BiConsumer<InteractionContext, T> clickHandler) {
         this.dataState = dataState;
-        this.pageState = new ReactiveState<>(0);
-        this.pageSize = pageSize;
-        this.itemRenderer = itemRenderer;
+        this.scrollState = new ReactiveState<>(0);
+        this.viewportSize = viewportSize;
+        this.renderer = renderer;
         this.clickHandler = clickHandler;
+        this.currentData = dataState.get() != null ? dataState.get() : Collections.emptyList();
 
-        this.dataListener = (list) -> {
-            this.paginator = new Paginator<>(list, pageSize);
-            if (pageState.get() >= paginator.getTotalPages()) {
-                pageState.set(0);
-            }
-            this.dirty = true;
-        };
-        this.dataState.subscribe(this.dataListener);
+        this.dataState.subscribe(newData -> {
+            this.currentData = newData != null ? newData : Collections.emptyList();
+            validateScroll();
+        });
 
-        if (dataState.get() != null) {
-            this.dataListener.accept(dataState.get());
-        }
-
-        this.pageListener = (page) -> this.dirty = true;
-        this.pageState.subscribe(this.pageListener);
+        this.scrollState.subscribe(offset -> {
+        });
     }
 
     @Override
     public @NotNull ItemStack render(int index) {
-        if (dirty || currentItems == null) {
-            if (paginator != null) {
-                currentItems = paginator.getPage(pageState.get());
+        int dataIndex = scrollState.get() + index;
+
+        if (dataIndex >= 0 && dataIndex < currentData.size()) {
+            T data = currentData.get(dataIndex);
+            if (data != null) {
+                return renderer.apply(data);
             }
-            dirty = false;
         }
 
-        if (currentItems != null && index < currentItems.size()) {
-            return itemRenderer.apply(currentItems.get(index));
-        }
         return new ItemStack(Material.AIR);
     }
 
     @Override
     public void onClick(InteractionContext context) {
-        int index = (int) context.componentState();
+        int index = context.componentIndex();
+        int dataIndex = scrollState.get() + index;
 
-        if (currentItems != null && index < currentItems.size()) {
-            T data = currentItems.get(index);
+        if (dataIndex >= 0 && dataIndex < currentData.size()) {
+            T data = currentData.get(dataIndex);
             if (clickHandler != null) {
                 clickHandler.accept(context, data);
             }
@@ -86,37 +74,48 @@ public class ScrollComponent<T> implements GloomComponent {
         return false;
     }
 
-    public void nextPage() {
-        if (paginator != null && paginator.hasNext(pageState.get())) {
-            pageState.set(pageState.get() + 1);
+    public void scrollDown(int amount) {
+        int maxOffset = Math.max(0, currentData.size() - viewportSize);
+        int current = scrollState.get();
+
+        if (current < maxOffset) {
+            scrollState.set(Math.min(current + amount, maxOffset));
         }
     }
 
-    public void prevPage() {
-        if (paginator != null && paginator.hasPrev(pageState.get())) {
-            pageState.set(pageState.get() - 1);
+    public void scrollUp(int amount) {
+        int current = scrollState.get();
+        if (current > 0) {
+            scrollState.set(Math.max(0, current - amount));
         }
     }
 
-    public ReactiveState<Integer> getPageState() {
-        return pageState;
+    public void scrollToTop() {
+        scrollState.set(0);
+    }
+
+    public void scrollToBottom() {
+        int maxOffset = Math.max(0, currentData.size() - viewportSize);
+        scrollState.set(maxOffset);
+    }
+
+    private void validateScroll() {
+        int maxOffset = Math.max(0, currentData.size() - viewportSize);
+        if (scrollState.get() > maxOffset) {
+            scrollState.set(maxOffset);
+        }
+    }
+
+    public ReactiveState<Integer> getScrollState() {
+        return scrollState;
+    }
+
+    public ReactiveState<List<T>> getDataState() {
+        return dataState;
     }
 
     @Override
-    public void dispose() {
-        dataState.unsubscribe(dataListener);
-        pageState.unsubscribe(pageListener);
-    }
-
-    @Override
-    public ScrollComponent<T> clone() {
-        try {
-            ScrollComponent<T> clone = (ScrollComponent<T>) super.clone();
-            clone.dirty = true;
-            clone.currentItems = null;
-            return clone;
-        } catch (CloneNotSupportedException e) {
-            throw new RuntimeException(e);
-        }
+    public GloomComponent clone() {
+        return new ScrollComponent<>(dataState, viewportSize, renderer, clickHandler);
     }
 }

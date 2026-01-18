@@ -78,6 +78,7 @@ public class ItemBuilder {
         return this;
     }
 
+    @SuppressWarnings("deprecation")
     public ItemBuilder modelData(int data) {
         if (meta != null) {
             meta.setCustomModelData(data);

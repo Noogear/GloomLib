@@ -38,7 +38,7 @@ public class PagedComponent<T> implements GloomComponent {
 
         this.dataListener = (list) -> {
             this.paginator = new Paginator<>(list, pageSize);
-            if (pageState.get() >= paginator.getTotalPages()) {
+            if (paginator.getTotalPages() > 0 && pageState.get() >= paginator.getTotalPages()) {
                 pageState.set(0);
             } else {
                 this.dirty = true;
@@ -66,12 +66,14 @@ public class PagedComponent<T> implements GloomComponent {
         if (currentItems != null && index < currentItems.size()) {
             return itemRenderer.apply(currentItems.get(index));
         }
+
         return new ItemStack(Material.AIR);
     }
 
     @Override
     public void onClick(InteractionContext context) {
-        int index = (int) context.componentState();
+        int index = context.componentIndex();
+
         if (currentItems != null && index < currentItems.size()) {
             if (clickHandler != null) {
                 clickHandler.accept(context, currentItems.get(index));
@@ -93,11 +95,15 @@ public class PagedComponent<T> implements GloomComponent {
     }
 
     public void nextPage() {
-        if (hasNext()) pageState.set(pageState.get() + 1);
+        if (hasNext()) {
+            pageState.set(pageState.get() + 1);
+        }
     }
 
     public void prevPage() {
-        if (hasPrev()) pageState.set(pageState.get() - 1);
+        if (hasPrev()) {
+            pageState.set(pageState.get() - 1);
+        }
     }
 
     public ReactiveState<Integer> getPageState() {
@@ -117,6 +123,7 @@ public class PagedComponent<T> implements GloomComponent {
     @Override
     public PagedComponent<T> clone() {
         try {
+            @SuppressWarnings("unchecked")
             PagedComponent<T> clone = (PagedComponent<T>) super.clone();
             clone.dirty = true;
             clone.currentItems = null;

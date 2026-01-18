@@ -1,19 +1,19 @@
 package gloomlib.gui.interaction;
 
-import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.inventory.ItemStack;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public record InteractionContext(
-        Player player,
-        ClickType clickType,
-        InventoryAction action,
+        @NotNull Player player,
+        @NotNull ClickType clickType,
+        @NotNull InventoryAction action,
         int slot,
-        @Nullable ItemStack clickedItem,
-        @Nullable Object componentState
+        @Nullable ItemStack item,
+        int componentIndex
 ) {
 
     public boolean isLeftClick() {
@@ -28,7 +28,11 @@ public record InteractionContext(
         return clickType.isShiftClick();
     }
 
-    public void reply(Component message) {
-        player.sendMessage(message);
+    public boolean isNumberKey() {
+        return clickType == ClickType.NUMBER_KEY;
+    }
+
+    public boolean isDrop() {
+        return clickType == ClickType.DROP || clickType == ClickType.CONTROL_DROP;
     }
 }

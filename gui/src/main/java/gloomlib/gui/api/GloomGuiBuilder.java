@@ -6,6 +6,7 @@ import gloomlib.gui.template.GuiStructure;
 import net.kyori.adventure.text.Component;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -45,6 +46,16 @@ public class GloomGuiBuilder {
         return this;
     }
 
+    public GloomGuiBuilder enableAnimations(int tickRate) {
+        this.manualAnimationEnable = true;
+        this.manualTickRate = tickRate;
+        return this;
+    }
+
+    public GloomGuiBuilder enableAnimations() {
+        return enableAnimations(1);
+    }
+
     public GloomGuiBuilder structure(String... pattern) {
         this.structure = pattern;
         this.rows = Math.max(this.rows, pattern.length);
@@ -61,15 +72,23 @@ public class GloomGuiBuilder {
         return this;
     }
 
-    public GloomGuiBuilder define(char key, Consumer<GloomComponent.Builder> config) {
-        GloomComponent.Builder builder = GloomComponent.builder();
-        config.accept(builder);
-        return setComponent(key, builder.build());
+    public GloomGuiBuilder setIngredient(char key, ItemStack item) {
+        return setComponent(key, GloomComponent.builder().icon(item).build());
     }
 
     public GloomGuiBuilder setItem(int slot, GloomComponent component) {
         this.slotComponents.put(slot, component);
         return this;
+    }
+
+    public GloomGuiBuilder setItem(int slot, ItemStack item) {
+        return setItem(slot, GloomComponent.builder().icon(item).build());
+    }
+
+    public GloomGuiBuilder define(char key, Consumer<GloomComponent.Builder> config) {
+        GloomComponent.Builder builder = GloomComponent.builder();
+        config.accept(builder);
+        return setComponent(key, builder.build());
     }
 
     public GloomGuiBuilder define(char key, GloomComponent component) {
@@ -81,14 +100,10 @@ public class GloomGuiBuilder {
         return this;
     }
 
-    public GloomGuiBuilder enableAnimations(int tickRate) {
-        this.manualAnimationEnable = true;
-        this.manualTickRate = tickRate;
-        return this;
-    }
-
     public GloomGui create(org.bukkit.entity.Player player) {
-        if (title == null) title = Component.text("GloomGui");
+        if (title == null) {
+            title = Component.text("GloomGui");
+        }
 
         GuiConfiguration config;
 
@@ -97,12 +112,6 @@ public class GloomGuiBuilder {
         } else {
             int minDetectedRate = Integer.MAX_VALUE;
             boolean hasAnimatedComponents = false;
-
-            Consumer<GloomComponent> check = (comp) -> {
-                int rate = comp.getTickRate();
-                if (rate > 0) {
-                }
-            };
 
             for (GloomComponent comp : charComponents.values()) {
                 int r = comp.getTickRate();
@@ -131,28 +140,49 @@ public class GloomGuiBuilder {
         Map<GloomComponent, Integer> counters = new HashMap<>();
 
         int width = 9;
+        if (type == InventoryType.HOPPER) width = 5;
+        else if (type == InventoryType.DISPENSER || type == InventoryType.DROPPER || type == InventoryType.WORKBENCH)
+            width = 3;
+
         if (structure != null) {
             for (int r = 0; r < structure.length; r++) {
                 String rowStr = structure[r].replace(" ", "");
                 for (int c = 0; c < rowStr.length() && c < width; c++) {
                     char key = rowStr.charAt(c);
-                    if (key == '.') continue;
+                    if (key == '.') {
+                        continue;
+                    }
+
                     GloomComponent comp = charComponents.get(key);
                     if (comp != null) {
                         int slot = r * width + c;
+
                         int idx = counters.getOrDefault(comp, 0);
+
                         layout.put(slot, comp);
                         indices.put(slot, idx);
+
                         counters.put(comp, idx + 1);
                     }
                 }
             }
         }
+
         slotComponents.forEach((slot, comp) -> {
             layout.put(slot, comp);
             indices.put(slot, 0);
         });
 
-        return new GloomGui(player, title, rows * 9, config, closeAction, layout, indices);
+        int size = (type == InventoryType.CHEST) ? rows * 9 : type.getDefaultSize();
+
+        return new GloomGui(
+                player,
+                title,
+                size,
+                config,
+                closeAction,
+                layout,
+                indices
+        );
     }
 }

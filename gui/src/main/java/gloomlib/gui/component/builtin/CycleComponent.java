@@ -3,55 +3,80 @@ package gloomlib.gui.component.builtin;
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.interaction.InteractionContext;
 import gloomlib.gui.state.ReactiveState;
+import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 public class CycleComponent<T> implements GloomComponent {
 
     private final ReactiveState<T> state;
-    private final List<T> values;
+    private final List<T> possibleValues;
     private final Function<T, ItemStack> renderer;
-    private final Consumer<T> changeListener;
-    private final Consumer<T> stateListener;
-    private boolean dirty = true;
-    private ItemStack cachedItem;
+    private final BiConsumer<InteractionContext, T> onStateChange;
 
-    public CycleComponent(ReactiveState<T> state, List<T> values,
+    public CycleComponent(ReactiveState<T> initialState,
+                          List<T> values,
                           Function<T, ItemStack> renderer,
-                          Consumer<T> changeListener) {
-        this.state = state;
-        this.values = values;
+                          BiConsumer<InteractionContext, T> onStateChange) {
+        this.state = initialState;
+        this.possibleValues = new ArrayList<>(values);
         this.renderer = renderer;
-        this.changeListener = changeListener;
+        this.onStateChange = onStateChange;
 
-        this.stateListener = (val) -> dirty = true;
-        this.state.subscribe(this.stateListener);
+        if (possibleValues.isEmpty()) {
+            throw new IllegalArgumentException("CycleComponent must have at least one possible value.");
+        }
+
+        if (state.get() == null || !possibleValues.contains(state.get())) {
+            state.set(possibleValues.get(0));
+        }
+    }
+
+    @SafeVarargs
+    public CycleComponent(ReactiveState<T> initialState,
+                          Function<T, ItemStack> renderer,
+                          T... values) {
+        this(initialState, Arrays.asList(values), renderer, null);
     }
 
     @Override
     public @NotNull ItemStack render(int index) {
-        if (dirty || cachedItem == null) {
-            cachedItem = renderer.apply(state.get());
-            dirty = false;
+        T current = state.get();
+        if (current == null && !possibleValues.isEmpty()) {
+            current = possibleValues.get(0);
         }
-        return cachedItem;
+
+        if (current != null) {
+            return renderer.apply(current);
+        }
+
+        return new ItemStack(Material.BARRIER);
     }
 
     @Override
     public void onClick(InteractionContext context) {
+        cycle();
+
+        if (onStateChange != null) {
+            onStateChange.accept(context, state.get());
+        }
+    }
+
+    public void cycle() {
         T current = state.get();
-        int index = values.indexOf(current);
-        int nextIndex = (index + 1) % values.size();
-        T next = values.get(nextIndex);
+        int index = possibleValues.indexOf(current);
 
-        state.set(next);
-
-        if (changeListener != null) {
-            changeListener.accept(next);
+        if (index == -1) {
+            if (!possibleValues.isEmpty()) state.set(possibleValues.get(0));
+        } else {
+            int nextIndex = (index + 1) % possibleValues.size();
+            state.set(possibleValues.get(nextIndex));
         }
     }
 
@@ -61,20 +86,16 @@ public class CycleComponent<T> implements GloomComponent {
     }
 
     @Override
-    public void dispose() {
-        state.unsubscribe(stateListener);
+    public int getTickRate() {
+        return GloomComponent.super.getTickRate();
+    }
+
+    public ReactiveState<T> getState() {
+        return state;
     }
 
     @Override
-    public CycleComponent<T> clone() {
-        try {
-            CycleComponent<T> clone = (CycleComponent<T>) super.clone();
-            clone.dirty = true;
-            clone.cachedItem = null;
-            this.state.subscribe(clone.stateListener);
-            return clone;
-        } catch (CloneNotSupportedException e) {
-            throw new RuntimeException(e);
-        }
+    public GloomComponent clone() {
+        return new CycleComponent<>(state, possibleValues, renderer, onStateChange);
     }
 }

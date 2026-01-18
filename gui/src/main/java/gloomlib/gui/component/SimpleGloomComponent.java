@@ -36,6 +36,7 @@ public class SimpleGloomComponent implements GloomComponent {
     private void setupListener() {
         if (this.bindState != null) {
             this.stateListener = (val) -> this.dirty = true;
+
             ((ReactiveState<Object>) this.bindState).subscribe(this.stateListener);
         }
     }
@@ -55,7 +56,9 @@ public class SimpleGloomComponent implements GloomComponent {
 
     @Override
     public void onClick(InteractionContext context) {
-        if (clickHandler != null) clickHandler.accept(context);
+        if (clickHandler != null) {
+            clickHandler.accept(context);
+        }
     }
 
     @Override
