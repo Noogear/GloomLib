@@ -24,6 +24,7 @@ public class PagedComponent<T> implements GloomComponent {
     private final Consumer<Integer> pageListener;
     private Paginator<T> paginator;
     private List<T> currentItems;
+
     private boolean dirty = true;
 
     public PagedComponent(ReactiveState<List<T>> dataState,
@@ -54,7 +55,6 @@ public class PagedComponent<T> implements GloomComponent {
         this.pageState.subscribe(this.pageListener);
     }
 
-    // Static data constructor
     public PagedComponent(List<T> staticData,
                           int pageSize,
                           Function<T, ItemStack> itemRenderer,

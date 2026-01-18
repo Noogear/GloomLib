@@ -11,11 +11,9 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemStack;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Consumer;
 
 public class GloomGui {
@@ -28,6 +26,8 @@ public class GloomGui {
 
     private final Map<Integer, GloomComponent> components = new HashMap<>();
     private final Map<Integer, Integer> componentIndices = new HashMap<>();
+
+    private final List<Integer> tickingSlots = new ArrayList<>();
 
     private Inventory inventory;
 
@@ -85,6 +85,13 @@ public class GloomGui {
             this.components.put(slot, comp);
             this.componentIndices.put(slot, 0);
         });
+
+        this.tickingSlots.clear();
+        this.components.forEach((slot, component) -> {
+            if (component.getTickRate() > 0) {
+                this.tickingSlots.add(slot);
+            }
+        });
     }
 
     public void bindToWindow(AbstractWindow window) {
@@ -96,19 +103,33 @@ public class GloomGui {
         if (inventory == null) return;
         components.forEach((slot, component) -> {
             int idx = componentIndices.get(slot);
-            inventory.setItem(slot, component.render(idx));
+            updateInventoryItem(slot, component.render(idx));
         });
     }
 
     public void tick() {
         if (inventory == null) return;
 
-        components.forEach((slot, component) -> {
+        for (Integer slot : tickingSlots) {
+            GloomComponent component = components.get(slot);
             if (component.onTick()) {
                 int idx = componentIndices.get(slot);
-                inventory.setItem(slot, component.render(idx));
+                updateInventoryItem(slot, component.render(idx));
             }
-        });
+        }
+    }
+
+    private void updateInventoryItem(int slot, ItemStack newItem) {
+        ItemStack currentItem = inventory.getItem(slot);
+
+        if (currentItem == null && newItem == null) {
+            return;
+        }
+        if (currentItem != null && newItem != null && currentItem.isSimilar(newItem) && currentItem.getAmount() == newItem.getAmount()) {
+            return;
+        }
+
+        inventory.setItem(slot, newItem);
     }
 
     public void handleClose(InventoryCloseEvent event) {
@@ -148,7 +169,7 @@ public class GloomGui {
                 try {
                     component.onClick(context);
                     if (component.onTick()) {
-                        inventory.setItem(slot, component.render(getComponentIndex(slot)));
+                        updateInventoryItem(slot, component.render(getComponentIndex(slot)));
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -191,5 +212,9 @@ public class GloomGui {
 
     public int getComponentIndex(int slot) {
         return componentIndices.getOrDefault(slot, 0);
+    }
+
+    public Map<Integer, GloomComponent> getLayout() {
+        return components;
     }
 }

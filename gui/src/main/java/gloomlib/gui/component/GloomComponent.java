@@ -68,7 +68,9 @@ public interface GloomComponent extends Cloneable {
             private final Function<Object, ItemStack> renderer;
             private final ReactiveState<?> state;
             private final int tickRate;
+
             private boolean dirty = true;
+            private ItemStack cachedRender = null;
 
             private Impl(ItemStack icon, Consumer<InteractionContext> onClick, Function<Object, ItemStack> renderer, ReactiveState<?> state, int tickRate) {
                 this.icon = icon != null ? icon : new ItemStack(Material.AIR);
@@ -85,8 +87,11 @@ public interface GloomComponent extends Cloneable {
             @Override
             public @NotNull ItemStack render(int index) {
                 if (renderer != null && state != null) {
-                    dirty = false;
-                    return renderer.apply(state.get());
+                    if (dirty || cachedRender == null) {
+                        cachedRender = renderer.apply(state.get());
+                        dirty = false;
+                    }
+                    return cachedRender;
                 }
                 return icon;
             }
