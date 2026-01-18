@@ -34,7 +34,7 @@ public class CycleComponent<T> implements GloomComponent {
         }
 
         if (state.get() == null || !possibleValues.contains(state.get())) {
-            state.set(possibleValues.get(0));
+            state.set(possibleValues.getFirst());
         }
     }
 
@@ -49,7 +49,7 @@ public class CycleComponent<T> implements GloomComponent {
     public @NotNull ItemStack render(int index) {
         T current = state.get();
         if (current == null && !possibleValues.isEmpty()) {
-            current = possibleValues.get(0);
+            current = possibleValues.getFirst();
         }
 
         if (current != null) {
@@ -73,7 +73,7 @@ public class CycleComponent<T> implements GloomComponent {
         int index = possibleValues.indexOf(current);
 
         if (index == -1) {
-            if (!possibleValues.isEmpty()) state.set(possibleValues.get(0));
+            if (!possibleValues.isEmpty()) state.set(possibleValues.getFirst());
         } else {
             int nextIndex = (index + 1) % possibleValues.size();
             state.set(possibleValues.get(nextIndex));
