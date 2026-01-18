@@ -2,6 +2,7 @@ package gloomlib.gui.component;
 
 import gloomlib.gui.interaction.InteractionContext;
 import gloomlib.gui.state.ReactiveState;
+import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
@@ -14,19 +15,14 @@ public interface GloomComponent extends Cloneable {
         return new Builder();
     }
 
-    @NotNull
-    ItemStack render(int index);
+    @NotNull ItemStack render(int index);
 
     void onClick(InteractionContext context);
 
     boolean onTick();
 
-    default boolean canInteract() {
-        return false;
-    }
-
     default int getTickRate() {
-        return 0;
+        return -1;
     }
 
     default void dispose() {
@@ -35,59 +31,91 @@ public interface GloomComponent extends Cloneable {
     GloomComponent clone();
 
     class Builder {
-        private Function<ReactiveState<?>, ItemStack> renderer;
-        private ReactiveState<?> bindState;
-        private Consumer<InteractionContext> clickHandler;
-        private Consumer<GloomComponent> tickHandler;
-        private boolean editable = false;
-        private int tickRate = 0;
+        private ItemStack icon;
+        private Consumer<InteractionContext> onClick;
+        private Function<Object, ItemStack> renderer;
+        private ReactiveState<?> state;
+        private int tickRate = -1;
+
+        public Builder icon(ItemStack icon) {
+            this.icon = icon;
+            return this;
+        }
+
+        public Builder onClick(Consumer<InteractionContext> onClick) {
+            this.onClick = onClick;
+            return this;
+        }
 
         public <T> Builder onRender(Function<T, ItemStack> renderer, ReactiveState<T> state) {
-            this.renderer = (Function<ReactiveState<?>, ItemStack>) renderer;
-            this.bindState = state;
+            this.renderer = (Function<Object, ItemStack>) renderer;
+            this.state = state;
             return this;
         }
 
-        public Builder icon(ItemStack item) {
-            this.renderer = (ignored) -> item;
-            return this;
-        }
-
-        public Builder onClick(Consumer<InteractionContext> handler) {
-            this.clickHandler = handler;
-            return this;
-        }
-
-        public Builder onTick(Consumer<GloomComponent> handler) {
-            this.tickHandler = handler;
-            return this;
-        }
-
-        public Builder editable(boolean editable) {
-            this.editable = editable;
-            return this;
-        }
-
-        public Builder tickRate(int rate) {
-            this.tickRate = rate;
+        public Builder tickRate(int tickRate) {
+            this.tickRate = tickRate;
             return this;
         }
 
         public GloomComponent build() {
-            return new SimpleGloomComponent(
-                    (state, idx) -> renderer != null ? renderer.apply(state) : null,
-                    bindState, clickHandler, tickHandler
-            ) {
-                @Override
-                public boolean canInteract() {
-                    return editable;
-                }
+            return new Impl(icon, onClick, renderer, state, tickRate);
+        }
 
-                @Override
-                public int getTickRate() {
-                    return tickRate;
+        private static class Impl implements GloomComponent {
+            private final ItemStack icon;
+            private final Consumer<InteractionContext> onClick;
+            private final Function<Object, ItemStack> renderer;
+            private final ReactiveState<?> state;
+            private final int tickRate;
+            private boolean dirty = true;
+
+            private Impl(ItemStack icon, Consumer<InteractionContext> onClick, Function<Object, ItemStack> renderer, ReactiveState<?> state, int tickRate) {
+                this.icon = icon != null ? icon : new ItemStack(Material.AIR);
+                this.onClick = onClick;
+                this.renderer = renderer;
+                this.state = state;
+                this.tickRate = tickRate;
+
+                if (this.state != null) {
+                    this.state.subscribe(v -> this.dirty = true);
                 }
-            };
+            }
+
+            @Override
+            public @NotNull ItemStack render(int index) {
+                if (renderer != null && state != null) {
+                    dirty = false;
+                    return renderer.apply(state.get());
+                }
+                return icon;
+            }
+
+            @Override
+            public void onClick(InteractionContext context) {
+                if (onClick != null) {
+                    onClick.accept(context);
+                }
+            }
+
+            @Override
+            public boolean onTick() {
+                return state != null && dirty;
+            }
+
+            @Override
+            public int getTickRate() {
+                return tickRate;
+            }
+
+            @Override
+            public GloomComponent clone() {
+                try {
+                    return (GloomComponent) super.clone();
+                } catch (CloneNotSupportedException e) {
+                    return new Impl(icon, onClick, renderer, state, tickRate);
+                }
+            }
         }
     }
 }

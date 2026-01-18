@@ -1,54 +1,70 @@
 package gloomlib.gui.component.builtin;
 
-import gloomlib.gui.animation.Animation;
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.interaction.InteractionContext;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+
 public class AnimatedComponent implements GloomComponent {
 
-    private final Animation<ItemStack> animation;
-    private final int updateInterval;
-    private long startTick = -1;
+    private final List<ItemStack> frames;
+    private final int tickRate;
+    private final boolean repeat;
+    private final Consumer<InteractionContext> clickHandler;
 
-    public AnimatedComponent(Animation<ItemStack> animation, int updateInterval) {
-        this.animation = animation;
-        this.updateInterval = Math.max(1, updateInterval);
-    }
+    private int currentFrame = 0;
+    private boolean finished = false;
 
-    public AnimatedComponent(Animation<ItemStack> animation) {
-        this(animation, 1);
+    public AnimatedComponent(List<ItemStack> frames, int tickRate, boolean repeat, Consumer<InteractionContext> clickHandler) {
+        this.frames = new ArrayList<>(frames);
+        this.tickRate = tickRate;
+        this.repeat = repeat;
+        this.clickHandler = clickHandler;
     }
 
     @Override
     public @NotNull ItemStack render(int index) {
-        if (startTick == -1) {
-            startTick = System.currentTimeMillis() / 50;
-        }
-
-        long currentTick = (System.currentTimeMillis() / 50);
-        return animation.getFrame(currentTick - startTick);
+        if (frames.isEmpty()) return null;
+        return frames.get(currentFrame % frames.size());
     }
 
     @Override
     public void onClick(InteractionContext context) {
+        if (clickHandler != null) {
+            clickHandler.accept(context);
+        }
     }
 
     @Override
     public boolean onTick() {
-        long currentTick = (System.currentTimeMillis() / 50);
+        if (finished && !repeat) return false;
 
-        return currentTick % updateInterval == 0;
+        currentFrame++;
+
+        if (currentFrame >= frames.size()) {
+            if (repeat) {
+                currentFrame = 0;
+            } else {
+                currentFrame = frames.size() - 1;
+                finished = true;
+                return false;
+            }
+        }
+
+        return true;
     }
 
     @Override
     public int getTickRate() {
-        return updateInterval;
+        return tickRate;
     }
 
     @Override
     public GloomComponent clone() {
-        return new AnimatedComponent(animation, updateInterval);
+        return new AnimatedComponent(frames, tickRate, repeat, clickHandler);
     }
 }

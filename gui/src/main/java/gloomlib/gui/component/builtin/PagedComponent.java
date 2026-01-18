@@ -54,6 +54,14 @@ public class PagedComponent<T> implements GloomComponent {
         this.pageState.subscribe(this.pageListener);
     }
 
+    // Static data constructor
+    public PagedComponent(List<T> staticData,
+                          int pageSize,
+                          Function<T, ItemStack> itemRenderer,
+                          BiConsumer<InteractionContext, T> clickHandler) {
+        this(ReactiveState.of(staticData), pageSize, itemRenderer, clickHandler);
+    }
+
     @Override
     public @NotNull ItemStack render(int index) {
         if (dirty || currentItems == null) {
@@ -73,7 +81,6 @@ public class PagedComponent<T> implements GloomComponent {
     @Override
     public void onClick(InteractionContext context) {
         int index = context.componentIndex();
-
         if (currentItems != null && index < currentItems.size()) {
             if (clickHandler != null) {
                 clickHandler.accept(context, currentItems.get(index));
@@ -95,15 +102,11 @@ public class PagedComponent<T> implements GloomComponent {
     }
 
     public void nextPage() {
-        if (hasNext()) {
-            pageState.set(pageState.get() + 1);
-        }
+        if (hasNext()) pageState.set(pageState.get() + 1);
     }
 
     public void prevPage() {
-        if (hasPrev()) {
-            pageState.set(pageState.get() - 1);
-        }
+        if (hasPrev()) pageState.set(pageState.get() - 1);
     }
 
     public ReactiveState<Integer> getPageState() {

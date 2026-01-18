@@ -1,10 +1,13 @@
 package gloomlib.gui.component;
 
+import gloomlib.gui.component.builtin.PagedComponent;
+import gloomlib.gui.component.builtin.ScrollComponent;
 import gloomlib.gui.state.ReactiveState;
 import gloomlib.gui.util.ItemBuilder;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
 
 import java.util.function.Consumer;
 
@@ -17,9 +20,13 @@ public class Components {
                 .build();
     }
 
-    public static GloomComponent toggle(ReactiveState<Boolean> state,
-                                        Material onMat, String onText,
-                                        Material offMat, String offText) {
+    public static GloomComponent filler(Material material) {
+        return GloomComponent.builder()
+                .icon(ItemBuilder.from(material).name(Component.empty()).build())
+                .build();
+    }
+
+    public static GloomComponent toggle(ReactiveState<Boolean> state, Material onMat, String onText, Material offMat, String offText) {
         return GloomComponent.builder()
                 .onRender((s) -> {
                     boolean active = s;
@@ -32,24 +39,43 @@ public class Components {
                 .build();
     }
 
-    public static <T> GloomComponent selector(ReactiveState<T> state, T targetValue,
-                                              Material activeMat, Material inactiveMat,
-                                              String name) {
+    public static GloomComponent pageNext(PagedComponent<?> pager, Material mat, String name) {
         return GloomComponent.builder()
-                .onRender((s) -> {
-                    boolean isActive = s.equals(targetValue);
-                    return ItemBuilder.from(isActive ? activeMat : inactiveMat)
-                            .name(Component.text(name, isActive ? NamedTextColor.GREEN : NamedTextColor.GRAY))
-                            .glow(isActive)
-                            .build();
-                }, state)
-                .onClick(ctx -> state.set(targetValue))
+                .onRender((page) -> {
+                    if (!pager.hasNext()) return new ItemStack(Material.AIR);
+                    return ItemBuilder.from(mat).name(Component.text(name)).build();
+                }, pager.getPageState())
+                .onClick(ctx -> pager.nextPage())
                 .build();
     }
 
-    public static GloomComponent filler(Material material) {
+    public static GloomComponent pagePrev(PagedComponent<?> pager, Material mat, String name) {
         return GloomComponent.builder()
-                .icon(ItemBuilder.from(material).name(Component.empty()).build())
+                .onRender((page) -> {
+                    if (!pager.hasPrev()) return new ItemStack(Material.AIR);
+                    return ItemBuilder.from(mat).name(Component.text(name)).build();
+                }, pager.getPageState())
+                .onClick(ctx -> pager.prevPage())
+                .build();
+    }
+
+    public static GloomComponent scrollUp(ScrollComponent<?> scroller, Material mat, String name) {
+        return GloomComponent.builder()
+                .onRender((offset) -> {
+                    if (!scroller.canScrollUp()) return new ItemStack(Material.AIR);
+                    return ItemBuilder.from(mat).name(Component.text(name)).build();
+                }, scroller.getScrollState())
+                .onClick(ctx -> scroller.scrollUp(1))
+                .build();
+    }
+
+    public static GloomComponent scrollDown(ScrollComponent<?> scroller, Material mat, String name) {
+        return GloomComponent.builder()
+                .onRender((offset) -> {
+                    if (!scroller.canScrollDown()) return new ItemStack(Material.AIR);
+                    return ItemBuilder.from(mat).name(Component.text(name)).build();
+                }, scroller.getScrollState())
+                .onClick(ctx -> scroller.scrollDown(1))
                 .build();
     }
 }

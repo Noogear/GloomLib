@@ -3,7 +3,9 @@ package gloomlib.gui.api;
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.config.GuiConfiguration;
 import gloomlib.gui.template.GuiStructure;
+import gloomlib.gui.window.SimpleWindow;
 import net.kyori.adventure.text.Component;
+import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.ItemStack;
@@ -100,89 +102,63 @@ public class GloomGuiBuilder {
         return this;
     }
 
-    public GloomGui create(org.bukkit.entity.Player player) {
+    /**
+     * Builds and opens the GUI for the player immediately.
+     */
+    public void open(Player player) {
+        GloomGui gui = create(player);
+        int size = (type == InventoryType.CHEST) ? rows * 9 : type.getDefaultSize();
+        SimpleWindow window = new SimpleWindow(player, title, gui, type, size);
+        window.open();
+    }
+
+    public GloomGui create(Player player) {
         if (title == null) {
             title = Component.text("GloomGui");
         }
 
-        GuiConfiguration config;
-
-        if (manualAnimationEnable != null && manualAnimationEnable) {
-            config = new GuiConfiguration(GuiConfiguration.UpdateStrategy.PERIODIC, manualTickRate, true);
-        } else {
-            int minDetectedRate = Integer.MAX_VALUE;
-            boolean hasAnimatedComponents = false;
-
-            for (GloomComponent comp : charComponents.values()) {
-                int r = comp.getTickRate();
-                if (r > 0) {
-                    hasAnimatedComponents = true;
-                    minDetectedRate = Math.min(minDetectedRate, r);
-                }
-            }
-            for (GloomComponent comp : slotComponents.values()) {
-                int r = comp.getTickRate();
-                if (r > 0) {
-                    hasAnimatedComponents = true;
-                    minDetectedRate = Math.min(minDetectedRate, r);
-                }
-            }
-
-            if (hasAnimatedComponents) {
-                config = new GuiConfiguration(GuiConfiguration.UpdateStrategy.PERIODIC, minDetectedRate, true);
-            } else {
-                config = GuiConfiguration.REACTIVE;
-            }
-        }
-
-        Map<Integer, GloomComponent> layout = new HashMap<>();
-        Map<Integer, Integer> indices = new HashMap<>();
-        Map<GloomComponent, Integer> counters = new HashMap<>();
-
-        int width = 9;
-        if (type == InventoryType.HOPPER) width = 5;
-        else if (type == InventoryType.DISPENSER || type == InventoryType.DROPPER || type == InventoryType.WORKBENCH)
-            width = 3;
-
-        if (structure != null) {
-            for (int r = 0; r < structure.length; r++) {
-                String rowStr = structure[r].replace(" ", "");
-                for (int c = 0; c < rowStr.length() && c < width; c++) {
-                    char key = rowStr.charAt(c);
-                    if (key == '.') {
-                        continue;
-                    }
-
-                    GloomComponent comp = charComponents.get(key);
-                    if (comp != null) {
-                        int slot = r * width + c;
-
-                        int idx = counters.getOrDefault(comp, 0);
-
-                        layout.put(slot, comp);
-                        indices.put(slot, idx);
-
-                        counters.put(comp, idx + 1);
-                    }
-                }
-            }
-        }
-
-        slotComponents.forEach((slot, comp) -> {
-            layout.put(slot, comp);
-            indices.put(slot, 0);
-        });
-
-        int size = (type == InventoryType.CHEST) ? rows * 9 : type.getDefaultSize();
+        GuiConfiguration config = resolveConfiguration();
 
         return new GloomGui(
                 player,
                 title,
-                size,
+                rows,
+                type,
                 config,
                 closeAction,
-                layout,
-                indices
+                structure,
+                charComponents,
+                slotComponents
         );
+    }
+
+    private GuiConfiguration resolveConfiguration() {
+        if (manualAnimationEnable != null && manualAnimationEnable) {
+            return new GuiConfiguration(GuiConfiguration.UpdateStrategy.PERIODIC, manualTickRate, true);
+        }
+
+        int minDetectedRate = Integer.MAX_VALUE;
+        boolean hasAnimatedComponents = false;
+
+        for (GloomComponent comp : charComponents.values()) {
+            int r = comp.getTickRate();
+            if (r > 0) {
+                hasAnimatedComponents = true;
+                minDetectedRate = Math.min(minDetectedRate, r);
+            }
+        }
+        for (GloomComponent comp : slotComponents.values()) {
+            int r = comp.getTickRate();
+            if (r > 0) {
+                hasAnimatedComponents = true;
+                minDetectedRate = Math.min(minDetectedRate, r);
+            }
+        }
+
+        if (hasAnimatedComponents) {
+            return new GuiConfiguration(GuiConfiguration.UpdateStrategy.PERIODIC, minDetectedRate, true);
+        } else {
+            return GuiConfiguration.REACTIVE;
+        }
     }
 }

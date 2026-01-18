@@ -9,23 +9,18 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Consumer;
 
 public class TabComponent implements GloomComponent {
 
-    private final ReactiveState<String> tabState;
+    private final ReactiveState<String> activeTabState;
     private final Map<String, GloomComponent> tabs = new HashMap<>();
     private final GloomComponent fallback;
 
-    private final Consumer<String> listener;
-
-    public TabComponent(String initialTab) {
-        this.tabState = new ReactiveState<>(initialTab);
+    public TabComponent(String defaultTab) {
+        this.activeTabState = new ReactiveState<>(defaultTab);
         this.fallback = GloomComponent.builder().icon(new ItemStack(Material.AIR)).build();
 
-        this.listener = (val) -> {
-        };
-        this.tabState.subscribe(this.listener);
+        this.activeTabState.subscribe(val -> {});
     }
 
     public void addTab(String id, GloomComponent component) {
@@ -33,43 +28,56 @@ public class TabComponent implements GloomComponent {
     }
 
     public void setTab(String id) {
-        tabState.set(id);
+        if (tabs.containsKey(id)) {
+            activeTabState.set(id);
+        }
     }
 
-    private GloomComponent getCurrent() {
-        return tabs.getOrDefault(tabState.get(), fallback);
+    private GloomComponent getActiveComponent() {
+        return tabs.getOrDefault(activeTabState.get(), fallback);
     }
 
     @Override
     public @NotNull ItemStack render(int index) {
-        return getCurrent().render(index);
+        return getActiveComponent().render(index);
     }
 
     @Override
     public void onClick(InteractionContext context) {
-        getCurrent().onClick(context);
+        getActiveComponent().onClick(context);
     }
 
     @Override
     public boolean onTick() {
-        return getCurrent().onTick();
+        return getActiveComponent().onTick();
+    }
+
+    @Override
+    public int getTickRate() {
+        int minRate = Integer.MAX_VALUE;
+        boolean hasAnimated = false;
+
+        for (GloomComponent comp : tabs.values()) {
+            int rate = comp.getTickRate();
+            if (rate > 0) {
+                hasAnimated = true;
+                minRate = Math.min(minRate, rate);
+            }
+        }
+        return hasAnimated ? minRate : -1;
     }
 
     @Override
     public void dispose() {
-        tabState.unsubscribe(listener);
-        tabs.values().forEach(GloomComponent::dispose);
+        for (GloomComponent comp : tabs.values()) {
+            comp.dispose();
+        }
     }
 
     @Override
-    public GloomComponent clone() {
-        try {
-            TabComponent clone = (TabComponent) super.clone();
-            clone.tabs.clear();
-            this.tabs.forEach((k, v) -> clone.tabs.put(k, v.clone()));
-            return clone;
-        } catch (CloneNotSupportedException e) {
-            throw new RuntimeException(e);
-        }
+    public TabComponent clone() {
+        TabComponent clone = new TabComponent(activeTabState.get());
+        this.tabs.forEach((k, v) -> clone.addTab(k, v.clone()));
+        return clone;
     }
 }

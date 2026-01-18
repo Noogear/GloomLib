@@ -20,43 +20,53 @@ public class GloomGuiTemplate {
     private final GuiConfiguration config;
     private final Consumer<InventoryCloseEvent> closeAction;
 
-    private final Map<Integer, GloomComponent> layoutPrototypes;
-    private final Map<Integer, Integer> slotIndices;
+    private final String[] structure;
+    private final Map<Character, GloomComponent> charComponents;
+    private final Map<Integer, GloomComponent> slotComponents;
 
-    public GloomGuiTemplate(Component title, int rows, InventoryType type,
+    public GloomGuiTemplate(Component title,
+                            int rows,
+                            InventoryType type,
                             GuiConfiguration config,
                             Consumer<InventoryCloseEvent> closeAction,
-                            Map<Integer, GloomComponent> layoutPrototypes,
-                            Map<Integer, Integer> slotIndices) {
+                            String[] structure,
+                            Map<Character, GloomComponent> charComponents,
+                            Map<Integer, GloomComponent> slotComponents) {
         this.title = title;
         this.rows = rows;
         this.type = type;
         this.config = config;
         this.closeAction = closeAction;
-        this.layoutPrototypes = layoutPrototypes;
-        this.slotIndices = slotIndices;
+        this.structure = structure;
+        this.charComponents = charComponents;
+        this.slotComponents = slotComponents;
     }
 
     public GloomGui create(Player player) {
-        Map<Integer, GloomComponent> clonedLayout = new HashMap<>();
-
         Map<GloomComponent, GloomComponent> prototypeToClone = new HashMap<>();
 
-        layoutPrototypes.forEach((slot, prototype) -> {
+        Map<Character, GloomComponent> clonedCharComponents = new HashMap<>();
+        charComponents.forEach((key, prototype) -> {
             GloomComponent cloned = prototypeToClone.computeIfAbsent(prototype, GloomComponent::clone);
-            clonedLayout.put(slot, cloned);
+            clonedCharComponents.put(key, cloned);
         });
 
-        int size = (type == InventoryType.CHEST) ? rows * 9 : type.getDefaultSize();
+        Map<Integer, GloomComponent> clonedSlotComponents = new HashMap<>();
+        slotComponents.forEach((slot, prototype) -> {
+            GloomComponent cloned = prototypeToClone.computeIfAbsent(prototype, GloomComponent::clone);
+            clonedSlotComponents.put(slot, cloned);
+        });
 
         return new GloomGui(
                 player,
                 title,
-                size,
+                rows,
+                type,
                 config,
                 closeAction,
-                clonedLayout,
-                slotIndices
+                structure,
+                clonedCharComponents,
+                clonedSlotComponents
         );
     }
 }

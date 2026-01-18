@@ -19,7 +19,6 @@ public class ScrollComponent<T> implements GloomComponent {
     private final int viewportSize;
     private final Function<T, ItemStack> renderer;
     private final BiConsumer<InteractionContext, T> clickHandler;
-
     private List<T> currentData;
 
     public ScrollComponent(ReactiveState<List<T>> dataState,
@@ -37,22 +36,25 @@ public class ScrollComponent<T> implements GloomComponent {
             this.currentData = newData != null ? newData : Collections.emptyList();
             validateScroll();
         });
-
         this.scrollState.subscribe(offset -> {
         });
+    }
+
+    // Static data constructor
+    public ScrollComponent(List<T> staticData,
+                           int viewportSize,
+                           Function<T, ItemStack> renderer,
+                           BiConsumer<InteractionContext, T> clickHandler) {
+        this(ReactiveState.of(staticData), viewportSize, renderer, clickHandler);
     }
 
     @Override
     public @NotNull ItemStack render(int index) {
         int dataIndex = scrollState.get() + index;
-
         if (dataIndex >= 0 && dataIndex < currentData.size()) {
             T data = currentData.get(dataIndex);
-            if (data != null) {
-                return renderer.apply(data);
-            }
+            if (data != null) return renderer.apply(data);
         }
-
         return new ItemStack(Material.AIR);
     }
 
@@ -60,12 +62,9 @@ public class ScrollComponent<T> implements GloomComponent {
     public void onClick(InteractionContext context) {
         int index = context.componentIndex();
         int dataIndex = scrollState.get() + index;
-
         if (dataIndex >= 0 && dataIndex < currentData.size()) {
             T data = currentData.get(dataIndex);
-            if (clickHandler != null) {
-                clickHandler.accept(context, data);
-            }
+            if (clickHandler != null) clickHandler.accept(context, data);
         }
     }
 
@@ -77,41 +76,30 @@ public class ScrollComponent<T> implements GloomComponent {
     public void scrollDown(int amount) {
         int maxOffset = Math.max(0, currentData.size() - viewportSize);
         int current = scrollState.get();
-
-        if (current < maxOffset) {
-            scrollState.set(Math.min(current + amount, maxOffset));
-        }
+        if (current < maxOffset) scrollState.set(Math.min(current + amount, maxOffset));
     }
 
     public void scrollUp(int amount) {
         int current = scrollState.get();
-        if (current > 0) {
-            scrollState.set(Math.max(0, current - amount));
-        }
+        if (current > 0) scrollState.set(Math.max(0, current - amount));
     }
 
-    public void scrollToTop() {
-        scrollState.set(0);
+    public boolean canScrollUp() {
+        return scrollState.get() > 0;
     }
 
-    public void scrollToBottom() {
+    public boolean canScrollDown() {
         int maxOffset = Math.max(0, currentData.size() - viewportSize);
-        scrollState.set(maxOffset);
+        return scrollState.get() < maxOffset;
     }
 
     private void validateScroll() {
         int maxOffset = Math.max(0, currentData.size() - viewportSize);
-        if (scrollState.get() > maxOffset) {
-            scrollState.set(maxOffset);
-        }
+        if (scrollState.get() > maxOffset) scrollState.set(maxOffset);
     }
 
     public ReactiveState<Integer> getScrollState() {
         return scrollState;
-    }
-
-    public ReactiveState<List<T>> getDataState() {
-        return dataState;
     }
 
     @Override

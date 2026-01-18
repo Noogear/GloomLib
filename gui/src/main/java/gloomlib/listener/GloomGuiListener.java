@@ -1,7 +1,8 @@
 package gloomlib.listener;
 
-import gloomlib.gui.api.GloomGui;
+import gloomlib.gui.GloomGuiManager;
 import gloomlib.gui.util.GuiSecurity;
+import gloomlib.gui.window.AbstractWindow;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -11,15 +12,19 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
-import org.bukkit.inventory.InventoryHolder;
 
 public class GloomGuiListener implements Listener {
 
+    private final GloomGuiManager manager;
+
+    public GloomGuiListener(GloomGuiManager manager) {
+        this.manager = manager;
+    }
+
     @EventHandler(priority = EventPriority.HIGH)
     public void onClick(InventoryClickEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
-        if (holder instanceof GloomGui gui) {
-            gui.handleClick(event);
+        if (event.getInventory().getHolder(false) instanceof AbstractWindow window) {
+            window.getGui().handleClick(event);
         } else {
             if (GuiSecurity.isLocked(event.getCurrentItem()) || GuiSecurity.isLocked(event.getCursor())) {
                 event.setCancelled(true);
@@ -31,17 +36,15 @@ public class GloomGuiListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH)
     public void onDrag(InventoryDragEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
-        if (holder instanceof GloomGui gui) {
-            gui.handleDrag(event);
+        if (event.getInventory().getHolder(false) instanceof AbstractWindow window) {
+            window.getGui().handleDrag(event);
         }
     }
 
     @EventHandler
     public void onClose(InventoryCloseEvent event) {
-        InventoryHolder holder = event.getInventory().getHolder();
-        if (holder instanceof GloomGui gui) {
-            gui.handleClose(event);
+        if (event.getInventory().getHolder(false) instanceof AbstractWindow window) {
+            window.handleClose(event);
         }
     }
 
