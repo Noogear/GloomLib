@@ -20,7 +20,8 @@ public class TabComponent implements GloomComponent {
         this.activeTabState = new ReactiveState<>(defaultTab);
         this.fallback = GloomComponent.builder().icon(new ItemStack(Material.AIR)).build();
 
-        this.activeTabState.subscribe(val -> {});
+        this.activeTabState.subscribe(val -> {
+        });
     }
 
     public void addTab(String id, GloomComponent component) {
