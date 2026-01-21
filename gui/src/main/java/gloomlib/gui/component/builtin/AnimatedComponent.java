@@ -28,7 +28,9 @@ public class AnimatedComponent implements GloomComponent {
 
     @Override
     public @NotNull ItemStack render(int index) {
-        if (frames.isEmpty()) return null;
+        if (frames.isEmpty()) {
+            return new ItemStack(org.bukkit.Material.AIR);
+        }
         return frames.get(currentFrame % frames.size());
     }
 

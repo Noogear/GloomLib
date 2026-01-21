@@ -15,6 +15,7 @@ import org.bukkit.inventory.InventoryView;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public abstract class AbstractWindow implements Window, InventoryHolder {
 
@@ -22,7 +23,7 @@ public abstract class AbstractWindow implements Window, InventoryHolder {
     protected final Component title;
     protected final GloomGui gui;
     protected Inventory inventory;
-    protected boolean isClosed = false;
+    protected final AtomicBoolean isClosed = new AtomicBoolean(false);
 
     public AbstractWindow(Player viewer, Component title, GloomGui gui) {
         this.viewer = viewer;
@@ -47,14 +48,14 @@ public abstract class AbstractWindow implements Window, InventoryHolder {
 
     @Override
     public void close() {
-        if (!isClosed) {
+        if (!isClosed.get()) {
             viewer.closeInventory();
         }
     }
 
     @Override
     public void handleClose(InventoryCloseEvent event) {
-        isClosed = true;
+        isClosed.set(true);
         GloomGuiManager.unregister(this);
         gui.handleClose(event);
         GuiSecurity.cleanInventory((Player) event.getPlayer());
@@ -62,7 +63,7 @@ public abstract class AbstractWindow implements Window, InventoryHolder {
 
     @Override
     public void tick() {
-        if (isClosed) return;
+        if (isClosed.get()) return;
         gui.tick();
     }
 
@@ -76,8 +77,14 @@ public abstract class AbstractWindow implements Window, InventoryHolder {
         return inventory;
     }
 
+    @Override
     public Player getViewer() {
         return viewer;
+    }
+
+    @Override
+    public boolean isClosed() {
+        return isClosed.get();
     }
 
     @SuppressWarnings("deprecation")

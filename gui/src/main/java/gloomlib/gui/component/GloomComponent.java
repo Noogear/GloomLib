@@ -9,8 +9,29 @@ import org.jetbrains.annotations.NotNull;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+/**
+ * GUI 组件基础接口
+ * <p>
+ * 所有 GUI 组件都必须实现此接口。内置实现包括：
+ * <ul>
+ *   <li>{@link gloomlib.gui.component.builtin.AnimatedComponent} - 帧动画组件</li>
+ *   <li>{@link gloomlib.gui.component.builtin.CycleComponent} - 循环组件</li>
+ *   <li>{@link gloomlib.gui.component.builtin.PagedComponent} - 分页组件</li>
+ *   <li>{@link gloomlib.gui.component.builtin.ScrollComponent} - 滚动组件</li>
+ *   <li>{@link gloomlib.gui.component.builtin.TabComponent} - 标签页组件</li>
+ *   <li>{@link gloomlib.gui.component.builtin.InventoryLinkComponent} - 背包链接组件</li>
+ * </ul>
+ * 
+ * @author GloomLib
+ * @since 2.0
+ */
 public interface GloomComponent extends Cloneable {
 
+    /**
+     * 创建组件构建器
+     * 
+     * @return 新的构建器实例
+     */
     static Builder builder() {
         return new Builder();
     }
@@ -47,6 +68,7 @@ public interface GloomComponent extends Cloneable {
             return this;
         }
 
+        @SuppressWarnings("unchecked")
         public <T> Builder onRender(Function<T, ItemStack> renderer, ReactiveState<T> state) {
             this.renderer = (Function<Object, ItemStack>) renderer;
             this.state = state;
@@ -62,7 +84,10 @@ public interface GloomComponent extends Cloneable {
             return new Impl(icon, onClick, renderer, state, tickRate);
         }
 
-        private static class Impl implements GloomComponent {
+        /**
+         * 默认组件实现类
+         */
+        private static final class Impl implements GloomComponent {
             private final ItemStack icon;
             private final Consumer<InteractionContext> onClick;
             private final Function<Object, ItemStack> renderer;

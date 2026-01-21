@@ -90,6 +90,11 @@ public class PagedComponent<T> implements GloomComponent {
 
     @Override
     public boolean onTick() {
+        // 返回脏标志状态，如果需要更新则返回 true
+        if (dirty) {
+            // 不在这里重置 dirty，让 render() 方法处理
+            return true;
+        }
         return false;
     }
 

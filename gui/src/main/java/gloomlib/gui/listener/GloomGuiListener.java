@@ -1,4 +1,4 @@
-package gloomlib.listener;
+package gloomlib.gui.listener;
 
 import gloomlib.gui.GloomGuiManager;
 import gloomlib.gui.util.GuiSecurity;

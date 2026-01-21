@@ -1,10 +1,13 @@
 package gloomlib.gui.api;
 
 import gloomlib.gui.component.GloomComponent;
+import gloomlib.gui.component.builtin.InventoryLinkComponent;
 import gloomlib.gui.config.GuiConfiguration;
 import gloomlib.gui.interaction.InteractionContext;
+import gloomlib.gui.state.ReactiveState;
 import gloomlib.gui.window.AbstractWindow;
 import net.kyori.adventure.text.Component;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -28,6 +31,12 @@ public class GloomGui {
     private final Map<Integer, Integer> componentIndices = new HashMap<>();
 
     private final List<Integer> tickingSlots = new ArrayList<>();
+
+    // 冻结状态：当 GUI 被冻结时，所有交互都会被阻止
+    private final ReactiveState<Boolean> frozen = ReactiveState.of(false);
+    
+    // 背景物品：在没有组件的槽位显示
+    private final ReactiveState<ItemStack> background = ReactiveState.of(null);
 
     private Inventory inventory;
 
@@ -96,11 +105,40 @@ public class GloomGui {
 
     public void bindToWindow(AbstractWindow window) {
         this.inventory = window.getInventory();
+        
+        // 设置背景物品监听器
+        background.subscribe(bg -> {
+            if (inventory != null) {
+                applyBackground();
+            }
+        });
+        
         redraw();
+    }
+
+    /**
+     * 应用背景物品到所有空槽位
+     */
+    private void applyBackground() {
+        ItemStack bg = background.get();
+        if (bg == null) {
+            return;
+        }
+        
+        for (int i = 0; i < size; i++) {
+            if (!components.containsKey(i)) {
+                inventory.setItem(i, bg.clone());
+            }
+        }
     }
 
     public void redraw() {
         if (inventory == null) return;
+        
+        // 先应用背景
+        applyBackground();
+        
+        // 然后渲染组件
         components.forEach((slot, component) -> {
             int idx = componentIndices.get(slot);
             updateInventoryItem(slot, component.render(idx));
@@ -152,10 +190,27 @@ public class GloomGui {
 
     public void handleClick(InventoryClickEvent event) {
         if (event.getClickedInventory() == event.getInventory()) {
-            event.setCancelled(true);
-
+            // 如果 GUI 被冻结，阻止所有交互
+            if (frozen.get()) {
+                event.setCancelled(true);
+                return;
+            }
+            
             int slot = event.getSlot();
             GloomComponent component = getComponent(slot);
+
+            // 检查是否为 InventoryLink 组件
+            if (component instanceof InventoryLinkComponent link) {
+                // 对于 InventoryLink，如果允许交互则不取消事件
+                if (!link.isAllowInteraction()) {
+                    event.setCancelled(true);
+                }
+                // 否则让 Bukkit 的背包系统处理交互
+                return;
+            }
+            
+            // 对于普通组件，取消事件并调用 onClick
+            event.setCancelled(true);
 
             if (component != null) {
                 InteractionContext context = new InteractionContext(
@@ -176,8 +231,14 @@ public class GloomGui {
                 }
             }
         } else {
-            if (event.isShiftClick()) {
-                event.setCancelled(true);
+            // 只在 shift-click 的目标槽位是 GUI 时才阻止
+            if (event.isShiftClick() && event.getClickedInventory() != null) {
+                int rawSlot = event.getRawSlot();
+                // rawSlot < size 表示点击的是上方 GUI，需要阻止
+                if (rawSlot >= size && event.getAction().toString().contains("MOVE_TO")) {
+                    // 从玩家背包 shift-click 可能移动到 GUI，检查是否会影响 GUI
+                    event.setCancelled(true);
+                }
             }
         }
     }
@@ -216,5 +277,50 @@ public class GloomGui {
 
     public Map<Integer, GloomComponent> getLayout() {
         return components;
+    }
+
+    /**
+     * 获取 frozen 状态（响应式）
+     * 
+     * @return frozen 响应式状态
+     */
+    public ReactiveState<Boolean> getFrozen() {
+        return frozen;
+    }
+
+    /**
+     * 设置 GUI 是否冻结
+     * 
+     * @param frozen 是否冻结
+     */
+    public void setFrozen(boolean frozen) {
+        this.frozen.set(frozen);
+    }
+
+    /**
+     * 检查 GUI 是否冻结
+     * 
+     * @return 如果冻结返回 true
+     */
+    public boolean isFrozen() {
+        return frozen.get();
+    }
+
+    /**
+     * 获取背景物品状态（响应式）
+     * 
+     * @return 背景物品响应式状态
+     */
+    public ReactiveState<ItemStack> getBackground() {
+        return background;
+    }
+
+    /**
+     * 设置背景物品
+     * 
+     * @param background 背景物品，null 表示无背景
+     */
+    public void setBackground(ItemStack background) {
+        this.background.set(background);
     }
 }
