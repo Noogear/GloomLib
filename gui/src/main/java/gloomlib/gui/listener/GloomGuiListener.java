@@ -1,7 +1,7 @@
 package gloomlib.gui.listener;
 
 import gloomlib.gui.GloomGuiManager;
-import gloomlib.gui.util.GuiSecurity;
+import gloomlib.gui.window.GuiSecurity;
 import gloomlib.gui.window.AbstractWindow;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;

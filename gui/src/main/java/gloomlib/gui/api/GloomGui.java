@@ -4,7 +4,7 @@ import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.component.builtin.InventoryLinkComponent;
 import gloomlib.gui.config.GuiConfiguration;
 import gloomlib.gui.interaction.InteractionContext;
-import gloomlib.gui.observable.Observer;
+import gloomlib.gui.window.Observer;
 import gloomlib.gui.slot.SlotElement;
 import gloomlib.gui.state.MutableProperty;
 import gloomlib.gui.state.Property;

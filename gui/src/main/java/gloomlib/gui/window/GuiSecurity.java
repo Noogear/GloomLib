@@ -1,4 +1,4 @@
-package gloomlib.gui.util;
+package gloomlib.gui.window;
 
 import gloomlib.gui.GloomGuiManager;
 import org.bukkit.NamespacedKey;

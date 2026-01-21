@@ -2,8 +2,8 @@ package gloomlib.gui.slot;
 
 import gloomlib.gui.api.GloomGui;
 import gloomlib.gui.component.GloomComponent;
-import gloomlib.gui.observable.Observable;
-import gloomlib.gui.observable.Observer;
+import gloomlib.gui.window.Observable;
+import gloomlib.gui.window.Observer;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;

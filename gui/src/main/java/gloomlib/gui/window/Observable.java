@@ -1,4 +1,4 @@
-package gloomlib.gui.observable;
+package gloomlib.gui.window;
 
 import org.jetbrains.annotations.NotNull;
 

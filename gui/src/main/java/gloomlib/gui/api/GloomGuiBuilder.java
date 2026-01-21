@@ -3,7 +3,7 @@ package gloomlib.gui.api;
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.config.GuiConfiguration;
 import gloomlib.gui.template.GuiStructure;
-import gloomlib.gui.window.SimpleWindow;
+import gloomlib.gui.window.AbstractWindow;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -117,7 +117,7 @@ public class GloomGuiBuilder {
     public void open(Player player) {
         GloomGui gui = build(player);
         int size = (type == InventoryType.CHEST) ? rows * 9 : type.getDefaultSize();
-        SimpleWindow window = new SimpleWindow(player, title, gui, type, size);
+        AbstractWindow window = new AbstractWindow(player, title, gui, type, size);
         window.open();
     }
 

@@ -1,7 +1,7 @@
 package gloomlib.gui.api;
 
 import gloomlib.gui.component.GloomComponent;
-import gloomlib.gui.observable.Observable;
+import gloomlib.gui.window.Observable;
 import gloomlib.gui.slot.SlotElement;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;

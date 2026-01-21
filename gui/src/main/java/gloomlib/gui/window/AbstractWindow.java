@@ -3,13 +3,13 @@ package gloomlib.gui.window;
 import gloomlib.gui.GloomGuiManager;
 import gloomlib.gui.api.GloomGui;
 import gloomlib.gui.config.GuiConfiguration;
-import gloomlib.gui.observable.Observer;
-import gloomlib.gui.util.GuiSecurity;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.InventoryView;
@@ -22,11 +22,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 
-public abstract class AbstractWindow implements Window, InventoryHolder, Observer {
+public class AbstractWindow implements Window, InventoryHolder, Observer {
 
     protected final Player viewer;
     protected final Component title;
     protected final GloomGui gui;
+    private final InventoryType type;
+    private final int size;
     protected final AtomicBoolean isClosed = new AtomicBoolean(false);
     protected final Map<Integer, Integer> slotTickCounters = new ConcurrentHashMap<>();
     protected final Map<String, BiConsumer<WindowState, WindowState>> stateChangeHandlers = new ConcurrentHashMap<>();
@@ -36,13 +38,24 @@ public abstract class AbstractWindow implements Window, InventoryHolder, Observe
     protected volatile long lastPingTime = 0;
     protected volatile long lastUpdatePeriodCheck = 0;
 
-    public AbstractWindow(Player viewer, Component title, GloomGui gui) {
+    public AbstractWindow(Player viewer, Component title, GloomGui gui, InventoryType type, int size) {
         this.viewer = viewer;
         this.title = title;
         this.gui = gui;
+        this.type = type;
+        this.size = size;
     }
 
-    protected abstract Inventory createInventory();
+    protected Inventory createInventory() {
+        if (type == InventoryType.CHEST) {
+            if (size <= 0 || size > 54 || size % 9 != 0) {
+                throw new IllegalArgumentException("Chest inventory size must be a multiple of 9 and between 9 and 54. Given: " + size);
+            }
+            return Bukkit.createInventory(this, size, title);
+        } else {
+            return Bukkit.createInventory(this, type, title);
+        }
+    }
 
     @Override
     public void open() {
