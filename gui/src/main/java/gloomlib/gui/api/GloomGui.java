@@ -4,7 +4,6 @@ import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.component.builtin.InventoryLinkComponent;
 import gloomlib.gui.config.GuiConfiguration;
 import gloomlib.gui.interaction.InteractionContext;
-import gloomlib.gui.observable.Observable;
 import gloomlib.gui.observable.Observer;
 import gloomlib.gui.slot.SlotElement;
 import gloomlib.gui.state.MutableProperty;
@@ -19,12 +18,28 @@ import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
-public class GloomGui implements Observable {
+/**
+ * The standard implementation of {@link Gui.Normal}, providing a fixed-size inventory-based GUI.
+ * <p>
+ * This class manages the core GUI state including:
+ * <ul>
+ *     <li>Slot-to-component mappings</li>
+ *     <li>SlotElement management for advanced slot types (components, nested GUIs, inventory links)</li>
+ *     <li>Observable pattern integration for automatic UI updates</li>
+ *     <li>Ticking for animated components</li>
+ *     <li>Event handling for clicks and drags</li>
+ * </ul>
+ * 
+ * @see Gui.Normal
+ * @see SlotElement
+ */
+public final class GloomGui implements Gui.Normal {
 
     private final Player player;
     private final Component title;
@@ -41,7 +56,16 @@ public class GloomGui implements Observable {
     private final MutableProperty<Boolean> frozen = MutableProperty.of(false);
     private final MutableProperty<ItemStack> background = MutableProperty.of(null);
 
+    /**
+     * Dirty tracking: BitSet where each bit represents whether a slot needs to be updated.
+     * Inspired by InvUI's AbstractGui dirty tracking mechanism.
+     * 
+     * @see <a href="https://github.com/NichtStudioCode/InvUI/blob/ver/2.x/invui-core/src/main/java/xyz/xenondevs/invui/gui/AbstractGui.java#L700-750">InvUI AbstractGui.java#L700-750</a>
+     */
+    private final java.util.BitSet dirtySlots;
+
     private Inventory inventory;
+    private boolean batchUpdateMode = false;
 
     public GloomGui(Player player,
                     Component title,
@@ -57,8 +81,15 @@ public class GloomGui implements Observable {
         this.configuration = configuration;
         this.closeAction = closeAction;
         this.size = (type == InventoryType.CHEST) ? rows * 9 : type.getDefaultSize();
+        this.dirtySlots = new java.util.BitSet(size);
 
         calculateLayout(type, structure, charComponents, slotComponents);
+    }
+
+    @Override
+    @Nullable
+    public Inventory getInventory() {
+        return inventory;
     }
 
     private void calculateLayout(InventoryType type,
@@ -106,7 +137,8 @@ public class GloomGui implements Observable {
         });
     }
 
-    public void bindToWindow(AbstractWindow window) {
+    @Override
+    public void bindToWindow(@NotNull AbstractWindow window) {
         this.inventory = window.getInventory();
 
         background.observeWeak(bg -> {
@@ -132,33 +164,93 @@ public class GloomGui implements Observable {
         }
     }
 
+    @Override
     public void redraw() {
         if (inventory == null) return;
 
-        applyBackground();
-
-        slotElements.forEach((slot, element) -> {
-            updateInventoryItem(slot, element.render());
-        });
-
-        components.forEach((slot, component) -> {
-            if (!slotElements.containsKey(slot)) {
-                int idx = componentIndices.get(slot);
-                updateInventoryItem(slot, component.render(idx));
-            }
-        });
+        markAllDirty();
+        flushUpdates();
     }
 
+    @Override
     public void tick() {
         if (inventory == null) return;
 
         for (Integer slot : tickingSlots) {
             GloomComponent component = components.get(slot);
             if (component.onTick()) {
-                int idx = componentIndices.get(slot);
-                updateInventoryItem(slot, component.render(idx));
+                markDirty(slot);
             }
         }
+
+        flushUpdates();
+    }
+
+    /**
+     * Marks a specific slot as dirty (needing update).
+     * The slot will be updated on the next {@link #flushUpdates()} call.
+     * 
+     * @param slot the slot index to mark dirty
+     */
+    public void markDirty(int slot) {
+        if (slot >= 0 && slot < size) {
+            dirtySlots.set(slot);
+        }
+    }
+
+    /**
+     * Marks all slots as dirty.
+     * Useful when the entire GUI needs to be refreshed.
+     */
+    public void markAllDirty() {
+        dirtySlots.set(0, size);
+    }
+
+    /**
+     * Flushes all dirty slots to the inventory, updating only the changed slots.
+     * This is more efficient than redrawing the entire GUI.
+     * <p>
+     * Inspired by InvUI's flush mechanism.
+     * 
+     * @see <a href="https://github.com/NichtStudioCode/InvUI/blob/ver/2.x/invui-core/src/main/java/xyz/xenondevs/invui/gui/AbstractGui.java#L722">InvUI AbstractGui.java#L722</a>
+     */
+    public void flushUpdates() {
+        if (inventory == null || batchUpdateMode) return;
+
+        for (int slot = dirtySlots.nextSetBit(0); slot >= 0; slot = dirtySlots.nextSetBit(slot + 1)) {
+            ItemStack newItem = renderSlot(slot);
+            updateInventoryItem(slot, newItem);
+        }
+
+        dirtySlots.clear();
+    }
+
+    /**
+     * Enters batch update mode, deferring all slot updates until {@link #endBatchUpdate()} is called.
+     * This is useful when making multiple changes to the GUI to avoid flickering.
+     * <p>
+     * <b>Example:</b>
+     * <pre>{@code
+     * gui.beginBatchUpdate();
+     * try {
+     *     gui.setSlotElement(10, element1);
+     *     gui.setSlotElement(11, element2);
+     *     gui.setSlotElement(12, element3);
+     * } finally {
+     *     gui.endBatchUpdate();
+     * }
+     * }</pre>
+     */
+    public void beginBatchUpdate() {
+        batchUpdateMode = true;
+    }
+
+    /**
+     * Exits batch update mode and flushes all accumulated dirty slots.
+     */
+    public void endBatchUpdate() {
+        batchUpdateMode = false;
+        flushUpdates();
     }
 
     private void updateInventoryItem(int slot, ItemStack newItem) {
@@ -259,14 +351,19 @@ public class GloomGui implements Observable {
         }
     }
 
+    @Override
+    @NotNull
     public Player getPlayer() {
         return player;
     }
 
+    @Override
+    @NotNull
     public Component getTitle() {
         return title;
     }
 
+    @Override
     public int getSize() {
         return size;
     }
@@ -275,60 +372,72 @@ public class GloomGui implements Observable {
         return configuration;
     }
 
+    @Override
+    @Nullable
     public GloomComponent getComponent(int slot) {
         return components.get(slot);
     }
 
+    @Override
     public int getComponentIndex(int slot) {
         return componentIndices.getOrDefault(slot, 0);
     }
 
+    @Override
+    @NotNull
     public Map<Integer, GloomComponent> getLayout() {
-        return components;
+        return Collections.unmodifiableMap(components);
     }
 
     public Property<Boolean> getFrozen() {
         return frozen;
     }
 
+    @Override
     public boolean isFrozen() {
         return frozen.get();
     }
 
+    @Override
     public void setFrozen(boolean frozen) {
         this.frozen.set(frozen);
     }
 
-    public Property<ItemStack> getBackground() {
-        return background;
+    @Override
+    @Nullable
+    public ItemStack getBackground() {
+        return background.get();
     }
 
-    public void setBackground(ItemStack background) {
+    @Override
+    public void setBackground(@Nullable ItemStack background) {
         this.background.set(background);
     }
 
+    @Override
     public void setSlotElement(int slot, @NotNull SlotElement element) {
         slotElements.put(slot, element);
-        if (inventory != null) {
-            updateInventoryItem(slot, element.render());
-        }
+        markDirty(slot);
     }
 
+    @Override
+    @Nullable
     public SlotElement getSlotElement(int slot) {
         return slotElements.get(slot);
     }
 
+    @Override
     public void removeSlotElement(int slot) {
         slotElements.remove(slot);
-        if (inventory != null) {
-            updateInventoryItem(slot, null);
-        }
+        markDirty(slot);
     }
 
+    @Override
+    @Nullable
     public ItemStack renderSlot(int slot) {
         SlotElement element = slotElements.get(slot);
         if (element != null) {
-            return element.render();
+            return element.render(player);
         }
 
         GloomComponent component = components.get(slot);
@@ -389,5 +498,29 @@ public class GloomGui implements Observable {
         public int hashCode() {
             return System.identityHashCode(observer);
         }
+    }
+
+    @Override
+    public int getUpdatePeriod(int what) {
+        // Check if the slot has a SlotElement with periodic update needs
+        SlotElement element = slotElements.get(what);
+        if (element instanceof SlotElement.ComponentSlot componentSlot) {
+            GloomComponent component = componentSlot.component();
+            int tickRate = component.getTickRate();
+            if (tickRate > 0) {
+                return tickRate; // Component needs periodic updates
+            }
+        }
+        
+        // Check if the slot has a regular component
+        GloomComponent component = components.get(what);
+        if (component != null) {
+            int tickRate = component.getTickRate();
+            if (tickRate > 0) {
+                return tickRate;
+            }
+        }
+        
+        return -1; // No automatic updates needed
     }
 }
