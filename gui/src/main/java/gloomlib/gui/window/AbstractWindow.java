@@ -3,6 +3,7 @@ package gloomlib.gui.window;
 import gloomlib.gui.GloomGuiManager;
 import gloomlib.gui.api.GloomGui;
 import gloomlib.gui.config.GuiConfiguration;
+import gloomlib.gui.observable.Observer;
 import gloomlib.gui.util.GuiSecurity;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
@@ -12,12 +13,22 @@ import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.InventoryView;
+import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public abstract class AbstractWindow implements Window, InventoryHolder {
+/**
+ * 抽象窗口基类 - 实现多观察者模式
+ * <p>
+ * 从 3.0 版本开始，AbstractWindow 实现 {@link Observer} 接口，
+ * 可以观察 {@link GloomGui} 的槽位变化并自动更新显示。
+ * 
+ * @author GloomLib
+ * @since 2.0
+ */
+public abstract class AbstractWindow implements Window, InventoryHolder, Observer {
 
     protected final Player viewer;
     protected final Component title;
@@ -38,6 +49,11 @@ public abstract class AbstractWindow implements Window, InventoryHolder {
         this.inventory = createInventory();
         gui.bindToWindow(this);
 
+        // 注册为 GUI 的观察者，观察所有槽位
+        for (int slot = 0; slot < gui.getSize(); slot++) {
+            gui.addObserver(this, slot, slot);
+        }
+
         GuiConfiguration config = gui.getConfiguration();
         if (config.updateStrategy() == GuiConfiguration.UpdateStrategy.PERIODIC) {
             GloomGuiManager.register(this, config.tickRate());
@@ -57,6 +73,8 @@ public abstract class AbstractWindow implements Window, InventoryHolder {
     public void handleClose(InventoryCloseEvent event) {
         isClosed.set(true);
         GloomGuiManager.unregister(this);
+        // 移除所有观察者注册
+        gui.removeAllObservers(this);
         gui.handleClose(event);
         GuiSecurity.cleanInventory((Player) event.getPlayer());
     }
@@ -104,5 +122,18 @@ public abstract class AbstractWindow implements Window, InventoryHolder {
         if (openView.getTopInventory().equals(getInventory())) {
             openView.setTitle(LegacyComponentSerializer.legacySection().serialize(title));
         }
+    }
+
+    // ==================== Observer 接口实现 ====================
+
+    @Override
+    public void notifyUpdate(int slot) {
+        if (isClosed.get() || inventory == null) {
+            return;
+        }
+
+        // 使用 GUI 的 renderSlot 方法获取最新物品
+        ItemStack newItem = gui.renderSlot(slot);
+        inventory.setItem(slot, newItem);
     }
 }

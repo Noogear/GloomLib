@@ -11,9 +11,9 @@ import org.jetbrains.annotations.Nullable;
  * 交互上下文记录 - 包含完整的点击交互信息
  * <p>
  * 此类使用 Java 16+ 的 record 特性，提供不可变的数据载体。
- * 支持完整的交互类型检测，包括 MC 1.21+ 的新特性。
+ * 支持完整的交互类型检测，包括 MC 1.21+ 的新特性（Bundle 交互等）。
  * <p>
- * 参考：InvUI AbstractGui 的点击处理逻辑
+ * 设计参考：InvUI 2.x 的完整点击处理逻辑
  * {@link <a href="https://github.com/NichtStudioCode/InvUI/blob/ver/2.x/invui/src/main/java/xyz/xenondevs/invui/gui/AbstractGui.java#L100-L550">InvUI AbstractGui.java</a>}
  * 
  * @param player         触发交互的玩家
@@ -222,5 +222,69 @@ public record InteractionContext(
     public String getDescription() {
         return String.format("InteractionContext{player=%s, click=%s, action=%s, slot=%d, index=%d}",
             player.getName(), clickType, action, slot, componentIndex);
+    }
+
+    // ==================== MC 1.21+ 新特性 ====================
+
+    /**
+     * 检查是否为 Bundle 相关交互
+     * <p>
+     * MC 1.21+ 引入了 Bundle（包裹）物品，支持特殊的交互方式。
+     * 
+     * @return 如果是 Bundle 交互返回 true
+     */
+    public boolean isBundleInteraction() {
+        // Bundle 交互通常表现为右键点击
+        // 具体检测需要根据物品类型判断
+        if (item != null && isRightClick()) {
+            return item.getType().name().contains("BUNDLE");
+        }
+        return false;
+    }
+
+    /**
+     * 检查是否为跨 GUI 双击收集
+     * <p>
+     * 当玩家双击时，应该收集所有相同类型的物品。
+     * InvUI 实现了跨 GUI 的智能收集逻辑。
+     * 
+     * @return 如果是双击且涉及物品堆叠返回 true
+     */
+    public boolean isDoubleClickCollect() {
+        return isDoubleClick() && item != null && !item.getType().isAir();
+    }
+
+    /**
+     * 检查是否为拖拽分配操作
+     * <p>
+     * 拖拽可以将光标上的物品均匀分配到多个槽位。
+     * 
+     * @return 如果是拖拽操作返回 true
+     */
+    public boolean isDragOperation() {
+        return clickType == ClickType.LEFT || clickType == ClickType.RIGHT;
+    }
+
+    /**
+     * 检查是否需要阻止物品移动
+     * <p>
+     * 某些操作（如 Shift+点击、数字键交换）会移动物品，
+     * GUI 通常需要阻止这些操作以保持界面状态。
+     * 
+     * @return 如果需要阻止返回 true
+     */
+    public boolean shouldPreventItemMovement() {
+        return isMoveToOtherInventory() || isSwapAction() || isOffhandSwap();
+    }
+
+    /**
+     * 检查是否为有效的 GUI 交互
+     * <p>
+     * 排除一些不应该在 GUI 中处理的特殊点击类型。
+     * 
+     * @return 如果是有效交互返回 true
+     */
+    public boolean isValidGuiInteraction() {
+        return !isOutsideClick() && action != InventoryAction.NOTHING;
     }
 }

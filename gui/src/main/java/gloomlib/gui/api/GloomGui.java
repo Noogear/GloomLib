@@ -4,10 +4,13 @@ import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.component.builtin.InventoryLinkComponent;
 import gloomlib.gui.config.GuiConfiguration;
 import gloomlib.gui.interaction.InteractionContext;
-import gloomlib.gui.state.ReactiveState;
+import gloomlib.gui.observable.Observable;
+import gloomlib.gui.observable.Observer;
+import gloomlib.gui.slot.SlotElement;
+import gloomlib.gui.state.MutableProperty;
+import gloomlib.gui.state.Property;
 import gloomlib.gui.window.AbstractWindow;
 import net.kyori.adventure.text.Component;
-import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
@@ -15,11 +18,22 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
-public class GloomGui {
+/**
+ * 核心 GUI 类 - 支持多观察者模式
+ * <p>
+ * 从 3.0 版本开始，GloomGui 支持多个窗口（玩家）同时观察同一个 GUI 实例。
+ * 这允许创建共享的商店、拍卖行等多人可见的界面。
+ * 
+ * @author GloomLib
+ * @since 2.0
+ */
+public class GloomGui implements Observable {
 
     private final Player player;
     private final Component title;
@@ -30,15 +44,38 @@ public class GloomGui {
     private final Map<Integer, GloomComponent> components = new HashMap<>();
     private final Map<Integer, Integer> componentIndices = new HashMap<>();
 
+    // SlotElement 系统：槽位索引 -> 槽位元素
+    private final Map<Integer, SlotElement> slotElements = new HashMap<>();
+
     private final List<Integer> tickingSlots = new ArrayList<>();
 
+    // 多观察者支持：槽位索引 -> 观察者集合
+    private final Map<Integer, Set<ObserverEntry>> observers = new ConcurrentHashMap<>();
+
     // 冻结状态：当 GUI 被冻结时，所有交互都会被阻止
-    private final ReactiveState<Boolean> frozen = ReactiveState.of(false);
+    private final MutableProperty<Boolean> frozen = MutableProperty.of(false);
     
     // 背景物品：在没有组件的槽位显示
-    private final ReactiveState<ItemStack> background = ReactiveState.of(null);
+    private final MutableProperty<ItemStack> background = MutableProperty.of(null);
 
     private Inventory inventory;
+
+    /**
+     * 观察者条目记录 - 存储观察者和通知方式
+     */
+    private record ObserverEntry(@NotNull Observer observer, int how) {
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof ObserverEntry entry)) return false;
+            return observer == entry.observer;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(observer);
+        }
+    }
 
     public GloomGui(Player player,
                     Component title,
@@ -107,7 +144,7 @@ public class GloomGui {
         this.inventory = window.getInventory();
         
         // 设置背景物品监听器
-        background.subscribe(bg -> {
+        background.observeWeak(bg -> {
             if (inventory != null) {
                 applyBackground();
             }
@@ -126,8 +163,11 @@ public class GloomGui {
         }
         
         for (int i = 0; i < size; i++) {
-            if (!components.containsKey(i)) {
+            // 如果槽位既没有 SlotElement 也没有传统组件，则应用背景
+            if (!slotElements.containsKey(i) && !components.containsKey(i)) {
                 inventory.setItem(i, bg.clone());
+                // 通知观察者背景槽位已更新
+                notifySlotObservers(i);
             }
         }
     }
@@ -138,10 +178,18 @@ public class GloomGui {
         // 先应用背景
         applyBackground();
         
-        // 然后渲染组件
+        // 渲染使用 SlotElement 的槽位
+        slotElements.forEach((slot, element) -> {
+            updateInventoryItem(slot, element.render());
+        });
+        
+        // 渲染传统组件槽位
         components.forEach((slot, component) -> {
-            int idx = componentIndices.get(slot);
-            updateInventoryItem(slot, component.render(idx));
+            // 如果该槽位已经使用 SlotElement，跳过
+            if (!slotElements.containsKey(slot)) {
+                int idx = componentIndices.get(slot);
+                updateInventoryItem(slot, component.render(idx));
+            }
         });
     }
 
@@ -168,6 +216,8 @@ public class GloomGui {
         }
 
         inventory.setItem(slot, newItem);
+        // 通知观察者槽位已更新
+        notifySlotObservers(slot);
     }
 
     public void handleClose(InventoryCloseEvent event) {
@@ -280,11 +330,11 @@ public class GloomGui {
     }
 
     /**
-     * 获取 frozen 状态（响应式）
+     * 获取 frozen 状态（只读视图）
      * 
-     * @return frozen 响应式状态
+     * @return frozen 属性的只读视图
      */
-    public ReactiveState<Boolean> getFrozen() {
+    public Property<Boolean> getFrozen() {
         return frozen;
     }
 
@@ -307,11 +357,11 @@ public class GloomGui {
     }
 
     /**
-     * 获取背景物品状态（响应式）
+     * 获取背景物品状态（只读视图）
      * 
-     * @return 背景物品响应式状态
+     * @return 背景物品属性的只读视图
      */
-    public ReactiveState<ItemStack> getBackground() {
+    public Property<ItemStack> getBackground() {
         return background;
     }
 
@@ -322,5 +372,116 @@ public class GloomGui {
      */
     public void setBackground(ItemStack background) {
         this.background.set(background);
+    }
+
+    // ==================== SlotElement 系统 ====================
+
+    /**
+     * 设置槽位元素（新API）
+     * <p>
+     * 使用 SlotElement 系统可以实现更灵活的槽位内容，
+     * 包括组件、GUI 嵌套和背包链接。
+     * 
+     * @param slot    槽位索引
+     * @param element 槽位元素
+     */
+    public void setSlotElement(int slot, @NotNull SlotElement element) {
+        slotElements.put(slot, element);
+        if (inventory != null) {
+            updateInventoryItem(slot, element.render());
+        }
+    }
+
+    /**
+     * 获取槽位元素
+     * 
+     * @param slot 槽位索引
+     * @return 槽位元素，null 表示该槽位没有使用 SlotElement
+     */
+    public SlotElement getSlotElement(int slot) {
+        return slotElements.get(slot);
+    }
+
+    /**
+     * 移除槽位元素
+     * 
+     * @param slot 槽位索引
+     */
+    public void removeSlotElement(int slot) {
+        slotElements.remove(slot);
+        if (inventory != null) {
+            updateInventoryItem(slot, null);
+        }
+    }
+
+    /**
+     * 渲染单个槽位（支持 SlotElement 和传统组件）
+     * 
+     * @param slot 槽位索引
+     * @return 渲染后的物品
+     */
+    public ItemStack renderSlot(int slot) {
+        // 优先使用 SlotElement
+        SlotElement element = slotElements.get(slot);
+        if (element != null) {
+            return element.render();
+        }
+
+        // 回退到传统组件系统
+        GloomComponent component = components.get(slot);
+        if (component != null) {
+            return component.render(componentIndices.get(slot));
+        }
+
+        // 使用背景物品
+        return background.get();
+    }
+
+    // ==================== Observable 接口实现 ====================
+
+    @Override
+    public void addObserver(@NotNull Observer who, int what, int how) {
+        observers.computeIfAbsent(what, k -> ConcurrentHashMap.newKeySet())
+                .add(new ObserverEntry(who, how));
+    }
+
+    @Override
+    public void removeObserver(@NotNull Observer who, int what, int how) {
+        Set<ObserverEntry> slotObservers = observers.get(what);
+        if (slotObservers != null) {
+            slotObservers.removeIf(entry -> entry.observer() == who);
+            if (slotObservers.isEmpty()) {
+                observers.remove(what);
+            }
+        }
+    }
+
+    @Override
+    public void removeAllObservers(@NotNull Observer who) {
+        observers.values().forEach(set -> 
+            set.removeIf(entry -> entry.observer() == who)
+        );
+        observers.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+    }
+
+    /**
+     * 通知所有观察特定槽位的观察者
+     * 
+     * @param slot 槽位索引
+     */
+    public void notifySlotObservers(int slot) {
+        Set<ObserverEntry> slotObservers = observers.get(slot);
+        if (slotObservers != null) {
+            slotObservers.forEach(entry -> entry.observer().notifyUpdate(entry.how()));
+        }
+    }
+
+    /**
+     * 通知所有观察者所有槽位都已更新
+     */
+    public void notifyAllObservers() {
+        for (int slot = 0; slot < size; slot++) {
+            notifySlotObservers(slot);
+        }
     }
 }
