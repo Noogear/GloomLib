@@ -70,6 +70,8 @@ public interface GloomComponent extends Cloneable {
             private final ReactiveState<?> state;
             private final int tickRate;
 
+            // 性能优化：静态组件渲染缓存
+            private final ItemStack cachedIcon;
             private boolean dirty = true;
             private ItemStack cachedRender = null;
 
@@ -80,6 +82,13 @@ public interface GloomComponent extends Cloneable {
                 this.state = state;
                 this.tickRate = tickRate;
 
+                // 性能优化：预克隆静态图标（没有 renderer 和 state 的情况）
+                if (renderer == null && state == null) {
+                    this.cachedIcon = this.icon.clone();
+                } else {
+                    this.cachedIcon = null;
+                }
+
                 if (this.state != null) {
                     this.state.subscribe(v -> this.dirty = true);
                 }
@@ -87,6 +96,12 @@ public interface GloomComponent extends Cloneable {
 
             @Override
             public @NotNull ItemStack render(int index) {
+                // 性能优化：静态组件直接返回缓存的图标
+                if (cachedIcon != null) {
+                    return cachedIcon;
+                }
+
+                // 响应式组件：使用脏标记缓存
                 if (renderer != null && state != null) {
                     if (dirty || cachedRender == null) {
                         cachedRender = renderer.apply(state.get());
@@ -94,6 +109,8 @@ public interface GloomComponent extends Cloneable {
                     }
                     return cachedRender;
                 }
+
+                // 其他情况返回 icon
                 return icon;
             }
 

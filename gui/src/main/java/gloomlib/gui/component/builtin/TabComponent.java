@@ -50,22 +50,15 @@ public class TabComponent implements GloomComponent {
 
     @Override
     public boolean onTick() {
+        // 性能优化：只 tick 激活的标签
         return getActiveComponent().onTick();
     }
 
     @Override
     public int getTickRate() {
-        int minRate = Integer.MAX_VALUE;
-        boolean hasAnimated = false;
-
-        for (GloomComponent comp : tabs.values()) {
-            int rate = comp.getTickRate();
-            if (rate > 0) {
-                hasAnimated = true;
-                minRate = Math.min(minRate, rate);
-            }
-        }
-        return hasAnimated ? minRate : -1;
+        // 性能优化：只返回激活标签的 tickRate
+        GloomComponent active = getActiveComponent();
+        return active.getTickRate();
     }
 
     @Override

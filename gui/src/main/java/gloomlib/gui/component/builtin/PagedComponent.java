@@ -25,7 +25,11 @@ public class PagedComponent<T> implements GloomComponent {
     private Paginator<T> paginator;
     private List<T> currentItems;
 
+    // 性能优化：增量更新标记
     private boolean dirty = true;
+    private int cachedPage = -1;
+    private final java.util.BitSet dirtyIndices;
+    private final ItemStack[] renderedCache;
 
     public PagedComponent(ReactiveState<List<T>> dataState,
                           int pageSize,
@@ -36,6 +40,10 @@ public class PagedComponent<T> implements GloomComponent {
         this.pageSize = pageSize;
         this.itemRenderer = itemRenderer;
         this.clickHandler = clickHandler;
+        
+        // 初始化缓存
+        this.dirtyIndices = new java.util.BitSet(pageSize);
+        this.renderedCache = new ItemStack[pageSize];
 
         this.dataListener = (list) -> {
             this.paginator = new Paginator<>(list, pageSize);
@@ -43,6 +51,8 @@ public class PagedComponent<T> implements GloomComponent {
                 pageState.set(0);
             } else {
                 this.dirty = true;
+                // 数据变化时标记所有槽位为脏
+                this.dirtyIndices.set(0, pageSize);
             }
         };
         this.dataState.subscribe(this.dataListener);
@@ -51,7 +61,11 @@ public class PagedComponent<T> implements GloomComponent {
             this.dataListener.accept(dataState.get());
         }
 
-        this.pageListener = (page) -> this.dirty = true;
+        this.pageListener = (page) -> {
+            this.dirty = true;
+            // 页面变化时标记所有槽位为脏
+            this.dirtyIndices.set(0, pageSize);
+        };
         this.pageState.subscribe(this.pageListener);
     }
 
@@ -64,18 +78,34 @@ public class PagedComponent<T> implements GloomComponent {
 
     @Override
     public @NotNull ItemStack render(int index) {
-        if (dirty || currentItems == null) {
+        if (index < 0 || index >= pageSize) {
+            return new ItemStack(Material.AIR);
+        }
+
+        int currentPage = pageState.get();
+
+        // 页面切换：重新加载当前页数据
+        if (dirty || currentItems == null || currentPage != cachedPage) {
             if (paginator != null) {
-                currentItems = paginator.getPage(pageState.get());
+                currentItems = paginator.getPage(currentPage);
+                cachedPage = currentPage;
             }
             dirty = false;
         }
 
-        if (currentItems != null && index < currentItems.size()) {
-            return itemRenderer.apply(currentItems.get(index));
+        // 增量更新：只重新渲染脏槽位
+        if (dirtyIndices.get(index)) {
+            if (currentItems != null && index < currentItems.size()) {
+                renderedCache[index] = itemRenderer.apply(currentItems.get(index));
+            } else {
+                renderedCache[index] = new ItemStack(Material.AIR);
+            }
+            dirtyIndices.clear(index);
         }
 
-        return new ItemStack(Material.AIR);
+        // 返回缓存的渲染结果
+        ItemStack cached = renderedCache[index];
+        return cached != null ? cached : new ItemStack(Material.AIR);
     }
 
     @Override
@@ -129,10 +159,12 @@ public class PagedComponent<T> implements GloomComponent {
     public PagedComponent<T> clone() {
         try {
             @SuppressWarnings("unchecked")
-            PagedComponent<T> clone = (PagedComponent<T>) super.clone();
-            clone.dirty = true;
-            clone.currentItems = null;
-            return clone;
+            PagedComponent<T> cloned = (PagedComponent<T>) super.clone();
+            cloned.dirty = true;
+            cloned.currentItems = null;
+            cloned.cachedPage = -1;
+            cloned.dirtyIndices.set(0, pageSize); // 标记所有为脏
+            return cloned;
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
         }

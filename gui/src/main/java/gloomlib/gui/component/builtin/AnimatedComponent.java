@@ -16,6 +16,9 @@ public class AnimatedComponent implements GloomComponent {
     private final boolean repeat;
     private final Consumer<InteractionContext> clickHandler;
 
+    // 性能优化：预渲染帧缓存
+    private final ItemStack[] frameCache;
+
     private int currentFrame = 0;
     private boolean finished = false;
 
@@ -24,14 +27,20 @@ public class AnimatedComponent implements GloomComponent {
         this.tickRate = tickRate;
         this.repeat = repeat;
         this.clickHandler = clickHandler;
+        
+        // 预克隆所有帧到缓存
+        this.frameCache = frames.stream()
+                .map(ItemStack::clone)
+                .toArray(ItemStack[]::new);
     }
 
     @Override
     public @NotNull ItemStack render(int index) {
-        if (frames.isEmpty()) {
+        if (frameCache.length == 0) {
             return new ItemStack(org.bukkit.Material.AIR);
         }
-        return frames.get(currentFrame % frames.size());
+        // 性能优化：返回预渲染的缓存帧，无需克隆
+        return frameCache[currentFrame % frameCache.length];
     }
 
     @Override
