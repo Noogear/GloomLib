@@ -1,17 +1,13 @@
 package gloomlib.gui.listener;
 
 import gloomlib.gui.GloomGuiManager;
-import gloomlib.gui.window.GuiSecurity;
 import gloomlib.gui.window.AbstractWindow;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.player.PlayerDropItemEvent;
-import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 
 public class GloomGuiListener implements Listener {
 
@@ -25,12 +21,6 @@ public class GloomGuiListener implements Listener {
     public void onClick(InventoryClickEvent event) {
         if (event.getInventory().getHolder(false) instanceof AbstractWindow window) {
             window.getGui().handleClick(event);
-        } else {
-            if (GuiSecurity.isLocked(event.getCurrentItem()) || GuiSecurity.isLocked(event.getCursor())) {
-                event.setCancelled(true);
-                event.setCurrentItem(null);
-                event.getWhoClicked().setItemOnCursor(null);
-            }
         }
     }
 
@@ -46,25 +36,5 @@ public class GloomGuiListener implements Listener {
         if (event.getInventory().getHolder(false) instanceof AbstractWindow window) {
             window.handleClose(event);
         }
-    }
-
-    @EventHandler
-    public void onDrop(PlayerDropItemEvent event) {
-        if (GuiSecurity.isLocked(event.getItemDrop().getItemStack())) {
-            event.getItemDrop().remove();
-        }
-    }
-
-    @EventHandler
-    public void onSwapHand(PlayerSwapHandItemsEvent event) {
-        if (GuiSecurity.isLocked(event.getOffHandItem()) || GuiSecurity.isLocked(event.getMainHandItem())) {
-            event.setCancelled(true);
-            GuiSecurity.cleanInventory(event.getPlayer());
-        }
-    }
-
-    @EventHandler
-    public void onDeath(PlayerDeathEvent event) {
-        event.getDrops().removeIf(GuiSecurity::isLocked);
     }
 }

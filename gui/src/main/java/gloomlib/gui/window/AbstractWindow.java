@@ -96,7 +96,6 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
         GloomGuiManager.unregister(this);
         gui.removeAllObservers(this);
         gui.handleClose(event);
-        GuiSecurity.cleanInventory((Player) event.getPlayer());
     }
 
     @Override
