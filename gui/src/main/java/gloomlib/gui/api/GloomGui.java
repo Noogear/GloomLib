@@ -24,15 +24,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
-/**
- * 核心 GUI 类 - 支持多观察者模式
- * <p>
- * 从 3.0 版本开始，GloomGui 支持多个窗口（玩家）同时观察同一个 GUI 实例。
- * 这允许创建共享的商店、拍卖行等多人可见的界面。
- * 
- * @author GloomLib
- * @since 2.0
- */
 public class GloomGui implements Observable {
 
     private final Player player;
@@ -44,38 +35,13 @@ public class GloomGui implements Observable {
     private final Map<Integer, GloomComponent> components = new HashMap<>();
     private final Map<Integer, Integer> componentIndices = new HashMap<>();
 
-    // SlotElement 系统：槽位索引 -> 槽位元素
     private final Map<Integer, SlotElement> slotElements = new HashMap<>();
-
     private final List<Integer> tickingSlots = new ArrayList<>();
-
-    // 多观察者支持：槽位索引 -> 观察者集合
     private final Map<Integer, Set<ObserverEntry>> observers = new ConcurrentHashMap<>();
-
-    // 冻结状态：当 GUI 被冻结时，所有交互都会被阻止
     private final MutableProperty<Boolean> frozen = MutableProperty.of(false);
-    
-    // 背景物品：在没有组件的槽位显示
     private final MutableProperty<ItemStack> background = MutableProperty.of(null);
 
     private Inventory inventory;
-
-    /**
-     * 观察者条目记录 - 存储观察者和通知方式
-     */
-    private record ObserverEntry(@NotNull Observer observer, int how) {
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof ObserverEntry entry)) return false;
-            return observer == entry.observer;
-        }
-
-        @Override
-        public int hashCode() {
-            return System.identityHashCode(observer);
-        }
-    }
 
     public GloomGui(Player player,
                     Component title,
@@ -142,31 +108,25 @@ public class GloomGui implements Observable {
 
     public void bindToWindow(AbstractWindow window) {
         this.inventory = window.getInventory();
-        
-        // 设置背景物品监听器
+
         background.observeWeak(bg -> {
             if (inventory != null) {
                 applyBackground();
             }
         });
-        
+
         redraw();
     }
 
-    /**
-     * 应用背景物品到所有空槽位
-     */
     private void applyBackground() {
         ItemStack bg = background.get();
         if (bg == null) {
             return;
         }
-        
+
         for (int i = 0; i < size; i++) {
-            // 如果槽位既没有 SlotElement 也没有传统组件，则应用背景
             if (!slotElements.containsKey(i) && !components.containsKey(i)) {
                 inventory.setItem(i, bg.clone());
-                // 通知观察者背景槽位已更新
                 notifySlotObservers(i);
             }
         }
@@ -174,18 +134,14 @@ public class GloomGui implements Observable {
 
     public void redraw() {
         if (inventory == null) return;
-        
-        // 先应用背景
+
         applyBackground();
-        
-        // 渲染使用 SlotElement 的槽位
+
         slotElements.forEach((slot, element) -> {
             updateInventoryItem(slot, element.render());
         });
-        
-        // 渲染传统组件槽位
+
         components.forEach((slot, component) -> {
-            // 如果该槽位已经使用 SlotElement，跳过
             if (!slotElements.containsKey(slot)) {
                 int idx = componentIndices.get(slot);
                 updateInventoryItem(slot, component.render(idx));
@@ -208,16 +164,26 @@ public class GloomGui implements Observable {
     private void updateInventoryItem(int slot, ItemStack newItem) {
         ItemStack currentItem = inventory.getItem(slot);
 
-        if (currentItem == null && newItem == null) {
-            return;
+        if (shouldUpdateSlot(currentItem, newItem)) {
+            inventory.setItem(slot, newItem);
+            notifySlotObservers(slot);
         }
-        if (currentItem != null && newItem != null && currentItem.isSimilar(newItem) && currentItem.getAmount() == newItem.getAmount()) {
-            return;
+    }
+
+    private boolean shouldUpdateSlot(ItemStack current, ItemStack newItem) {
+        if (current == null && newItem == null) {
+            return false;
         }
 
-        inventory.setItem(slot, newItem);
-        // 通知观察者槽位已更新
-        notifySlotObservers(slot);
+        if (current == null || newItem == null) {
+            return true;
+        }
+
+        if (!current.isSimilar(newItem)) {
+            return true;
+        }
+
+        return current.getAmount() != newItem.getAmount();
     }
 
     public void handleClose(InventoryCloseEvent event) {
@@ -240,26 +206,21 @@ public class GloomGui implements Observable {
 
     public void handleClick(InventoryClickEvent event) {
         if (event.getClickedInventory() == event.getInventory()) {
-            // 如果 GUI 被冻结，阻止所有交互
             if (frozen.get()) {
                 event.setCancelled(true);
                 return;
             }
-            
+
             int slot = event.getSlot();
             GloomComponent component = getComponent(slot);
 
-            // 检查是否为 InventoryLink 组件
             if (component instanceof InventoryLinkComponent link) {
-                // 对于 InventoryLink，如果允许交互则不取消事件
-                if (!link.isAllowInteraction()) {
+                if (!link.allowInteraction()) {
                     event.setCancelled(true);
                 }
-                // 否则让 Bukkit 的背包系统处理交互
                 return;
             }
-            
-            // 对于普通组件，取消事件并调用 onClick
+
             event.setCancelled(true);
 
             if (component != null) {
@@ -281,12 +242,9 @@ public class GloomGui implements Observable {
                 }
             }
         } else {
-            // 只在 shift-click 的目标槽位是 GUI 时才阻止
             if (event.isShiftClick() && event.getClickedInventory() != null) {
                 int rawSlot = event.getRawSlot();
-                // rawSlot < size 表示点击的是上方 GUI，需要阻止
                 if (rawSlot >= size && event.getAction().toString().contains("MOVE_TO")) {
-                    // 从玩家背包 shift-click 可能移动到 GUI，检查是否会影响 GUI
                     event.setCancelled(true);
                 }
             }
@@ -329,62 +287,26 @@ public class GloomGui implements Observable {
         return components;
     }
 
-    /**
-     * 获取 frozen 状态（只读视图）
-     * 
-     * @return frozen 属性的只读视图
-     */
     public Property<Boolean> getFrozen() {
         return frozen;
     }
 
-    /**
-     * 设置 GUI 是否冻结
-     * 
-     * @param frozen 是否冻结
-     */
-    public void setFrozen(boolean frozen) {
-        this.frozen.set(frozen);
-    }
-
-    /**
-     * 检查 GUI 是否冻结
-     * 
-     * @return 如果冻结返回 true
-     */
     public boolean isFrozen() {
         return frozen.get();
     }
 
-    /**
-     * 获取背景物品状态（只读视图）
-     * 
-     * @return 背景物品属性的只读视图
-     */
+    public void setFrozen(boolean frozen) {
+        this.frozen.set(frozen);
+    }
+
     public Property<ItemStack> getBackground() {
         return background;
     }
 
-    /**
-     * 设置背景物品
-     * 
-     * @param background 背景物品，null 表示无背景
-     */
     public void setBackground(ItemStack background) {
         this.background.set(background);
     }
 
-    // ==================== SlotElement 系统 ====================
-
-    /**
-     * 设置槽位元素（新API）
-     * <p>
-     * 使用 SlotElement 系统可以实现更灵活的槽位内容，
-     * 包括组件、GUI 嵌套和背包链接。
-     * 
-     * @param slot    槽位索引
-     * @param element 槽位元素
-     */
     public void setSlotElement(int slot, @NotNull SlotElement element) {
         slotElements.put(slot, element);
         if (inventory != null) {
@@ -392,21 +314,10 @@ public class GloomGui implements Observable {
         }
     }
 
-    /**
-     * 获取槽位元素
-     * 
-     * @param slot 槽位索引
-     * @return 槽位元素，null 表示该槽位没有使用 SlotElement
-     */
     public SlotElement getSlotElement(int slot) {
         return slotElements.get(slot);
     }
 
-    /**
-     * 移除槽位元素
-     * 
-     * @param slot 槽位索引
-     */
     public void removeSlotElement(int slot) {
         slotElements.remove(slot);
         if (inventory != null) {
@@ -414,30 +325,19 @@ public class GloomGui implements Observable {
         }
     }
 
-    /**
-     * 渲染单个槽位（支持 SlotElement 和传统组件）
-     * 
-     * @param slot 槽位索引
-     * @return 渲染后的物品
-     */
     public ItemStack renderSlot(int slot) {
-        // 优先使用 SlotElement
         SlotElement element = slotElements.get(slot);
         if (element != null) {
             return element.render();
         }
 
-        // 回退到传统组件系统
         GloomComponent component = components.get(slot);
         if (component != null) {
             return component.render(componentIndices.get(slot));
         }
 
-        // 使用背景物品
         return background.get();
     }
-
-    // ==================== Observable 接口实现 ====================
 
     @Override
     public void addObserver(@NotNull Observer who, int what, int how) {
@@ -458,17 +358,12 @@ public class GloomGui implements Observable {
 
     @Override
     public void removeAllObservers(@NotNull Observer who) {
-        observers.values().forEach(set -> 
-            set.removeIf(entry -> entry.observer() == who)
+        observers.values().forEach(set ->
+                set.removeIf(entry -> entry.observer() == who)
         );
         observers.entrySet().removeIf(entry -> entry.getValue().isEmpty());
     }
 
-    /**
-     * 通知所有观察特定槽位的观察者
-     * 
-     * @param slot 槽位索引
-     */
     public void notifySlotObservers(int slot) {
         Set<ObserverEntry> slotObservers = observers.get(slot);
         if (slotObservers != null) {
@@ -476,12 +371,23 @@ public class GloomGui implements Observable {
         }
     }
 
-    /**
-     * 通知所有观察者所有槽位都已更新
-     */
     public void notifyAllObservers() {
         for (int slot = 0; slot < size; slot++) {
             notifySlotObservers(slot);
+        }
+    }
+
+    private record ObserverEntry(@NotNull Observer observer, int how) {
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof ObserverEntry entry)) return false;
+            return observer == entry.observer;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(observer);
         }
     }
 }

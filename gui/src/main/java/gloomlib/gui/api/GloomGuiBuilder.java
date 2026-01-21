@@ -33,6 +33,18 @@ public class GloomGuiBuilder {
         return new GloomGuiBuilder();
     }
 
+    public static GloomGuiBuilder chest() {
+        return create().type(InventoryType.CHEST);
+    }
+
+    public static GloomGuiBuilder hopper() {
+        return create().type(InventoryType.HOPPER).rows(1);
+    }
+
+    public static GloomGuiBuilder dispenser() {
+        return create().type(InventoryType.DISPENSER).rows(3);
+    }
+
     public GloomGuiBuilder title(Component title) {
         this.title = title;
         return this;
@@ -102,17 +114,14 @@ public class GloomGuiBuilder {
         return this;
     }
 
-    /**
-     * Builds and opens the GUI for the player immediately.
-     */
     public void open(Player player) {
-        GloomGui gui = create(player);
+        GloomGui gui = build(player);
         int size = (type == InventoryType.CHEST) ? rows * 9 : type.getDefaultSize();
         SimpleWindow window = new SimpleWindow(player, title, gui, type, size);
         window.open();
     }
 
-    public GloomGui create(Player player) {
+    public GloomGui build(Player player) {
         if (title == null) {
             title = Component.text("GloomGui");
         }

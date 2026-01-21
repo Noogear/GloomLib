@@ -11,91 +11,24 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-/**
- * 不可变属性接口 - 只读的响应式状态容器
- * <p>
- * Property 提供了类型安全的只读视图，外部代码无法修改其值。
- * 这有助于封装内部状态，防止意外修改。
- * <p>
- * 设计参考：InvUI 2.x 的 Property 接口
- * {@link <a href="https://github.com/NichtStudioCode/InvUI/blob/ver/2.x/invui/src/main/java/xyz/xenondevs/invui/state/Property.java">InvUI Property.java</a>}
- * 
- * <h3>典型用法</h3>
- * <pre>{@code
- * public class GloomGui {
- *     private final MutableProperty<Boolean> frozen = MutableProperty.of(false);
- *     
- *     // 只暴露只读视图
- *     public Property<Boolean> getFrozen() {
- *         return frozen;
- *     }
- *     
- *     // 内部可以修改
- *     public void setFrozen(boolean value) {
- *         frozen.set(value);
- *     }
- * }
- * }</pre>
- * 
- * @param <T> 属性值类型
- * @author GloomLib
- * @since 3.0
- * @see MutableProperty
- */
 public interface Property<T> extends Supplier<T> {
 
-    /**
-     * 获取当前值
-     * 
-     * @return 当前值，可能为 null
-     */
     @Nullable
     @Override
     T get();
 
-    /**
-     * 使用弱引用订阅值变化
-     * <p>
-     * 当属性值变化时，消费者会被调用并传入新值。
-     * 使用弱引用可防止内存泄漏，当消费者对象被垃圾回收时，订阅会自动取消。
-     * 
-     * @param consumer 值变化时的回调函数
-     */
     void observeWeak(@NotNull Consumer<T> consumer);
 
-    /**
-     * 映射转换为另一个 Property
-     * <p>
-     * 创建一个新的派生 Property，其值通过 mapper 函数从当前 Property 转换而来。
-     * 当原始 Property 变化时，派生 Property 也会自动更新。
-     * 
-     * @param mapper 转换函数
-     * @param <R>    目标类型
-     * @return 派生的 Property
-     */
     @NotNull
     default <R> Property<R> map(@NotNull Function<T, R> mapper) {
         return new MappedProperty<>(this, mapper);
     }
 
-    /**
-     * 扁平化映射转换
-     * <p>
-     * 类似于 {@link #map(Function)}，但 mapper 函数返回另一个 Property。
-     * 结果 Property 会跟踪两层变化。
-     * 
-     * @param mapper 返回 Property 的转换函数
-     * @param <R>    目标类型
-     * @return 派生的 Property
-     */
     @NotNull
     default <R> Property<R> flatMap(@NotNull Function<T, Property<R>> mapper) {
         return new FlatMappedProperty<>(this, mapper);
     }
 
-    /**
-     * 映射后的 Property 实现
-     */
     class MappedProperty<T, R> implements Property<R> {
         private final Property<T> source;
         private final Function<T, R> mapper;
@@ -107,7 +40,6 @@ public interface Property<T> extends Supplier<T> {
             this.mapper = mapper;
             this.cachedValue = mapper.apply(source.get());
 
-            // 观察源 Property 的变化
             source.observeWeak(newValue -> {
                 R newMappedValue = mapper.apply(newValue);
                 if (!Objects.equals(cachedValue, newMappedValue)) {
@@ -147,9 +79,6 @@ public interface Property<T> extends Supplier<T> {
         }
     }
 
-    /**
-     * 扁平化映射后的 Property 实现
-     */
     class FlatMappedProperty<T, R> implements Property<R> {
         private final Property<T> source;
         private final Function<T, Property<R>> mapper;
@@ -163,7 +92,6 @@ public interface Property<T> extends Supplier<T> {
             this.currentInner = mapper.apply(source.get());
             this.cachedValue = currentInner != null ? currentInner.get() : null;
 
-            // 观察源 Property 的变化
             source.observeWeak(newValue -> {
                 Property<R> newInner = mapper.apply(newValue);
                 if (newInner != currentInner) {
@@ -175,7 +103,6 @@ public interface Property<T> extends Supplier<T> {
                 }
             });
 
-            // 观察内部 Property 的变化
             if (currentInner != null) {
                 currentInner.observeWeak(this::updateValue);
             }
