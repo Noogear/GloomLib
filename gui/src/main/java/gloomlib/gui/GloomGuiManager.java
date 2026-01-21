@@ -69,17 +69,24 @@ public class GloomGuiManager {
 
             instance.windowTasks.put(window, task);
         } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "无法使用 EntityScheduler，尝试使用传统调度器", e);
-            Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-                try {
-                    if (!player.isOnline()) {
-                        return;
-                    }
-                    window.tick();
-                } catch (Exception ex) {
-                    plugin.getLogger().log(Level.WARNING, "窗口 tick 时发生错误", ex);
-                }
-            }, 0L, tickRate);
+            plugin.getLogger().log(Level.WARNING, "无法使用 EntityScheduler，使用 GlobalRegionScheduler", e);
+            Bukkit.getServer().getGlobalRegionScheduler().runAtFixedRate(
+                    plugin,
+                    task -> {
+                        try {
+                            if (!player.isOnline() || window.isClosed()) {
+                                task.cancel();
+                                return;
+                            }
+                            window.tick();
+                        } catch (Exception ex) {
+                            plugin.getLogger().log(Level.WARNING, "窗口 tick 时发生错误", ex);
+                            task.cancel();
+                        }
+                    },
+                    tickRate,
+                    tickRate
+            );
         }
     }
 

@@ -22,7 +22,7 @@ public @interface Check {
      *
      * @return the validator class
      */
-    Class<? extends Validator> value() default Validator.class;
+    Class<? extends Validator<?>> value() default Validator.class;
 
     /**
      * [Reflection Mode] The class containing the validation method.

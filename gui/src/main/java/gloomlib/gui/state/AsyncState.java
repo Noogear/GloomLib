@@ -46,9 +46,7 @@ public class AsyncState<T> extends ReactiveState<T> {
             Thread.startVirtualThread(() -> {
                 try {
                     CompletableFuture<T> future = loader.get();
-                    future.whenComplete((result, ex) -> {
-                        scheduleMainThreadUpdate(result, ex);
-                    });
+                    future.whenComplete(this::scheduleMainThreadUpdate);
                 } catch (Exception e) {
                     scheduleMainThreadUpdate(null, e);
                 }
@@ -72,15 +70,15 @@ public class AsyncState<T> extends ReactiveState<T> {
                         null
                 );
             } catch (Exception e) {
-                Bukkit.getScheduler().runTask(
+                Bukkit.getServer().getGlobalRegionScheduler().run(
                         GloomGuiManager.getPlugin(),
-                        () -> updateState(result, ex)
+                        task -> updateState(result, ex)
                 );
             }
         } else {
-            Bukkit.getScheduler().runTask(
+            Bukkit.getServer().getGlobalRegionScheduler().run(
                     GloomGuiManager.getPlugin(),
-                    () -> updateState(result, ex)
+                    task -> updateState(result, ex)
             );
         }
     }
@@ -101,9 +99,10 @@ public class AsyncState<T> extends ReactiveState<T> {
 
     private void fallbackAsyncLoad(Supplier<CompletableFuture<T>> loader) {
         loader.get().whenComplete((result, ex) -> {
-            Bukkit.getScheduler().runTask(GloomGuiManager.getPlugin(), () -> {
-                updateState(result, ex);
-            });
+            Bukkit.getServer().getGlobalRegionScheduler().run(
+                    GloomGuiManager.getPlugin(),
+                    task -> updateState(result, ex)
+            );
         });
     }
 

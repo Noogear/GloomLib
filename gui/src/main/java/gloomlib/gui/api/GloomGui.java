@@ -24,21 +24,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
-/**
- * The standard implementation of {@link Gui.Normal}, providing a fixed-size inventory-based GUI.
- * <p>
- * This class manages the core GUI state including:
- * <ul>
- *     <li>Slot-to-component mappings</li>
- *     <li>SlotElement management for advanced slot types (components, nested GUIs, inventory links)</li>
- *     <li>Observable pattern integration for automatic UI updates</li>
- *     <li>Ticking for animated components</li>
- *     <li>Event handling for clicks and drags</li>
- * </ul>
- * 
- * @see Gui.Normal
- * @see SlotElement
- */
 public final class GloomGui implements Gui.Normal {
 
     private final Player player;
@@ -56,12 +41,6 @@ public final class GloomGui implements Gui.Normal {
     private final MutableProperty<Boolean> frozen = MutableProperty.of(false);
     private final MutableProperty<ItemStack> background = MutableProperty.of(null);
 
-    /**
-     * Dirty tracking: BitSet where each bit represents whether a slot needs to be updated.
-     * Inspired by InvUI's AbstractGui dirty tracking mechanism.
-     * 
-     * @see <a href="https://github.com/NichtStudioCode/InvUI/blob/ver/2.x/invui-core/src/main/java/xyz/xenondevs/invui/gui/AbstractGui.java#L700-750">InvUI AbstractGui.java#L700-750</a>
-     */
     private final java.util.BitSet dirtySlots;
 
     private Inventory inventory;
@@ -186,34 +165,16 @@ public final class GloomGui implements Gui.Normal {
         flushUpdates();
     }
 
-    /**
-     * Marks a specific slot as dirty (needing update).
-     * The slot will be updated on the next {@link #flushUpdates()} call.
-     * 
-     * @param slot the slot index to mark dirty
-     */
     public void markDirty(int slot) {
         if (slot >= 0 && slot < size) {
             dirtySlots.set(slot);
         }
     }
 
-    /**
-     * Marks all slots as dirty.
-     * Useful when the entire GUI needs to be refreshed.
-     */
     public void markAllDirty() {
         dirtySlots.set(0, size);
     }
 
-    /**
-     * Flushes all dirty slots to the inventory, updating only the changed slots.
-     * This is more efficient than redrawing the entire GUI.
-     * <p>
-     * Inspired by InvUI's flush mechanism.
-     * 
-     * @see <a href="https://github.com/NichtStudioCode/InvUI/blob/ver/2.x/invui-core/src/main/java/xyz/xenondevs/invui/gui/AbstractGui.java#L722">InvUI AbstractGui.java#L722</a>
-     */
     public void flushUpdates() {
         if (inventory == null || batchUpdateMode) return;
 
@@ -225,29 +186,10 @@ public final class GloomGui implements Gui.Normal {
         dirtySlots.clear();
     }
 
-    /**
-     * Enters batch update mode, deferring all slot updates until {@link #endBatchUpdate()} is called.
-     * This is useful when making multiple changes to the GUI to avoid flickering.
-     * <p>
-     * <b>Example:</b>
-     * <pre>{@code
-     * gui.beginBatchUpdate();
-     * try {
-     *     gui.setSlotElement(10, element1);
-     *     gui.setSlotElement(11, element2);
-     *     gui.setSlotElement(12, element3);
-     * } finally {
-     *     gui.endBatchUpdate();
-     * }
-     * }</pre>
-     */
     public void beginBatchUpdate() {
         batchUpdateMode = true;
     }
 
-    /**
-     * Exits batch update mode and flushes all accumulated dirty slots.
-     */
     public void endBatchUpdate() {
         batchUpdateMode = false;
         flushUpdates();
@@ -486,6 +428,28 @@ public final class GloomGui implements Gui.Normal {
         }
     }
 
+    @Override
+    public int getUpdatePeriod(int what) {
+        SlotElement element = slotElements.get(what);
+        if (element instanceof SlotElement.ComponentSlot componentSlot) {
+            GloomComponent component = componentSlot.component();
+            int tickRate = component.getTickRate();
+            if (tickRate > 0) {
+                return tickRate;
+            }
+        }
+
+        GloomComponent component = components.get(what);
+        if (component != null) {
+            int tickRate = component.getTickRate();
+            if (tickRate > 0) {
+                return tickRate;
+            }
+        }
+
+        return -1;
+    }
+
     private record ObserverEntry(@NotNull Observer observer, int how) {
         @Override
         public boolean equals(Object o) {
@@ -498,29 +462,5 @@ public final class GloomGui implements Gui.Normal {
         public int hashCode() {
             return System.identityHashCode(observer);
         }
-    }
-
-    @Override
-    public int getUpdatePeriod(int what) {
-        // Check if the slot has a SlotElement with periodic update needs
-        SlotElement element = slotElements.get(what);
-        if (element instanceof SlotElement.ComponentSlot componentSlot) {
-            GloomComponent component = componentSlot.component();
-            int tickRate = component.getTickRate();
-            if (tickRate > 0) {
-                return tickRate; // Component needs periodic updates
-            }
-        }
-        
-        // Check if the slot has a regular component
-        GloomComponent component = components.get(what);
-        if (component != null) {
-            int tickRate = component.getTickRate();
-            if (tickRate > 0) {
-                return tickRate;
-            }
-        }
-        
-        return -1; // No automatic updates needed
     }
 }
