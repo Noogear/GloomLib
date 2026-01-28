@@ -7,7 +7,7 @@ import org.junit.jupiter.api.*;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests for the intelligent repeating subsequence detection algorithm in NavigationHistory.
@@ -69,8 +69,8 @@ class NavigationSequenceDeduplicationTest {
         navigationManager.push(player, windowD);
 
         // Should detect and remove the repeating B-C-D sequence
-        assertEquals(4, navigationManager.getHistory(player).getDepth(), 
-            "Should optimize A-B-C-D-B-C-D to A-B-C-D (merge duplicate B-C-D)");
+        assertEquals(4, navigationManager.getHistory(player).getDepth(),
+                "Should optimize A-B-C-D-B-C-D to A-B-C-D (merge duplicate B-C-D)");
     }
 
     @Test
@@ -90,8 +90,8 @@ class NavigationSequenceDeduplicationTest {
         navigationManager.push(player, windowC);
 
         // Should NOT optimize because it involves index 0 (initial window A)
-        assertEquals(6, navigationManager.getHistory(player).getDepth(), 
-            "Should NOT optimize A-B-C-A-B-C (protects initial window)");
+        assertEquals(6, navigationManager.getHistory(player).getDepth(),
+                "Should NOT optimize A-B-C-A-B-C (protects initial window)");
     }
 
     @Test
@@ -106,8 +106,8 @@ class NavigationSequenceDeduplicationTest {
         navigationManager.push(player, windowB);
         navigationManager.push(player, windowC);
 
-        assertEquals(6, navigationManager.getHistory(player).getDepth(), 
-            "First two A-B-C sequences should be kept");
+        assertEquals(6, navigationManager.getHistory(player).getDepth(),
+                "First two A-B-C sequences should be kept");
 
         // Push third A-B-C sequence
         navigationManager.push(player, windowA);
@@ -115,8 +115,8 @@ class NavigationSequenceDeduplicationTest {
         navigationManager.push(player, windowC);
 
         // Should merge the third A-B-C because it doesn't involve index 0
-        assertEquals(6, navigationManager.getHistory(player).getDepth(), 
-            "Should optimize A-B-C-A-B-C-A-B-C to A-B-C-A-B-C (merge third repeat)");
+        assertEquals(6, navigationManager.getHistory(player).getDepth(),
+                "Should optimize A-B-C-A-B-C-A-B-C to A-B-C-A-B-C (merge third repeat)");
     }
 
     @Test
@@ -133,8 +133,8 @@ class NavigationSequenceDeduplicationTest {
         navigationManager.push(player, windowB);
 
         // Should NOT optimize because A-B starts at index 0
-        assertEquals(4, navigationManager.getHistory(player).getDepth(), 
-            "Should NOT merge A-B-A-B (involves initial window)");
+        assertEquals(4, navigationManager.getHistory(player).getDepth(),
+                "Should NOT merge A-B-A-B (involves initial window)");
     }
 
     @Test
@@ -152,8 +152,8 @@ class NavigationSequenceDeduplicationTest {
         navigationManager.push(player, windowC);
 
         // Should detect and remove the repeating B-C sequence
-        assertEquals(3, navigationManager.getHistory(player).getDepth(), 
-            "Should optimize A-B-C-B-C to A-B-C (merge duplicate B-C)");
+        assertEquals(3, navigationManager.getHistory(player).getDepth(),
+                "Should optimize A-B-C-B-C to A-B-C (merge duplicate B-C)");
     }
 
     @Test
@@ -175,8 +175,8 @@ class NavigationSequenceDeduplicationTest {
         navigationManager.push(player, windowE);
 
         // Should detect and remove the repeating D-E sequence
-        assertEquals(5, navigationManager.getHistory(player).getDepth(), 
-            "Should optimize A-B-C-D-E-D-E to A-B-C-D-E (merge duplicate D-E)");
+        assertEquals(5, navigationManager.getHistory(player).getDepth(),
+                "Should optimize A-B-C-D-E-D-E to A-B-C-D-E (merge duplicate D-E)");
     }
 
     @Test
@@ -189,8 +189,8 @@ class NavigationSequenceDeduplicationTest {
         navigationManager.push(player, windowC);
         navigationManager.push(player, windowD);
 
-        assertEquals(4, navigationManager.getHistory(player).getDepth(), 
-            "Should keep all 4 windows (no repeating pattern)");
+        assertEquals(4, navigationManager.getHistory(player).getDepth(),
+                "Should keep all 4 windows (no repeating pattern)");
     }
 
     @Test

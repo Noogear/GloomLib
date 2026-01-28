@@ -28,9 +28,9 @@ public class AnimatedComponent implements GloomComponent {
     /**
      * Constructs an animated component.
      *
-     * @param frames the animation frames
-     * @param tickRate the ticks between frame changes
-     * @param repeat whether to loop the animation
+     * @param frames       the animation frames
+     * @param tickRate     the ticks between frame changes
+     * @param repeat       whether to loop the animation
      * @param clickHandler the click handler (nullable)
      */
     public AnimatedComponent(List<ItemStack> frames, int tickRate, boolean repeat, Consumer<InteractionContext> clickHandler) {

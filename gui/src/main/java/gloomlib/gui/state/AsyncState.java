@@ -33,11 +33,11 @@ public class AsyncState<T> extends ReactiveState<T> {
     /**
      * Creates an async state from a CompletableFuture supplier.
      *
-     * @param loader the future supplier
+     * @param loader       the future supplier
      * @param loadingValue the value to display while loading
-     * @param errorValue the fallback value on error
-     * @param player the player for scheduler context (nullable)
-     * @param <T> the state type
+     * @param errorValue   the fallback value on error
+     * @param player       the player for scheduler context (nullable)
+     * @param <T>          the state type
      * @return a new async state instance
      */
     public static <T> AsyncState<T> ofFuture(Supplier<CompletableFuture<T>> loader,
@@ -52,11 +52,11 @@ public class AsyncState<T> extends ReactiveState<T> {
     /**
      * Creates an async state from a synchronous loader (executed async).
      *
-     * @param loader the data loader
+     * @param loader       the data loader
      * @param loadingValue the value to display while loading
-     * @param errorValue the fallback value on error
-     * @param player the player for scheduler context (nullable)
-     * @param <T> the state type
+     * @param errorValue   the fallback value on error
+     * @param player       the player for scheduler context (nullable)
+     * @param <T>          the state type
      * @return a new async state instance
      */
     public static <T> AsyncState<T> of(Supplier<T> loader,

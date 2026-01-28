@@ -1,8 +1,8 @@
 package gloomlib.gui.api;
 
 import gloomlib.gui.component.GloomComponent;
-import gloomlib.gui.window.Observable;
 import gloomlib.gui.slot.SlotElement;
+import gloomlib.gui.window.Observable;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
@@ -78,7 +78,7 @@ public sealed interface Gui extends Observable permits Gui.Normal, Gui.Paged {
     /**
      * Sets a slot element at an index.
      *
-     * @param slot the slot index
+     * @param slot    the slot index
      * @param element the slot element
      */
     void setSlotElement(int slot, @NotNull SlotElement element);

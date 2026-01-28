@@ -10,11 +10,7 @@ import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 
@@ -122,7 +118,7 @@ class GuiTest {
     void itemsShouldBePlacedInInventory() {
         ItemStack item = new ItemStack(Material.STONE, 10);
         inventory.setItem(0, item);
-        
+
         assertNotNull(inventory.getItem(0));
         assertEquals(Material.STONE, inventory.getItem(0).getType());
         assertEquals(10, inventory.getItem(0).getAmount());

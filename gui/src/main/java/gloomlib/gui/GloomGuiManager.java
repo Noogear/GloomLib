@@ -56,7 +56,7 @@ public class GloomGuiManager {
     /**
      * Registers a window for periodic tick updates.
      *
-     * @param window the window to register
+     * @param window   the window to register
      * @param tickRate the tick interval
      */
     public static void register(Window window, int tickRate) {

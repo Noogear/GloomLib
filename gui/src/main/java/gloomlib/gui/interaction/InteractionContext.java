@@ -15,11 +15,11 @@ import org.jetbrains.annotations.Nullable;
  * <p>
  * Reference: InvUI AbstractGui click handling logic.
  *
- * @param player the player who triggered the interaction
- * @param clickType the click type
- * @param action the inventory action
- * @param slot the clicked slot
- * @param item the current item
+ * @param player         the player who triggered the interaction
+ * @param clickType      the click type
+ * @param action         the inventory action
+ * @param slot           the clicked slot
+ * @param item           the current item
  * @param componentIndex the component index
  */
 public record InteractionContext(
@@ -143,9 +143,9 @@ public record InteractionContext(
      */
     public boolean isPlaceAction() {
         return isAction(
-            InventoryAction.PLACE_ALL,
-            InventoryAction.PLACE_ONE,
-            InventoryAction.PLACE_SOME
+                InventoryAction.PLACE_ALL,
+                InventoryAction.PLACE_ONE,
+                InventoryAction.PLACE_SOME
         );
     }
 
@@ -156,10 +156,10 @@ public record InteractionContext(
      */
     public boolean isPickupAction() {
         return isAction(
-            InventoryAction.PICKUP_ALL,
-            InventoryAction.PICKUP_HALF,
-            InventoryAction.PICKUP_ONE,
-            InventoryAction.PICKUP_SOME
+                InventoryAction.PICKUP_ALL,
+                InventoryAction.PICKUP_HALF,
+                InventoryAction.PICKUP_ONE,
+                InventoryAction.PICKUP_SOME
         );
     }
 
@@ -179,8 +179,8 @@ public record InteractionContext(
      */
     public boolean isSwapAction() {
         return isAction(
-            InventoryAction.HOTBAR_SWAP,
-            InventoryAction.SWAP_WITH_CURSOR
+                InventoryAction.HOTBAR_SWAP,
+                InventoryAction.SWAP_WITH_CURSOR
         );
     }
 
@@ -200,14 +200,14 @@ public record InteractionContext(
      */
     public boolean involvesCursor() {
         return isAction(
-            InventoryAction.SWAP_WITH_CURSOR,
-            InventoryAction.PLACE_ALL,
-            InventoryAction.PLACE_ONE,
-            InventoryAction.PLACE_SOME,
-            InventoryAction.PICKUP_ALL,
-            InventoryAction.PICKUP_HALF,
-            InventoryAction.PICKUP_ONE,
-            InventoryAction.PICKUP_SOME
+                InventoryAction.SWAP_WITH_CURSOR,
+                InventoryAction.PLACE_ALL,
+                InventoryAction.PLACE_ONE,
+                InventoryAction.PLACE_SOME,
+                InventoryAction.PICKUP_ALL,
+                InventoryAction.PICKUP_HALF,
+                InventoryAction.PICKUP_ONE,
+                InventoryAction.PICKUP_SOME
         );
     }
 
@@ -218,7 +218,7 @@ public record InteractionContext(
      */
     public String getDescription() {
         return String.format("InteractionContext{player=%s, click=%s, action=%s, slot=%d, index=%d}",
-            player.getName(), clickType, action, slot, componentIndex);
+                player.getName(), clickType, action, slot, componentIndex);
     }
 
     /**

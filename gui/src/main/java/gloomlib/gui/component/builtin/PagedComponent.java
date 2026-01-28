@@ -22,13 +22,12 @@ public class PagedComponent<T> implements GloomComponent {
     private final int pageSize;
     private final Consumer<List<T>> dataListener;
     private final Consumer<Integer> pageListener;
-    private Paginator<T> paginator;
-    private List<T> currentItems;
-
-    private boolean dirty = true;
-    private int cachedPage = -1;
     private final java.util.BitSet dirtyIndices;
     private final ItemStack[] renderedCache;
+    private Paginator<T> paginator;
+    private List<T> currentItems;
+    private boolean dirty = true;
+    private int cachedPage = -1;
 
     public PagedComponent(ReactiveState<List<T>> dataState,
                           int pageSize,
@@ -39,7 +38,7 @@ public class PagedComponent<T> implements GloomComponent {
         this.pageSize = pageSize;
         this.itemRenderer = itemRenderer;
         this.clickHandler = clickHandler;
-        
+
         this.dirtyIndices = new java.util.BitSet(pageSize);
         this.renderedCache = new ItemStack[pageSize];
 

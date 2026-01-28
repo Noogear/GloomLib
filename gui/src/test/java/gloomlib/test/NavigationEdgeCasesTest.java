@@ -85,14 +85,14 @@ class NavigationEdgeCasesTest {
     @DisplayName("Should throttle cleanup operations for performance")
     void shouldThrottleCleanupOperations() {
         long startTime = System.currentTimeMillis();
-        
+
         // Perform many hasHistory checks rapidly (which trigger cleanup)
         for (int i = 0; i < 100; i++) {
             manager.hasHistory(player);
         }
-        
+
         long duration = System.currentTimeMillis() - startTime;
-        
+
         // Should complete very quickly due to throttling (< 100ms for 100 operations)
         assertTrue(duration < 100, "Operations should be throttled for performance, took: " + duration + "ms");
     }
@@ -101,13 +101,13 @@ class NavigationEdgeCasesTest {
     @DisplayName("Should clear all histories globally")
     void shouldClearAllHistories() {
         Player player2 = server.addPlayer();
-        
+
         // Note: We can't easily test with actual windows in unit tests
         // This test verifies the API exists and doesn't crash
         assertDoesNotThrow(() -> {
             manager.clearAll();
         });
-        
+
         assertFalse(manager.hasHistory(player), "Player 1 history should be cleared");
         assertFalse(manager.hasHistory(player2), "Player 2 history should be cleared");
     }
@@ -127,7 +127,7 @@ class NavigationEdgeCasesTest {
         final int THREAD_COUNT = 10;
         final int OPERATIONS_PER_THREAD = 20;
         Thread[] threads = new Thread[THREAD_COUNT];
-        
+
         for (int i = 0; i < THREAD_COUNT; i++) {
             threads[i] = new Thread(() -> {
                 for (int j = 0; j < OPERATIONS_PER_THREAD; j++) {
@@ -137,17 +137,17 @@ class NavigationEdgeCasesTest {
                 }
             });
         }
-        
+
         // Start all threads
         for (Thread thread : threads) {
             thread.start();
         }
-        
+
         // Wait for all threads to complete
         for (Thread thread : threads) {
             thread.join();
         }
-        
+
         //Should not crash
         assertDoesNotThrow(() -> manager.getDepth(player), "Concurrent access should be thread-safe");
     }
@@ -157,18 +157,18 @@ class NavigationEdgeCasesTest {
     void shouldSupportMultiplePlayerHistories() {
         Player player2 = server.addPlayer();
         Player player3 = server.addPlayer();
-        
+
         // Each player should have independent history
         assertNotSame(
-            manager.getHistory(player),
-            manager.getHistory(player2),
-            "Different players should have different histories"
+                manager.getHistory(player),
+                manager.getHistory(player2),
+                "Different players should have different histories"
         );
-        
+
         assertNotSame(
-            manager.getHistory(player2),
-            manager.getHistory(player3),
-            "Different players should have different histories"
+                manager.getHistory(player2),
+                manager.getHistory(player3),
+                "Different players should have different histories"
         );
     }
 
@@ -176,14 +176,14 @@ class NavigationEdgeCasesTest {
     @DisplayName("Should allow configuration of max depth")
     void shouldAllowMaxDepthConfiguration() {
         assertDoesNotThrow(() -> {
-            manager.getHistory(player).setMaxDepth(20);
-        }, "Should allow setting max depth"
-  );
-        
+                    manager.getHistory(player).setMaxDepth(20);
+                }, "Should allow setting max depth"
+        );
+
         assertThrows(IllegalArgumentException.class, () -> {
             manager.getHistory(player).setMaxDepth(0);
         }, "Should reject invalid max depth");
-        
+
         assertThrows(IllegalArgumentException.class, () -> {
             manager.getHistory(player).setMaxDepth(-1);
         }, "Should reject negative max depth");

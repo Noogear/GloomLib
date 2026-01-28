@@ -31,9 +31,9 @@ public class CycleComponent<T> implements GloomComponent {
     /**
      * Constructs a cycle component.
      *
-     * @param initialState the reactive state holding the current value
-     * @param values the list of possible values to cycle through
-     * @param renderer the function to render each value
+     * @param initialState  the reactive state holding the current value
+     * @param values        the list of possible values to cycle through
+     * @param renderer      the function to render each value
      * @param onStateChange the callback when value changes (nullable)
      */
     public CycleComponent(ReactiveState<T> initialState,
@@ -58,8 +58,8 @@ public class CycleComponent<T> implements GloomComponent {
      * Constructs a cycle component with varargs.
      *
      * @param initialState the reactive state holding the current value
-     * @param renderer the function to render each value
-     * @param values the possible values to cycle through
+     * @param renderer     the function to render each value
+     * @param values       the possible values to cycle through
      */
     @SafeVarargs
     public CycleComponent(ReactiveState<T> initialState,

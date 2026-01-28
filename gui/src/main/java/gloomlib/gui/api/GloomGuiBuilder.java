@@ -32,7 +32,7 @@ public class GloomGuiBuilder {
     private Consumer<InventoryCloseEvent> closeAction;
     private Boolean manualAnimationEnable = null;
     private int manualTickRate = -1;
-    private boolean navigationEnabled = false; // New: Navigation tracking
+    private boolean navigationEnabled = false;
 
     private GloomGuiBuilder() {
     }
@@ -140,7 +140,7 @@ public class GloomGuiBuilder {
      * allowing them to use back buttons to return to previous windows.
      * <p>
      * Reference: Inspired by InvUI's parent window system, adapted for GloomLib's builder pattern.
-     * 
+     *
      * @param enabled true to enable navigation tracking
      * @return this builder for chaining
      * @see <a href="https://github.com/NichtStudioCode/InvUI">InvUI Navigation Pattern</a>
@@ -155,7 +155,7 @@ public class GloomGuiBuilder {
      * Enables navigation tracking (shorthand for navigationEnabled(true)).
      * <p>
      * Convenience method for the most common case.
-     * 
+     *
      * @return this builder for chaining
      * @since 2.0
      */
@@ -170,36 +170,36 @@ public class GloomGuiBuilder {
      * navigate back to the previous window if available.
      * <p>
      * This is the most convenient way to enable navigation with automatic back-on-close behavior.
-     * 
+     *
      * @return this builder for chaining
      * @since 2.0
      */
     public GloomGuiBuilder withAutoBack() {
         this.navigationEnabled = true;
-        
+
         // Chain the existing close action if any
         Consumer<InventoryCloseEvent> existingAction = this.closeAction;
-        
+
         this.closeAction = event -> {
             // Execute existing action first
             if (existingAction != null) {
                 existingAction.accept(event);
             }
-            
+
             // Then handle auto-back
             Player player = (Player) event.getPlayer();
             player.getScheduler().runDelayed(
-                GloomGuiManager.getPlugin(),
-                task -> {
-                    if (NavigationManager.getInstance().hasHistory(player)) {
-                        NavigationManager.getInstance().back(player);
-                    }
-                },
-                null,
-                2L  // Delay 2 ticks to avoid conflicts
+                    GloomGuiManager.getPlugin(),
+                    task -> {
+                        if (NavigationManager.getInstance().hasHistory(player)) {
+                            NavigationManager.getInstance().back(player);
+                        }
+                    },
+                    null,
+                    2L  // Delay 2 ticks to avoid conflicts
             );
         };
-        
+
         return this;
     }
 
@@ -207,12 +207,12 @@ public class GloomGuiBuilder {
         GloomGui gui = build(player);
         int size = (type == InventoryType.CHEST) ? rows * 9 : type.getDefaultSize();
         AbstractWindow window = new AbstractWindow(player, title, gui, type, size);
-        
+
         // Push to navigation stack if enabled
         if (navigationEnabled) {
             NavigationManager.getInstance().push(player, window);
         }
-        
+
         window.open();
     }
 

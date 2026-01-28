@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>
  * Tests InteractionContext navigation methods, navigation history management,
  * and integration with GloomGui.
- * 
+ *
  * @author GloomLib
  * @since 2.0
  */
@@ -62,7 +62,7 @@ class NavigationTest {
     void navigationManagerShouldBeSingleton() {
         NavigationManager instance1 = NavigationManager.getInstance();
         NavigationManager instance2 = NavigationManager.getInstance();
-        
+
         assertSame(instance1, instance2, "NavigationManager should return the same instance");
     }
 
@@ -79,14 +79,14 @@ class NavigationTest {
     @DisplayName("InteractionContext should provide navigation methods")
     void interactionContextShouldProvideNavigationMethods() {
         InteractionContext ctx = new InteractionContext(
-            player,
-            ClickType.LEFT,
-            InventoryAction.PICKUP_ALL,
-            0,
-            null,
-            0
+                player,
+                ClickType.LEFT,
+                InventoryAction.PICKUP_ALL,
+                0,
+                null,
+                0
         );
-        
+
         // Should be able to call navigation methods
         assertFalse(ctx.canNavigateBack(), "New player should not be able to navigate back");
         assertEquals(0, ctx.getNavigationDepth(), "Navigation depth should be 0");
@@ -97,39 +97,39 @@ class NavigationTest {
     @DisplayName("InteractionContext navigation methods should work correctly")
     void interactionContextNavigationShouldWork() {
         InteractionContext ctx = new InteractionContext(
-            player,
-            ClickType.LEFT,
-            InventoryAction.PICKUP_ALL,
-            0,
-            null,
-            0
+                player,
+                ClickType.LEFT,
+                InventoryAction.PICKUP_ALL,
+                0,
+                null,
+                0
         );
-        
+
         // Initially no history
         assertFalse(ctx.canNavigateBack());
         assertEquals(0, ctx.getNavigationDepth());
-        
+
         // Clear should work
         assertDoesNotThrow(() -> ctx.clearNavigationHistory(),
-            "Clear navigation history should not throw");
+                "Clear navigation history should not throw");
     }
 
     @Test
     @DisplayName("Should create custom back button using InteractionContext")
     void shouldCreateCustomBackButtonUsingContext() {
         GloomComponent backButton = GloomComponent.builder()
-            .icon(ItemBuilder.from(Material.ARROW)
-                .name(Component.text("返回").color(NamedTextColor.YELLOW))
-                .build())
-            .onClick(ctx -> {
-                if (ctx.navigateBack()) {
-                    ctx.player().sendMessage("已返回");
-                } else {
-                    ctx.player().sendMessage("无法返回");
-                }
-            })
-            .build();
-        
+                .icon(ItemBuilder.from(Material.ARROW)
+                        .name(Component.text("返回").color(NamedTextColor.YELLOW))
+                        .build())
+                .onClick(ctx -> {
+                    if (ctx.navigateBack()) {
+                        ctx.player().sendMessage("已返回");
+                    } else {
+                        ctx.player().sendMessage("无法返回");
+                    }
+                })
+                .build();
+
         assertNotNull(backButton, "Back button should not be null");
         assertNotNull(backButton.render(0), "Back button should render an item");
     }
@@ -139,14 +139,14 @@ class NavigationTest {
     void navigationHistoryShouldRespectMaxDepth() {
         var history = NavigationManager.getInstance().getHistory(player);
         history.setMaxDepth(5);
-        
+
         // Push more than max depth
         for (int i = 0; i < 10; i++) {
             // Create mock windows would go here in real test
             // For now, test the depth constraint logic is present
         }
-        
-        assertTrue(history.getDepth() <= 5, 
+
+        assertTrue(history.getDepth() <= 5,
                 "Navigation history should not exceed max depth");
     }
 
@@ -154,9 +154,9 @@ class NavigationTest {
     @DisplayName("Clear should remove all navigation history")
     void clearShouldRemoveAllHistory() {
         // Setup: would push some windows here
-        
+
         NavigationManager.getInstance().clear(player);
-        
+
         assertFalse(NavigationManager.getInstance().hasHistory(player),
                 "Player should have no history after clear");
         assertEquals(0, NavigationManager.getInstance().getDepth(player),
@@ -206,7 +206,7 @@ class NavigationTest {
                 .lore(Component.text("Click to go back")
                         .color(NamedTextColor.GRAY))
                 .build();
-        
+
         assertNotNull(item, "Built item should not be null");
         assertEquals(Material.ARROW, item.getType(), "Item should be an arrow");
         assertTrue(item.hasItemMeta(), "Item should have metadata");
@@ -216,11 +216,11 @@ class NavigationTest {
     @DisplayName("Navigation components should be cloneable")
     void navigationComponentsShouldBeCloneable() {
         GloomComponent original = GloomComponent.builder()
-            .icon(ItemBuilder.from(Material.ARROW).name(Component.text("Back")).build())
-            .onClick(ctx -> ctx.navigateBack())
-            .build();
+                .icon(ItemBuilder.from(Material.ARROW).name(Component.text("Back")).build())
+                .onClick(ctx -> ctx.navigateBack())
+                .build();
         GloomComponent cloned = original.clone();
-        
+
         assertNotNull(cloned, "Cloned component should not be null");
         assertNotSame(original, cloned, "Cloned component should be a different instance");
     }
@@ -229,14 +229,14 @@ class NavigationTest {
     @DisplayName("Multiple players should have independent navigation histories")
     void multiplePlayersShouldHaveIndependentHistories() {
         Player player2 = server.addPlayer();
-        
+
         // Each player should have their own history
         assertNotSame(
                 NavigationManager.getInstance().getHistory(player),
                 NavigationManager.getInstance().getHistory(player2),
                 "Different players should have different navigation histories"
         );
-        
+
         NavigationManager.getInstance().clear(player2);
     }
 }

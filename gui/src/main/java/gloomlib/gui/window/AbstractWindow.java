@@ -44,32 +44,26 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
      * The GUI managing components for this window.
      */
     protected final GloomGui gui;
-
-    /**
-     * The inventory type.
-     */
-    private final InventoryType type;
-
-    /**
-     * The inventory size (for chest types).
-     */
-    private final int size;
-
     /**
      * Whether the window is closed.
      */
     protected final AtomicBoolean isClosed = new AtomicBoolean(false);
-
     /**
      * Tick counters for each slot.
      */
     protected final Map<Integer, Integer> slotTickCounters = new ConcurrentHashMap<>();
-
     /**
      * State change handlers.
      */
     protected final Map<String, BiConsumer<WindowState, WindowState>> stateChangeHandlers = new ConcurrentHashMap<>();
-
+    /**
+     * The inventory type.
+     */
+    private final InventoryType type;
+    /**
+     * The inventory size (for chest types).
+     */
+    private final int size;
     /**
      * The Bukkit inventory instance.
      */
@@ -99,10 +93,10 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
      * Constructs a new abstract window.
      *
      * @param viewer the player viewing the window
-     * @param title the window title
-     * @param gui the GUI instance
-     * @param type the inventory type
-     * @param size the inventory size (for chest types)
+     * @param title  the window title
+     * @param gui    the GUI instance
+     * @param type   the inventory type
+     * @param size   the inventory size (for chest types)
      */
     public AbstractWindow(Player viewer, Component title, GloomGui gui, InventoryType type, int size) {
         this.viewer = viewer;
@@ -262,8 +256,8 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
      * Registers a handler for a specific state transition.
      *
      * @param fromState the starting state
-     * @param toState the ending state
-     * @param handler the handler to invoke
+     * @param toState   the ending state
+     * @param handler   the handler to invoke
      */
     public void onStateChange(WindowState fromState, WindowState toState, BiConsumer<WindowState, WindowState> handler) {
         String key = fromState + "_to_" + toState;
@@ -337,7 +331,7 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
      * Updates the window title for a specific viewer.
      *
      * @param viewer the viewer entity
-     * @param title the new title component
+     * @param title  the new title component
      */
     @SuppressWarnings("deprecation")
     public void updateTitle(@NotNull final HumanEntity viewer, final Component title) {

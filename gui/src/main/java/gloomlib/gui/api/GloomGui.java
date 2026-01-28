@@ -7,18 +7,14 @@ import gloomlib.gui.interaction.ClickActionHandler;
 import gloomlib.gui.interaction.DragHandler;
 import gloomlib.gui.interaction.InteractionContext;
 import gloomlib.gui.interaction.SlotPriority;
-import gloomlib.gui.window.Observer;
 import gloomlib.gui.slot.SlotElement;
 import gloomlib.gui.state.MutableProperty;
 import gloomlib.gui.state.Property;
 import gloomlib.gui.window.AbstractWindow;
+import gloomlib.gui.window.Observer;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
-import org.bukkit.event.inventory.ClickType;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.inventory.InventoryType;
+import org.bukkit.event.inventory.*;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -44,33 +40,28 @@ public final class GloomGui implements Gui.Normal {
 
     private final Map<Integer, GloomComponent> components = new HashMap<>();
     private final Map<Integer, Integer> componentIndices = new HashMap<>();
-
-    private GloomComponent[] slotToComponent;
-    private int[] slotToComponentIndex;
-
     private final Map<Integer, SlotElement> slotElements = new HashMap<>();
     private final List<Integer> tickingSlots = new ArrayList<>();
     private final Map<Integer, Set<ObserverEntry>> observers = new ConcurrentHashMap<>();
     private final MutableProperty<Boolean> frozen = MutableProperty.of(false);
     private final MutableProperty<ItemStack> background = MutableProperty.of(null);
-
-    private SlotPriority slotPriority = SlotPriority.normal();
-
     private final java.util.BitSet dirtySlots;
-
+    private GloomComponent[] slotToComponent;
+    private int[] slotToComponentIndex;
+    private SlotPriority slotPriority = SlotPriority.normal();
     private Inventory inventory;
     private boolean batchUpdateMode = false;
 
     /**
      * Constructs a new GloomGui.
      *
-     * @param player the player for scheduler context
-     * @param title the GUI title
-     * @param rows the number of rows (for chest types)
-     * @param type the inventory type
-     * @param configuration the GUI configuration
-     * @param closeAction the close event handler (nullable)
-     * @param structure the structure pattern (nullable)
+     * @param player         the player for scheduler context
+     * @param title          the GUI title
+     * @param rows           the number of rows (for chest types)
+     * @param type           the inventory type
+     * @param configuration  the GUI configuration
+     * @param closeAction    the close event handler (nullable)
+     * @param structure      the structure pattern (nullable)
      * @param charComponents the character-to-component mapping
      * @param slotComponents the slot-to-component mapping
      */
@@ -296,7 +287,7 @@ public final class GloomGui implements Gui.Normal {
         // 点击 GUI 区域
         if (event.getClickedInventory() == event.getInventory()) {
             handleGuiClick(event, clicker, clickType, slot);
-        } 
+        }
         // 点击玩家背包区域
         else if (event.getClickedInventory() != null) {
             handlePlayerInventoryClick(event, clicker, clickType);
@@ -404,14 +395,14 @@ public final class GloomGui implements Gui.Normal {
 
         // 应用变更
         if (changed) {
-            if (newSlotItem != null || clickType.isLeftClick() || clickType.isRightClick() 
-                || clickType == ClickType.SWAP_OFFHAND || clickType == ClickType.DROP 
-                || clickType == ClickType.CONTROL_DROP || clickType == ClickType.NUMBER_KEY) {
+            if (newSlotItem != null || clickType.isLeftClick() || clickType.isRightClick()
+                    || clickType == ClickType.SWAP_OFFHAND || clickType == ClickType.DROP
+                    || clickType == ClickType.CONTROL_DROP || clickType == ClickType.NUMBER_KEY) {
                 inventory.setItem(slot, newSlotItem);
                 markDirty(slot);
             }
-            if (newCursorItem != null || clickType.isLeftClick() || clickType.isRightClick() 
-                || clickType == ClickType.MIDDLE || clickType == ClickType.DOUBLE_CLICK) {
+            if (newCursorItem != null || clickType.isLeftClick() || clickType.isRightClick()
+                    || clickType == ClickType.MIDDLE || clickType == ClickType.DOUBLE_CLICK) {
                 clicker.setItemOnCursor(newCursorItem);
             }
         }
@@ -563,20 +554,20 @@ public final class GloomGui implements Gui.Normal {
     }
 
     /**
-     * 设置 Shift+点击的槽位优先级策略
-     * 
-     * @param priority 优先级策略
-     */
-    public void setSlotPriority(@NotNull SlotPriority priority) {
-        this.slotPriority = priority;
-    }
-
-    /**
      * 获取当前的槽位优先级策略
      */
     @NotNull
     public SlotPriority getSlotPriority() {
         return slotPriority;
+    }
+
+    /**
+     * 设置 Shift+点击的槽位优先级策略
+     *
+     * @param priority 优先级策略
+     */
+    public void setSlotPriority(@NotNull SlotPriority priority) {
+        this.slotPriority = priority;
     }
 
     @Override
