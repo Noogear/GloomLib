@@ -13,46 +13,40 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 点击动作处理器 - 实现完整的 Minecraft 原版点击交互逻辑
+ * Click action handler implementing complete Minecraft vanilla click interaction logic.
  * <p>
- * 参考 InvUI 2.x 的 GuiImpl 实现，支持：
- * - 左键/右键点击（拾取、放置、堆叠、交换）
- * - Shift+点击跨背包移动（支持优先级）
- * - 数字键快捷栏交换
- * - 双击收集相似物品
- * - 中键克隆（创造模式）
- * - 副手交换（F键）
- * - 丢弃物品（Q键）
- * - Bundle 支持（MC 1.21+）
- * 
- * @author GloomLib
- * @since 2.0
+ * Supports:
+ * - Left/right click (pick, place, stack, swap)
+ * - Shift+click cross-inventory movement (with priority)
+ * - Number key hotbar swap
+ * - Double-click item collection
+ * - Middle-click clone (creative mode)
+ * - Offhand swap (F key)
+ * - Item drop (Q key)
+ * - Bundle support (MC 1.21+)
  */
 public final class ClickActionHandler {
 
     private ClickActionHandler() {
     }
 
-    /**
-     * 优先级槽位（内部使用）
-     */
     private record PrioritizedSlot(int slot, int priority) {
     }
 
     /**
-     * 处理左键点击
+     * Handles left-click interaction.
      * <p>
-     * 逻辑：
-     * - 光标空 + 槽位有物品 → 拾取全部
-     * - 光标有物品 + 槽位空 → 放置全部
-     * - 相似物品 → 尝试堆叠
-     * - 不同物品 → 交换
-     * - Bundle 特殊处理（MC 1.21+）：插入/取出物品
-     * 
-     * @param player      玩家
-     * @param slotItem    槽位物品
-     * @param cursorItem  光标物品
-     * @return 点击结果
+     * Logic:
+     * - Empty cursor + slot has item → pick up all
+     * - Cursor has item + empty slot → place all
+     * - Similar items → attempt stack
+     * - Different items → swap
+     * - Bundle special handling (MC 1.21+): insert/extract items
+     *
+     * @param player the player performing the action
+     * @param slotItem the item in the slot
+     * @param cursorItem the item on the cursor
+     * @return the click result
      */
     @NotNull
     public static ClickResult handleLeftClick(
@@ -60,23 +54,19 @@ public final class ClickActionHandler {
             @Nullable ItemStack slotItem,
             @Nullable ItemStack cursorItem
     ) {
-        // Bundle 特殊处理：光标有物品 + 槽位是 Bundle → 插入到 Bundle
         if (BundleUtils.isBundleSupported() && BundleUtils.isBundle(slotItem) && !GuiItemUtils.isEmpty(cursorItem)) {
             BundleUtils.InsertResult bundleResult = BundleUtils.insertIntoBundle(slotItem, cursorItem);
             return new ClickResult(bundleResult.newBundle(), bundleResult.remaining(), true);
         }
 
-        // Bundle 特殊处理：光标空 + 槽位是 Bundle → 从 Bundle 取出
         if (BundleUtils.isBundleSupported() && BundleUtils.isBundle(slotItem) && GuiItemUtils.isEmpty(cursorItem)) {
             BundleUtils.ExtractResult extractResult = BundleUtils.extractFromBundle(slotItem);
             if (extractResult.wasExtracted()) {
                 return new ClickResult(extractResult.newBundle(), extractResult.extracted(), true);
             }
-            // Bundle 为空，拾取整个 Bundle
             return new ClickResult(null, slotItem.clone(), true);
         }
 
-        // 光标为空，拾取槽位物品
         if (GuiItemUtils.isEmpty(cursorItem)) {
             if (!GuiItemUtils.isEmpty(slotItem)) {
                 return new ClickResult(null, slotItem.clone(), true);
@@ -84,37 +74,33 @@ public final class ClickActionHandler {
             return ClickResult.noChange();
         }
 
-        // 光标有物品，槽位为空，放置全部
         if (GuiItemUtils.isEmpty(slotItem)) {
             return new ClickResult(cursorItem.clone(), null, true);
         }
 
-        // 两者都有物品
         if (GuiItemUtils.canStackWith(slotItem, cursorItem)) {
-            // 相似物品，尝试堆叠
             GuiItemUtils.AddResult result = GuiItemUtils.addItem(slotItem, cursorItem);
             return new ClickResult(result.newSlotItem(), result.remaining(), true);
         } else {
-            // 不同物品，交换
             GuiItemUtils.SwapResult swap = GuiItemUtils.swap(slotItem, cursorItem);
             return new ClickResult(swap.newA(), swap.newB(), true);
         }
     }
 
     /**
-     * 处理右键点击
+     * Handles right-click interaction.
      * <p>
-     * 逻辑：
-     * - 光标空 + 槽位有物品 → 拾取一半（向上取整）
-     * - 光标有物品 + 槽位空 → 放置1个
-     * - 相似物品 → 增加1个到槽位
-     * - 不同物品 → 交换
-     * - Bundle 特殊处理（MC 1.21+）：取出第一个物品
-     * 
-     * @param player      玩家
-     * @param slotItem    槽位物品
-     * @param cursorItem  光标物品
-     * @return 点击结果
+     * Logic:
+     * - Empty cursor + slot has item → pick up half (rounded up)
+     * - Cursor has item + empty slot → place 1 item
+     * - Similar items → add 1 to slot
+     * - Different items → swap
+     * - Bundle special handling (MC 1.21+): extract first item
+     *
+     * @param player the player performing the action
+     * @param slotItem the item in the slot
+     * @param cursorItem the item on the cursor
+     * @return the click result
      */
     @NotNull
     public static ClickResult handleRightClick(
@@ -122,17 +108,14 @@ public final class ClickActionHandler {
             @Nullable ItemStack slotItem,
             @Nullable ItemStack cursorItem
     ) {
-        // Bundle 特殊处理：光标空 + 槽位是 Bundle → 取出第一个物品
         if (BundleUtils.isBundleSupported() && BundleUtils.isBundle(slotItem) && GuiItemUtils.isEmpty(cursorItem)) {
             BundleUtils.ExtractResult extractResult = BundleUtils.extractFromBundle(slotItem);
             if (extractResult.wasExtracted()) {
                 return new ClickResult(extractResult.newBundle(), extractResult.extracted(), true);
             }
-            // Bundle 为空，拾取一半（实际上只有1个Bundle）
             return new ClickResult(null, slotItem.clone(), true);
         }
 
-        // 光标为空，拾取一半
         if (GuiItemUtils.isEmpty(cursorItem)) {
             if (!GuiItemUtils.isEmpty(slotItem)) {
                 GuiItemUtils.RemoveResult result = GuiItemUtils.pickupHalf(slotItem);
@@ -141,7 +124,6 @@ public final class ClickActionHandler {
             return ClickResult.noChange();
         }
 
-        // 光标有物品，槽位为空，放置1个
         if (GuiItemUtils.isEmpty(slotItem)) {
             ItemStack newSlot = cursorItem.clone();
             newSlot.setAmount(1);
@@ -150,9 +132,7 @@ public final class ClickActionHandler {
             return new ClickResult(newSlot, GuiItemUtils.isEmpty(newCursor) ? null : newCursor, true);
         }
 
-        // 两者都有物品
         if (GuiItemUtils.canStackWith(slotItem, cursorItem)) {
-            // 相似物品，增加1个到槽位
             int currentAmount = slotItem.getAmount();
             int maxStack = slotItem.getMaxStackSize();
 
@@ -163,30 +143,28 @@ public final class ClickActionHandler {
                 newCursor.setAmount(cursorItem.getAmount() - 1);
                 return new ClickResult(newSlot, GuiItemUtils.isEmpty(newCursor) ? null : newCursor, true);
             } else {
-                // 已满，不变
                 return ClickResult.noChange();
             }
         } else {
-            // 不同物品，交换
             GuiItemUtils.SwapResult swap = GuiItemUtils.swap(slotItem, cursorItem);
             return new ClickResult(swap.newA(), swap.newB(), true);
         }
     }
 
     /**
-     * 处理 Shift+点击（快速移动到另一个背包）- 带优先级支持
+     * Handles Shift+Click (quick move to another inventory) - with priority support.
      * <p>
-     * 逻辑：
-     * 1. 按优先级排序槽位
-     * 2. 优先填充高优先级槽位的已有堆叠
-     * 3. 然后填充高优先级的空槽位
-     * 
-     * @param slotItem          槽位物品
-     * @param targetInventory   目标背包
-     * @param startSlot         起始槽位
-     * @param endSlot           结束槽位（不包含）
-     * @param priority          优先级策略（可选，null 则使用默认策略）
-     * @return Shift点击结果
+     * Logic:
+     * 1. Sort slots by priority
+     * 2. Fill high-priority existing stacks first
+     * 3. Then fill high-priority empty slots
+     *
+     * @param slotItem the item in the slot
+     * @param targetInventory the target inventory
+     * @param startSlot the start slot (inclusive)
+     * @param endSlot the end slot (exclusive)
+     * @param priority the priority strategy (nullable, uses default if null)
+     * @return the shift-click result
      */
     @NotNull
     public static ShiftClickResult handleShiftClickWithPriority(
@@ -200,14 +178,12 @@ public final class ClickActionHandler {
             return new ShiftClickResult(null, false);
         }
 
-        // 如果没有优先级策略，使用普通模式
         if (priority == null) {
             return handleShiftClick(slotItem, targetInventory, startSlot, endSlot);
         }
 
         ItemStack remaining = slotItem.clone();
 
-        // 构建优先级排序的槽位列表
         java.util.List<PrioritizedSlot> slots = new java.util.ArrayList<>();
         for (int i = startSlot; i < endSlot; i++) {
             int slotPriority = priority.getPriority(i, remaining);
@@ -216,10 +192,8 @@ public final class ClickActionHandler {
             }
         }
 
-        // 按优先级降序排序
         slots.sort((a, b) -> Integer.compare(b.priority, a.priority));
 
-        // 第一阶段：填充已有的相似堆叠（按优先级）
         for (PrioritizedSlot ps : slots) {
             if (GuiItemUtils.isEmpty(remaining)) break;
             
@@ -231,7 +205,6 @@ public final class ClickActionHandler {
             }
         }
 
-        // 第二阶段：填充空槽位（按优先级）
         for (PrioritizedSlot ps : slots) {
             if (GuiItemUtils.isEmpty(remaining)) break;
             
@@ -247,17 +220,17 @@ public final class ClickActionHandler {
     }
 
     /**
-     * 处理 Shift+点击（快速移动到另一个背包）- 简化版本
+     * Handles Shift+Click (quick move to another inventory) - simplified version.
      * <p>
-     * 逻辑：
-     * 1. 优先填充已有的相似堆叠
-     * 2. 然后寻找空槽位
-     * 
-     * @param slotItem          槽位物品
-     * @param targetInventory   目标背包
-     * @param startSlot         起始槽位
-     * @param endSlot           结束槽位（不包含）
-     * @return Shift点击结果
+     * Logic:
+     * 1. Fill existing similar stacks first
+     * 2. Then find empty slots
+     *
+     * @param slotItem the item in the slot
+     * @param targetInventory the target inventory
+     * @param startSlot the start slot (inclusive)
+     * @param endSlot the end slot (exclusive)
+     * @return the shift-click result
      */
     @NotNull
     public static ShiftClickResult handleShiftClick(
@@ -272,7 +245,6 @@ public final class ClickActionHandler {
 
         ItemStack remaining = slotItem.clone();
 
-        // 第一阶段：填充已有的相似堆叠
         for (int i = startSlot; i < endSlot && !GuiItemUtils.isEmpty(remaining); i++) {
             ItemStack targetItem = targetInventory.getItem(i);
             if (!GuiItemUtils.isEmpty(targetItem) && GuiItemUtils.canStackWith(targetItem, remaining)) {
@@ -282,7 +254,6 @@ public final class ClickActionHandler {
             }
         }
 
-        // 第二阶段：寻找空槽位
         for (int i = startSlot; i < endSlot && !GuiItemUtils.isEmpty(remaining); i++) {
             if (GuiItemUtils.isEmpty(targetInventory.getItem(i))) {
                 targetInventory.setItem(i, remaining.clone());
@@ -296,14 +267,14 @@ public final class ClickActionHandler {
     }
 
     /**
-     * 处理数字键（1-9）快捷栏交换
+     * Handles number key (1-9) hotbar swap.
      * <p>
-     * 交换点击的槽位与快捷栏对应槽位的物品
-     * 
-     * @param slotItem        槽位物品
-     * @param hotbarSlot      快捷栏槽位（0-8）
-     * @param playerInventory 玩家背包
-     * @return 数字键结果
+     * Swaps the clicked slot with the corresponding hotbar slot item.
+     *
+     * @param slotItem the item in the slot
+     * @param hotbarSlot the hotbar slot (0-8)
+     * @param playerInventory the player's inventory
+     * @return the number key result
      */
     @NotNull
     public static HotbarSwapResult handleHotbarSwap(
@@ -323,15 +294,15 @@ public final class ClickActionHandler {
     }
 
     /**
-     * 处理双击收集相似物品
+     * Handles double-click to collect similar items.
      * <p>
-     * 从所有可访问的背包中收集与光标相似的物品到光标
-     * 
-     * @param cursorItem      光标物品（作为模板）
-     * @param sourceInventory 源背包（GUI 或玩家背包）
-     * @param startSlot       起始槽位
-     * @param endSlot         结束槽位（不包含）
-     * @return 双击结果
+     * Collects similar items from all accessible inventories to the cursor.
+     *
+     * @param cursorItem the cursor item (as template)
+     * @param sourceInventory the source inventory (GUI or player inventory)
+     * @param startSlot the start slot (inclusive)
+     * @param endSlot the end slot (exclusive)
+     * @return the double-click result
      */
     @NotNull
     public static DoubleClickResult handleDoubleClick(
@@ -348,7 +319,6 @@ public final class ClickActionHandler {
         int maxStack = collected.getMaxStackSize();
         boolean changed = false;
 
-        // 遍历背包收集相似物品
         for (int i = startSlot; i < endSlot && collected.getAmount() < maxStack; i++) {
             ItemStack sourceItem = sourceInventory.getItem(i);
             if (!GuiItemUtils.isEmpty(sourceItem) && GuiItemUtils.canStackWith(sourceItem, collected)) {
@@ -373,13 +343,13 @@ public final class ClickActionHandler {
     }
 
     /**
-     * 处理中键点击（创造模式克隆）
+     * Handles middle-click (creative mode clone).
      * <p>
-     * 仅在创造模式下，克隆槽位物品到光标（满堆叠）
-     * 
-     * @param player   玩家
-     * @param slotItem 槽位物品
-     * @return 中键点击结果
+     * Only in creative mode, clones the slot item to cursor (full stack).
+     *
+     * @param player the player
+     * @param slotItem the item in the slot
+     * @return the middle-click result
      */
     @NotNull
     public static MiddleClickResult handleMiddleClick(
@@ -396,13 +366,13 @@ public final class ClickActionHandler {
     }
 
     /**
-     * 处理副手交换（F键）
+     * Handles offhand swap (F key).
      * <p>
-     * 交换槽位物品与玩家副手物品
-     * 
-     * @param slotItem        槽位物品
-     * @param playerInventory 玩家背包
-     * @return 副手交换结果
+     * Swaps the slot item with the player's offhand item.
+     *
+     * @param slotItem the item in the slot
+     * @param playerInventory the player's inventory
+     * @return the offhand swap result
      */
     @NotNull
     public static OffhandSwapResult handleOffhandSwap(
@@ -417,14 +387,14 @@ public final class ClickActionHandler {
     }
 
     /**
-     * 处理丢弃物品（Q键或Ctrl+Q）
+     * Handles item drop (Q key or Ctrl+Q).
      * <p>
-     * Q键丢弃1个，Ctrl+Q丢弃全部
-     * 
-     * @param slotItem   槽位物品
-     * @param dropAll    是否丢弃全部
-     * @param player     玩家
-     * @return 丢弃结果
+     * Q key drops 1 item, Ctrl+Q drops all.
+     *
+     * @param slotItem the item in the slot
+     * @param dropAll whether to drop all items
+     * @param player the player
+     * @return the drop result
      */
     @NotNull
     public static DropResult handleDrop(
@@ -440,7 +410,6 @@ public final class ClickActionHandler {
         GuiItemUtils.RemoveResult result = GuiItemUtils.removeItem(slotItem, amount);
 
         if (result.wasRemoved()) {
-            // 在玩家位置丢弃物品
             player.getWorld().dropItemNaturally(player.getLocation(), result.removed());
             return new DropResult(result.newSlotItem(), true);
         }
@@ -448,23 +417,35 @@ public final class ClickActionHandler {
         return new DropResult(slotItem, false);
     }
 
-    // ==================== 结果类 ====================
+    // ==================== Result Classes ====================
 
     /**
-     * 点击结果（左键/右键）
+     * Click result (left-click/right-click).
+     *
+     * @param newSlotItem the new item in the slot
+     * @param newCursorItem the new item on the cursor
+     * @param changed whether the interaction caused a change
      */
     public record ClickResult(
             @Nullable ItemStack newSlotItem,
             @Nullable ItemStack newCursorItem,
             boolean changed
     ) {
+        /**
+         * Creates a no-change result (nothing happened).
+         *
+         * @return a ClickResult with no changes
+         */
         public static ClickResult noChange() {
             return new ClickResult(null, null, false);
         }
     }
 
     /**
-     * Shift点击结果
+     * Shift-click result.
+     *
+     * @param remaining the remaining item after transfer
+     * @param moved whether any items were moved
      */
     public record ShiftClickResult(
             @Nullable ItemStack remaining,
@@ -473,7 +454,10 @@ public final class ClickActionHandler {
     }
 
     /**
-     * 数字键结果
+     * Number key result.
+     *
+     * @param newSlotItem the new item in the clicked slot
+     * @param swapped whether a swap occurred
      */
     public record HotbarSwapResult(
             @Nullable ItemStack newSlotItem,
@@ -482,7 +466,10 @@ public final class ClickActionHandler {
     }
 
     /**
-     * 双击结果
+     * Double-click result.
+     *
+     * @param newCursorItem the new cursor item after collection
+     * @param collected whether any items were collected
      */
     public record DoubleClickResult(
             @Nullable ItemStack newCursorItem,
@@ -491,7 +478,10 @@ public final class ClickActionHandler {
     }
 
     /**
-     * 中键点击结果
+     * Middle-click result.
+     *
+     * @param newCursorItem the cloned item (full stack)
+     * @param cloned whether the item was cloned
      */
     public record MiddleClickResult(
             @Nullable ItemStack newCursorItem,
@@ -500,7 +490,10 @@ public final class ClickActionHandler {
     }
 
     /**
-     * 副手交换结果
+     * Offhand swap result.
+     *
+     * @param newSlotItem the new item in the slot
+     * @param swapped whether a swap occurred
      */
     public record OffhandSwapResult(
             @Nullable ItemStack newSlotItem,
@@ -509,7 +502,10 @@ public final class ClickActionHandler {
     }
 
     /**
-     * 丢弃结果
+     * Drop result.
+     *
+     * @param newSlotItem the remaining item in the slot
+     * @param dropped whether any items were dropped
      */
     public record DropResult(
             @Nullable ItemStack newSlotItem,

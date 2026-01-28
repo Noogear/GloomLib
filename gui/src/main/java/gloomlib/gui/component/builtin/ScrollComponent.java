@@ -40,7 +40,6 @@ public class ScrollComponent<T> implements GloomComponent {
         });
     }
 
-    // Static data constructor
     public ScrollComponent(List<T> staticData,
                            int viewportSize,
                            Function<T, ItemStack> renderer,

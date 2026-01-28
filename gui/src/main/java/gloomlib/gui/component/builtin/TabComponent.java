@@ -50,13 +50,11 @@ public class TabComponent implements GloomComponent {
 
     @Override
     public boolean onTick() {
-        // 性能优化：只 tick 激活的标签
         return getActiveComponent().onTick();
     }
 
     @Override
     public int getTickRate() {
-        // 性能优化：只返回激活标签的 tickRate
         GloomComponent active = getActiveComponent();
         return active.getTickRate();
     }

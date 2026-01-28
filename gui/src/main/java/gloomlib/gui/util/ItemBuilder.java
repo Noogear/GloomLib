@@ -24,6 +24,9 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+/**
+ * Fluent builder for constructing custom Bukkit ItemStack instances.
+ */
 public class ItemBuilder {
 
     private final ItemStack itemStack;
@@ -34,6 +37,12 @@ public class ItemBuilder {
         this.meta = itemStack.getItemMeta();
     }
 
+    /**
+     * Creates a new builder for the specified material.
+     *
+     * @param material the material
+     * @return a new builder instance
+     */
     public static ItemBuilder from(@NotNull Material material) {
         return new ItemBuilder(new ItemStack(material));
     }

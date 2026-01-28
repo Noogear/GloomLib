@@ -9,26 +9,35 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+/**
+ * Component that displays an animated sequence of item frames.
+ * <p>
+ * Cycles through frames at a specified tick rate, optionally repeating.
+ * Frames are pre-cached for performance.
+ */
 public class AnimatedComponent implements GloomComponent {
 
     private final List<ItemStack> frames;
     private final int tickRate;
     private final boolean repeat;
     private final Consumer<InteractionContext> clickHandler;
-
-    // 性能优化：预渲染帧缓存
     private final ItemStack[] frameCache;
-
     private int currentFrame = 0;
     private boolean finished = false;
 
+    /**
+     * Constructs an animated component.
+     *
+     * @param frames the animation frames
+     * @param tickRate the ticks between frame changes
+     * @param repeat whether to loop the animation
+     * @param clickHandler the click handler (nullable)
+     */
     public AnimatedComponent(List<ItemStack> frames, int tickRate, boolean repeat, Consumer<InteractionContext> clickHandler) {
         this.frames = new ArrayList<>(frames);
         this.tickRate = tickRate;
         this.repeat = repeat;
         this.clickHandler = clickHandler;
-        
-        // 预克隆所有帧到缓存
         this.frameCache = frames.stream()
                 .map(ItemStack::clone)
                 .toArray(ItemStack[]::new);
@@ -39,7 +48,6 @@ public class AnimatedComponent implements GloomComponent {
         if (frameCache.length == 0) {
             return new ItemStack(org.bukkit.Material.AIR);
         }
-        // 性能优化：返回预渲染的缓存帧，无需克隆
         return frameCache[currentFrame % frameCache.length];
     }
 
@@ -52,7 +60,9 @@ public class AnimatedComponent implements GloomComponent {
 
     @Override
     public boolean onTick() {
-        if (finished && !repeat) return false;
+        if (finished && !repeat) {
+            return false;
+        }
 
         currentFrame++;
 

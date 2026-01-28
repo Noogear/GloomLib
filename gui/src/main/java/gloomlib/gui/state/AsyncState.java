@@ -8,6 +8,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 
+/**
+ * Reactive state with async data loading support using virtual threads (Java 21+).
+ * <p>
+ * Displays a loading value while fetching data, then updates to the result or error value.
+ * Updates are automatically synchronized to the main thread for inventory operations.
+ *
+ * @param <T> the state value type
+ */
 public class AsyncState<T> extends ReactiveState<T> {
 
     private final T loadingValue;
@@ -22,6 +30,16 @@ public class AsyncState<T> extends ReactiveState<T> {
         this.player = player;
     }
 
+    /**
+     * Creates an async state from a CompletableFuture supplier.
+     *
+     * @param loader the future supplier
+     * @param loadingValue the value to display while loading
+     * @param errorValue the fallback value on error
+     * @param player the player for scheduler context (nullable)
+     * @param <T> the state type
+     * @return a new async state instance
+     */
     public static <T> AsyncState<T> ofFuture(Supplier<CompletableFuture<T>> loader,
                                              T loadingValue,
                                              T errorValue,
@@ -31,6 +49,16 @@ public class AsyncState<T> extends ReactiveState<T> {
         return state;
     }
 
+    /**
+     * Creates an async state from a synchronous loader (executed async).
+     *
+     * @param loader the data loader
+     * @param loadingValue the value to display while loading
+     * @param errorValue the fallback value on error
+     * @param player the player for scheduler context (nullable)
+     * @param <T> the state type
+     * @return a new async state instance
+     */
     public static <T> AsyncState<T> of(Supplier<T> loader,
                                        T loadingValue,
                                        T errorValue,
@@ -39,6 +67,11 @@ public class AsyncState<T> extends ReactiveState<T> {
                 loadingValue, errorValue, player);
     }
 
+    /**
+     * Reloads the state by executing the loader again.
+     *
+     * @param loader the future supplier to reload from
+     */
     public void reload(Supplier<CompletableFuture<T>> loader) {
         setLoading(true);
 
@@ -54,7 +87,7 @@ public class AsyncState<T> extends ReactiveState<T> {
         } catch (UnsupportedOperationException e) {
             GloomGuiManager.getPlugin().getLogger().log(
                     Level.WARNING,
-                    "虚拟线程不可用，使用传统异步方式。建议升级到 Java 21+",
+                    "Virtual threads unavailable, using traditional async approach. Consider upgrading to Java 21+",
                     e
             );
             fallbackAsyncLoad(loader);
@@ -87,7 +120,7 @@ public class AsyncState<T> extends ReactiveState<T> {
         if (ex != null) {
             GloomGuiManager.getPlugin().getLogger().log(
                     Level.WARNING,
-                    "异步加载数据时发生错误",
+                    "Error occurred while loading data asynchronously",
                     ex
             );
             super.set(errorValue);
@@ -106,6 +139,11 @@ public class AsyncState<T> extends ReactiveState<T> {
         });
     }
 
+    /**
+     * Checks if the state is currently loading.
+     *
+     * @return {@code true} if loading, {@code false} otherwise
+     */
     public boolean isLoading() {
         return isLoading;
     }
@@ -117,10 +155,20 @@ public class AsyncState<T> extends ReactiveState<T> {
         }
     }
 
+    /**
+     * Gets the loading placeholder value.
+     *
+     * @return the loading value
+     */
     public T getLoadingValue() {
         return loadingValue;
     }
 
+    /**
+     * Gets the error fallback value.
+     *
+     * @return the error value
+     */
     public T getErrorValue() {
         return errorValue;
     }

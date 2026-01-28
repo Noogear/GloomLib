@@ -29,6 +29,11 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
+/**
+ * Core GUI implementation with component management and reactive state.
+ * <p>
+ * Optimized with array-based slot lookups and batch update support.
+ */
 public final class GloomGui implements Gui.Normal {
 
     private final Player player;
@@ -40,7 +45,6 @@ public final class GloomGui implements Gui.Normal {
     private final Map<Integer, GloomComponent> components = new HashMap<>();
     private final Map<Integer, Integer> componentIndices = new HashMap<>();
 
-    // 性能优化：数组索引替代 Map 查找
     private GloomComponent[] slotToComponent;
     private int[] slotToComponentIndex;
 
@@ -50,7 +54,6 @@ public final class GloomGui implements Gui.Normal {
     private final MutableProperty<Boolean> frozen = MutableProperty.of(false);
     private final MutableProperty<ItemStack> background = MutableProperty.of(null);
 
-    // 性能优化：Shift+点击优先级策略
     private SlotPriority slotPriority = SlotPriority.normal();
 
     private final java.util.BitSet dirtySlots;
@@ -58,6 +61,19 @@ public final class GloomGui implements Gui.Normal {
     private Inventory inventory;
     private boolean batchUpdateMode = false;
 
+    /**
+     * Constructs a new GloomGui.
+     *
+     * @param player the player for scheduler context
+     * @param title the GUI title
+     * @param rows the number of rows (for chest types)
+     * @param type the inventory type
+     * @param configuration the GUI configuration
+     * @param closeAction the close event handler (nullable)
+     * @param structure the structure pattern (nullable)
+     * @param charComponents the character-to-component mapping
+     * @param slotComponents the slot-to-component mapping
+     */
     public GloomGui(Player player,
                     Component title,
                     int rows,

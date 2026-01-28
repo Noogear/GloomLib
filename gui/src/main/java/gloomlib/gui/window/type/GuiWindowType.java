@@ -119,24 +119,24 @@ public enum GuiWindowType {
     @NotNull
     public String getDisplayName() {
         return switch (this) {
-            case CHEST -> "箱子";
-            case HOPPER -> "漏斗";
-            case DISPENSER -> "发射器";
-            case SHULKER_BOX -> "潜影盒";
-            case FURNACE -> "熔炉";
-            case BLAST_FURNACE -> "高炉";
-            case SMOKER -> "烟熏炉";
-            case BREWING_STAND -> "酿造台";
-            case ENCHANTING -> "附魔台";
-            case ANVIL -> "铁砧";
-            case SMITHING -> "锻造台";
-            case BEACON -> "信标";
-            case STONECUTTER -> "切石机";
-            case LOOM -> "织布机";
-            case CARTOGRAPHY -> "制图台";
-            case GRINDSTONE -> "磨石";
-            case LECTERN -> "讲台";
-            case MERCHANT -> "交易";
+            case CHEST -> "Chest";
+            case HOPPER -> "Hopper";
+            case DISPENSER -> "Dispenser";
+            case SHULKER_BOX -> "Shulker Box";
+            case FURNACE -> "Furnace";
+            case BLAST_FURNACE -> "Blast Furnace";
+            case SMOKER -> "Smoker";
+            case BREWING_STAND -> "Brewing Stand";
+            case ENCHANTING -> "Enchanting Table";
+            case ANVIL -> "Anvil";
+            case SMITHING -> "Smithing Table";
+            case BEACON -> "Beacon";
+            case STONECUTTER -> "Stonecutter";
+            case LOOM -> "Loom";
+            case CARTOGRAPHY -> "Cartography Table";
+            case GRINDSTONE -> "Grindstone";
+            case LECTERN -> "Lectern";
+            case MERCHANT -> "Merchant";
         };
     }
 }

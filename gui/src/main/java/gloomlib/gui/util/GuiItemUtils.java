@@ -7,12 +7,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * GUI 物品操作工具类
- * <p>
- * 提供物品堆叠、添加、移除等常用操作，用于交互处理器复用
- * 
- * @author GloomLib
- * @since 2.0
+ * GUI item operation utility class.
+ * Provides common operations like stacking, adding, and removing items for interaction handler reuse.
  */
 public final class GuiItemUtils {
 
@@ -20,14 +16,21 @@ public final class GuiItemUtils {
     }
 
     /**
-     * 判断物品是否为空
+     * Checks if an item is empty.
+     *
+     * @param item the item to check
+     * @return {@code true} if the item is null, AIR, or has amount &lt;= 0
      */
     public static boolean isEmpty(@Nullable ItemStack item) {
         return item == null || item.getType() == Material.AIR || item.getAmount() <= 0;
     }
 
     /**
-     * 判断两个物品是否可以堆叠
+     * Checks if two items can stack together.
+     *
+     * @param a the first item
+     * @param b the second item
+     * @return true if the items can stack
      */
     public static boolean canStackWith(@Nullable ItemStack a, @Nullable ItemStack b) {
         if (isEmpty(a) || isEmpty(b)) {
@@ -37,14 +40,19 @@ public final class GuiItemUtils {
     }
 
     /**
-     * 获取物品的最大堆叠数量
+     * Gets the maximum stack size of an item.
+     *
+     * @param item the item
+     * @return the maximum stack size
      */
     public static int getMaxStackSize(@NotNull ItemStack item) {
         return item.getMaxStackSize();
     }
 
     /**
-     * 创建空物品（用于清空槽位）
+     * Creates an empty item (for clearing slots).
+     *
+     * @return an empty ItemStack (AIR)
      */
     @NotNull
     public static ItemStack createEmpty() {
@@ -52,7 +60,10 @@ public final class GuiItemUtils {
     }
 
     /**
-     * 安全克隆物品（处理 null）
+     * Safely clones an item (handles null).
+     *
+     * @param item the item to clone
+     * @return the cloned item, or null if the item is empty
      */
     @Nullable
     public static ItemStack cloneSafe(@Nullable ItemStack item) {
@@ -60,11 +71,11 @@ public final class GuiItemUtils {
     }
 
     /**
-     * 尝试向槽位添加物品
-     * 
-     * @param slotItem 槽位当前物品
-     * @param toAdd    要添加的物品
-     * @return 添加结果 [新的槽位物品, 剩余物品]
+     * Attempts to add an item to a slot.
+     *
+     * @param slotItem the current item in the slot
+     * @param toAdd the item to add
+     * @return the add result [new slot item, remaining item]
      */
     @NotNull
     public static AddResult addItem(@Nullable ItemStack slotItem, @NotNull ItemStack toAdd) {
@@ -72,12 +83,10 @@ public final class GuiItemUtils {
             return new AddResult(slotItem, null);
         }
 
-        // 槽位为空，直接放置
         if (isEmpty(slotItem)) {
             return new AddResult(toAdd.clone(), null);
         }
 
-        // 物品不可堆叠，无法添加
         if (!canStackWith(slotItem, toAdd)) {
             return new AddResult(slotItem, toAdd);
         }
@@ -88,12 +97,10 @@ public final class GuiItemUtils {
         int totalAmount = currentAmount + toAddAmount;
 
         if (totalAmount <= maxStack) {
-            // 可以完全堆叠
             ItemStack newSlot = slotItem.clone();
             newSlot.setAmount(totalAmount);
             return new AddResult(newSlot, null);
         } else {
-            // 部分堆叠
             ItemStack newSlot = slotItem.clone();
             newSlot.setAmount(maxStack);
             ItemStack remaining = toAdd.clone();
@@ -103,11 +110,11 @@ public final class GuiItemUtils {
     }
 
     /**
-     * 从槽位移除物品
-     * 
-     * @param slotItem 槽位当前物品
-     * @param amount   要移除的数量
-     * @return 移除结果 [新的槽位物品, 移除的物品]
+     * Removes items from a slot.
+     *
+     * @param slotItem the current item in the slot
+     * @param amount the amount to remove
+     * @return the remove result [new slot item, removed item]
      */
     @NotNull
     public static RemoveResult removeItem(@Nullable ItemStack slotItem, int amount) {
@@ -118,11 +125,9 @@ public final class GuiItemUtils {
         int currentAmount = slotItem.getAmount();
 
         if (amount >= currentAmount) {
-            // 全部移除
             ItemStack removed = slotItem.clone();
             return new RemoveResult(null, removed);
         } else {
-            // 部分移除
             ItemStack newSlot = slotItem.clone();
             newSlot.setAmount(currentAmount - amount);
             ItemStack removed = slotItem.clone();
@@ -132,7 +137,10 @@ public final class GuiItemUtils {
     }
 
     /**
-     * 拾取一半物品（向上取整）
+     * Picks up half of the items (rounds up).
+     *
+     * @param slotItem the current item in the slot
+     * @return the remove result with half picked up
      */
     @NotNull
     public static RemoveResult pickupHalf(@Nullable ItemStack slotItem) {
@@ -141,13 +149,17 @@ public final class GuiItemUtils {
         }
 
         int amount = slotItem.getAmount();
-        int half = (amount + 1) / 2; // 向上取整
+        int half = (amount + 1) / 2;
 
         return removeItem(slotItem, half);
     }
 
     /**
-     * 交换两个物品
+     * Swaps two items.
+     *
+     * @param a the first item
+     * @param b the second item
+     * @return the swap result [b, a]
      */
     @NotNull
     public static SwapResult swap(@Nullable ItemStack a, @Nullable ItemStack b) {
@@ -155,13 +167,13 @@ public final class GuiItemUtils {
     }
 
     /**
-     * 尝试在背包中找到第一个可以堆叠的槽位
-     * 
-     * @param inventory 背包
-     * @param item      物品
-     * @param start     起始槽位
-     * @param end       结束槽位（不包含）
-     * @return 槽位索引，未找到返回 -1
+     * Finds the first stackable slot in an inventory.
+     *
+     * @param inventory the inventory
+     * @param item the item to stack
+     * @param start the start slot (inclusive)
+     * @param end the end slot (exclusive)
+     * @return the slot index, or -1 if not found
      */
     public static int findFirstStackableSlot(@NotNull Inventory inventory, @NotNull ItemStack item, int start, int end) {
         if (isEmpty(item)) {
@@ -179,12 +191,12 @@ public final class GuiItemUtils {
     }
 
     /**
-     * 尝试在背包中找到第一个空槽位
-     * 
-     * @param inventory 背包
-     * @param start     起始槽位
-     * @param end       结束槽位（不包含）
-     * @return 槽位索引，未找到返回 -1
+     * Finds the first empty slot in an inventory.
+     *
+     * @param inventory the inventory
+     * @param start the start slot (inclusive)
+     * @param end the end slot (exclusive)
+     * @return the slot index, or -1 if not found
      */
     public static int findFirstEmptySlot(@NotNull Inventory inventory, int start, int end) {
         for (int i = start; i < end; i++) {
@@ -197,7 +209,10 @@ public final class GuiItemUtils {
     }
 
     /**
-     * 添加结果
+     * Add result.
+     *
+     * @param newSlotItem the new item in the slot
+     * @param remaining the remaining item that could not be added
      */
     public record AddResult(@Nullable ItemStack newSlotItem, @Nullable ItemStack remaining) {
         public boolean hasRemaining() {
@@ -206,7 +221,10 @@ public final class GuiItemUtils {
     }
 
     /**
-     * 移除结果
+     * Remove result.
+     *
+     * @param newSlotItem the new item in the slot after removal
+     * @param removed the removed item
      */
     public record RemoveResult(@Nullable ItemStack newSlotItem, @Nullable ItemStack removed) {
         public boolean wasRemoved() {
@@ -215,7 +233,10 @@ public final class GuiItemUtils {
     }
 
     /**
-     * 交换结果
+     * Swap result.
+     *
+     * @param newA the new value for a (was b)
+     * @param newB the new value for b (was a)
      */
     public record SwapResult(@Nullable ItemStack newA, @Nullable ItemStack newB) {
     }

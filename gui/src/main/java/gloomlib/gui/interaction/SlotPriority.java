@@ -5,63 +5,59 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 槽位优先级接口 - 用于 Shift+点击时控制物品优先放置的位置
- * <p>
- * 参考 InvUI 的优先级系统，允许组件定义接受物品的优先级。
- * 优先级越高，Shift+点击时越优先尝试放置到该槽位。
- * 
- * @author GloomLib
- * @since 2.0
+ * Slot priority interface for controlling where items are placed during Shift+click.
+ * References InvUI's priority system, allowing components to define item acceptance priority.
+ * Higher priority slots are tried first during Shift+click operations.
  */
 public interface SlotPriority {
 
     /**
-     * 最低优先级 - 不接受物品
+     * Lowest priority - does not accept items.
      */
     int PRIORITY_NONE = -1;
 
     /**
-     * 低优先级 - 最后考虑
+     * Low priority - considered last.
      */
     int PRIORITY_LOW = 0;
 
     /**
-     * 普通优先级 - 默认
+     * Normal priority - default.
      */
     int PRIORITY_NORMAL = 50;
 
     /**
-     * 高优先级 - 优先考虑
+     * High priority - preferred slots.
      */
     int PRIORITY_HIGH = 100;
 
     /**
-     * 最高优先级 - 最优先考虑
+     * Highest priority - most preferred slots.
      */
     int PRIORITY_HIGHEST = 200;
 
     /**
-     * 获取槽位接受指定物品的优先级
+     * Gets the priority of accepting the specified item in a slot.
      * 
-     * @param slot 槽位索引
-     * @param item 要放置的物品
-     * @return 优先级值，PRIORITY_NONE 表示不接受
+     * @param slot slot index
+     * @param item item to place
+     * @return priority value; PRIORITY_NONE means not accepting
      */
     int getPriority(int slot, @Nullable ItemStack item);
 
     /**
-     * 判断槽位是否接受指定物品
+     * Checks if the slot accepts the specified item.
      * 
-     * @param slot 槽位索引
-     * @param item 要放置的物品
-     * @return 是否接受
+     * @param slot slot index
+     * @param item item to place
+     * @return whether the item is accepted
      */
     default boolean acceptsItem(int slot, @Nullable ItemStack item) {
         return getPriority(slot, item) > PRIORITY_NONE;
     }
 
     /**
-     * 创建默认优先级策略（所有槽位普通优先级）
+     * Creates the default priority strategy (all slots at normal priority).
      */
     @NotNull
     static SlotPriority normal() {
@@ -69,7 +65,7 @@ public interface SlotPriority {
     }
 
     /**
-     * 创建拒绝所有物品的策略
+     * Creates a strategy that rejects all items.
      */
     @NotNull
     static SlotPriority none() {
@@ -77,7 +73,7 @@ public interface SlotPriority {
     }
 
     /**
-     * 创建高优先级策略
+     * Creates a high priority strategy.
      */
     @NotNull
     static SlotPriority high() {

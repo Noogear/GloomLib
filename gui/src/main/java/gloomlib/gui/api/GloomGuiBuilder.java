@@ -1,7 +1,9 @@
 package gloomlib.gui.api;
 
+import gloomlib.gui.GloomGuiManager;
 import gloomlib.gui.component.GloomComponent;
 import gloomlib.gui.config.GuiConfiguration;
+import gloomlib.gui.navigation.NavigationManager;
 import gloomlib.gui.template.GuiStructure;
 import gloomlib.gui.window.AbstractWindow;
 import net.kyori.adventure.text.Component;
@@ -14,6 +16,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 
+/**
+ * Fluent builder for creating {@link GloomGui} instances.
+ * <p>
+ * Supports structure-based layouts, component mapping, and navigation features.
+ */
 public class GloomGuiBuilder {
 
     private final Map<Character, GloomComponent> charComponents = new HashMap<>();
@@ -25,6 +32,7 @@ public class GloomGuiBuilder {
     private Consumer<InventoryCloseEvent> closeAction;
     private Boolean manualAnimationEnable = null;
     private int manualTickRate = -1;
+    private boolean navigationEnabled = false; // New: Navigation tracking
 
     private GloomGuiBuilder() {
     }
@@ -33,6 +41,11 @@ public class GloomGuiBuilder {
         return new GloomGuiBuilder();
     }
 
+    /**
+     * Creates a new chest-type GUI builder (default size 3 rows).
+     *
+     * @return a new builder instance
+     */
     public static GloomGuiBuilder chest() {
         return create().type(InventoryType.CHEST);
     }
@@ -76,6 +89,12 @@ public class GloomGuiBuilder {
         return this;
     }
 
+    /**
+     * Applies a predefined structure template to this builder.
+     *
+     * @param guiStructure the structure template
+     * @return this builder for chaining
+     */
     public GloomGuiBuilder applyStructure(GuiStructure guiStructure) {
         guiStructure.apply(this);
         return this;
@@ -114,13 +133,95 @@ public class GloomGuiBuilder {
         return this;
     }
 
+    /**
+     * Enables navigation tracking for this GUI.
+     * <p>
+     * When enabled, this window will be pushed to the player's navigation stack when opened,
+     * allowing them to use back buttons to return to previous windows.
+     * <p>
+     * Reference: Inspired by InvUI's parent window system, adapted for GloomLib's builder pattern.
+     * 
+     * @param enabled true to enable navigation tracking
+     * @return this builder for chaining
+     * @see <a href="https://github.com/NichtStudioCode/InvUI">InvUI Navigation Pattern</a>
+     * @since 2.0
+     */
+    public GloomGuiBuilder navigationEnabled(boolean enabled) {
+        this.navigationEnabled = enabled;
+        return this;
+    }
+
+    /**
+     * Enables navigation tracking (shorthand for navigationEnabled(true)).
+     * <p>
+     * Convenience method for the most common case.
+     * 
+     * @return this builder for chaining
+     * @since 2.0
+     */
+    public GloomGuiBuilder withNavigation() {
+        return navigationEnabled(true);
+    }
+
+    /**
+     * Enables navigation and automatically adds back button behavior on close.
+     * <p>
+     * When the player closes this GUI (by pressing ESC), it will automatically
+     * navigate back to the previous window if available.
+     * <p>
+     * This is the most convenient way to enable navigation with automatic back-on-close behavior.
+     * 
+     * @return this builder for chaining
+     * @since 2.0
+     */
+    public GloomGuiBuilder withAutoBack() {
+        this.navigationEnabled = true;
+        
+        // Chain the existing close action if any
+        Consumer<InventoryCloseEvent> existingAction = this.closeAction;
+        
+        this.closeAction = event -> {
+            // Execute existing action first
+            if (existingAction != null) {
+                existingAction.accept(event);
+            }
+            
+            // Then handle auto-back
+            Player player = (Player) event.getPlayer();
+            player.getScheduler().runDelayed(
+                GloomGuiManager.getPlugin(),
+                task -> {
+                    if (NavigationManager.getInstance().hasHistory(player)) {
+                        NavigationManager.getInstance().back(player);
+                    }
+                },
+                null,
+                2L  // Delay 2 ticks to avoid conflicts
+            );
+        };
+        
+        return this;
+    }
+
     public void open(Player player) {
         GloomGui gui = build(player);
         int size = (type == InventoryType.CHEST) ? rows * 9 : type.getDefaultSize();
         AbstractWindow window = new AbstractWindow(player, title, gui, type, size);
+        
+        // Push to navigation stack if enabled
+        if (navigationEnabled) {
+            NavigationManager.getInstance().push(player, window);
+        }
+        
         window.open();
     }
 
+    /**
+     * Builds the GUI for a specific player.
+     *
+     * @param player the player to build for
+     * @return a new GloomGui instance
+     */
     public GloomGui build(Player player) {
         if (title == null) {
             title = Component.text("GloomGui");

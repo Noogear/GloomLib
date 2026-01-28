@@ -6,13 +6,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Bundle 物品工具类 (MC 1.21+)
- * <p>
- * 处理 Bundle 容器的插入和取出逻辑。
- * 由于 Paper API 可能在不同版本有差异，使用反射和版本检测。
- * 
- * @author GloomLib
- * @since 2.0
+ * Bundle item utility class (MC 1.21+).
+ * Handles Bundle container insertion and extraction logic.
+ * Uses reflection and version detection since Paper API may vary across versions.
  */
 public final class BundleUtils {
 
@@ -23,12 +19,10 @@ public final class BundleUtils {
     static {
         boolean supported = false;
         try {
-            // 尝试加载 MC 1.21+ 的 Bundle 相关类
             bundleContentsClass = Class.forName("org.bukkit.inventory.meta.BundleMeta");
             dataComponentTypesClass = Class.forName("io.papermc.paper.datacomponent.DataComponentTypes");
             supported = true;
         } catch (ClassNotFoundException e) {
-            // MC 1.21 之前的版本不支持
         }
         BUNDLE_SUPPORTED = supported;
     }
@@ -37,14 +31,19 @@ public final class BundleUtils {
     }
 
     /**
-     * 判断当前服务器是否支持 Bundle
+     * Checks if the current server supports Bundle.
+     *
+     * @return true if Bundle is supported
      */
     public static boolean isBundleSupported() {
         return BUNDLE_SUPPORTED;
     }
 
     /**
-     * 判断物品是否为 Bundle
+     * Checks if an item is a Bundle.
+     *
+     * @param item the item to check
+     * @return true if the item is a Bundle
      */
     public static boolean isBundle(@Nullable ItemStack item) {
         if (!BUNDLE_SUPPORTED || GuiItemUtils.isEmpty(item)) {
@@ -54,11 +53,11 @@ public final class BundleUtils {
     }
 
     /**
-     * 尝试向 Bundle 中插入物品
-     * 
-     * @param bundle     Bundle 物品
-     * @param toInsert   要插入的物品
-     * @return 插入结果 [新的 Bundle, 剩余物品]
+     * Attempts to insert an item into a Bundle.
+     *
+     * @param bundle the Bundle item
+     * @param toInsert the item to insert
+     * @return the insert result [new Bundle, remaining item]
      */
     @NotNull
     public static InsertResult insertIntoBundle(@NotNull ItemStack bundle, @NotNull ItemStack toInsert) {
@@ -67,21 +66,17 @@ public final class BundleUtils {
         }
 
         try {
-            // 使用 Paper API 的 Bundle 操作（MC 1.21+）
             if (bundle.getItemMeta() instanceof org.bukkit.inventory.meta.BundleMeta bundleMeta) {
                 java.util.List<ItemStack> contents = bundleMeta.getItems();
                 
-                // 尝试添加物品
                 ItemStack cloned = toInsert.clone();
                 bundleMeta.addItem(cloned);
                 
-                // 检查是否成功添加
                 java.util.List<ItemStack> newContents = bundleMeta.getItems();
                 
                 ItemStack newBundle = bundle.clone();
                 newBundle.setItemMeta(bundleMeta);
                 
-                // 计算剩余物品
                 int inserted = getTotalAmount(newContents) - getTotalAmount(contents);
                 ItemStack remaining = null;
                 if (inserted < toInsert.getAmount()) {
@@ -92,17 +87,16 @@ public final class BundleUtils {
                 return new InsertResult(newBundle, remaining);
             }
         } catch (Exception e) {
-            // 版本不兼容或其他错误，返回原样
         }
 
         return new InsertResult(bundle, toInsert);
     }
 
     /**
-     * 从 Bundle 中取出第一个物品
-     * 
-     * @param bundle Bundle 物品
-     * @return 取出结果 [新的 Bundle, 取出的物品]
+     * Extracts the first item from a Bundle.
+     *
+     * @param bundle the Bundle item
+     * @return the extract result [new Bundle, extracted item]
      */
     @NotNull
     public static ExtractResult extractFromBundle(@NotNull ItemStack bundle) {
@@ -118,7 +112,6 @@ public final class BundleUtils {
                     return new ExtractResult(bundle, null);
                 }
                 
-                // 取出第一个物品
                 ItemStack extracted = contents.get(0).clone();
                 contents.remove(0);
                 
@@ -129,14 +122,16 @@ public final class BundleUtils {
                 return new ExtractResult(newBundle, extracted);
             }
         } catch (Exception e) {
-            // 版本不兼容或其他错误
         }
 
         return new ExtractResult(bundle, null);
     }
 
     /**
-     * 计算 Bundle 内物品的总数量
+     * Calculates the total amount of items in a Bundle.
+     *
+     * @param items the list of items
+     * @return the total amount
      */
     private static int getTotalAmount(java.util.List<ItemStack> items) {
         return items.stream()
@@ -145,18 +140,34 @@ public final class BundleUtils {
     }
 
     /**
-     * Bundle 插入结果
+     * Bundle insert result.
+     *
+     * @param newBundle the new Bundle after insertion
+     * @param remaining the remaining item that could not be inserted
      */
     public record InsertResult(@NotNull ItemStack newBundle, @Nullable ItemStack remaining) {
+        /**
+         * Checks if there are remaining items that could not be inserted.
+         *
+         * @return {@code true} if remaining items exist, {@code false} otherwise
+         */
         public boolean hasRemaining() {
             return !GuiItemUtils.isEmpty(remaining);
         }
     }
 
     /**
-     * Bundle 取出结果
+     * Bundle extract result.
+     *
+     * @param newBundle the new Bundle after extraction
+     * @param extracted the extracted item
      */
     public record ExtractResult(@NotNull ItemStack newBundle, @Nullable ItemStack extracted) {
+        /**
+         * Checks if an item was successfully extracted.
+         *
+         * @return {@code true} if extraction occurred, {@code false} otherwise
+         */
         public boolean wasExtracted() {
             return !GuiItemUtils.isEmpty(extracted);
         }

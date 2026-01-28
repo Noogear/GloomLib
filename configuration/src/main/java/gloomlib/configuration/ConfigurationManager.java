@@ -19,20 +19,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 /**
- * High-Performance Configuration Manager.
- * <p>
- * This class handles the lifecycle of configuration files, including loading, saving,
- * serialization, deserialization, and synchronization between Java objects and YAML files.
- * </p>
- * <p>
- * <b>Key Features:</b>
- * <ul>
- * <li><b>Smart Caching:</b> Minimizes I/O operations by checking file modification times.</li>
- * <li><b>Auto-Trim:</b> Automatically removes unused keys from the YAML file to keep it clean.</li>
- * <li><b>Type Safety:</b> Supports Java Records, Enums, UUIDs, and Bukkit Serialization.</li>
- * <li><b>Robustness:</b> Provides detailed error logging and auto-recovery for invalid values.</li>
- * </ul>
- * </p>
+ * High-performance configuration manager for loading, saving, and synchronizing
+ * configuration files between Java objects and YAML files.
  */
 public class ConfigurationManager {
 
@@ -54,6 +42,7 @@ public class ConfigurationManager {
      */
     public static void enableLogging(ComponentLogger componentLogger) {
         logger = componentLogger;
+        ConfigBackupManager.setLogger(componentLogger);
     }
 
     /**
@@ -83,6 +72,12 @@ public class ConfigurationManager {
     public static <T extends ConfigurationFile> T load(Class<T> clazz, File file) throws Exception {
         if (!file.exists()) {
             return saveDefault(clazz, file);
+        }
+
+        // Check for version field and handle upgrades
+        VersionCheckResult versionCheck = checkVersion(clazz, file);
+        if (versionCheck.needsUpgrade()) {
+            return handleVersionUpgrade(clazz, file, versionCheck);
         }
 
         YamlConfiguration yaml = loadYaml(file);
@@ -200,7 +195,7 @@ public class ConfigurationManager {
             Field field = meta.field();
             if (Map.class.isAssignableFrom(field.getType())) {
                 Type genericType = field.getGenericType();
-                Class<?> valueType = getGenericType(genericType, 1);
+                Class<?> valueType = TypeInference.extractGenericParameter(genericType, 1);
 
                 if (valueType.isAnnotationPresent(Template.class)) {
                     Template template = valueType.getAnnotation(Template.class);
@@ -432,8 +427,8 @@ public class ConfigurationManager {
         if (Map.class.isAssignableFrom(type)) {
             Map<Object, Object> map = new LinkedHashMap<>();
 
-            Class<?> kType = getGenericType(genericType, 0);
-            Class<?> vType = getGenericType(genericType, 1);
+            Class<?> kType = TypeInference.extractGenericParameter(genericType, 0);
+            Class<?> vType = TypeInference.extractGenericParameter(genericType, 1);
 
             if (raw instanceof ConfigurationSection cs) {
                 for (String k : cs.getKeys(false)) {
@@ -456,7 +451,7 @@ public class ConfigurationManager {
 
         if (List.class.isAssignableFrom(type) && raw instanceof List<?> list) {
             List<Object> newList = new ArrayList<>();
-            Class<?> iType = getGenericType(genericType, 0);
+            Class<?> iType = TypeInference.extractGenericParameter(genericType, 0);
             for (Object o : list) {
                 newList.add(deserialize(o, iType, iType));
             }
@@ -499,7 +494,8 @@ public class ConfigurationManager {
                 });
                 return Modifier.isStatic(m.getModifiers()) ? m.invoke(null, val) : m.invoke(createInstance(annotation.cls()), val);
             }
-            if (annotation.value() != Check.Validator.class) {
+            if (annotation.value() != Check.NoOpValidator.class) {
+                @SuppressWarnings("unchecked")
                 Check.Validator<Object> v = (Check.Validator<Object>) VALIDATOR_CACHE.computeIfAbsent(annotation.value(), k -> {
                     try {
                         Constructor<?> c = k.getDeclaredConstructor();
@@ -585,26 +581,13 @@ public class ConfigurationManager {
         return CAMEL_PATTERN.matcher(s).replaceAll("$1-$2").toLowerCase();
     }
 
+    /**
+     * @deprecated Use {@link TypeInference#extractGenericParameter(Type, int)} instead
+     */
+    @Deprecated(forRemoval = true)
+    @SuppressWarnings("unused")
     private static Class<?> getGenericType(Type t, int i) {
-        if (t instanceof ParameterizedType pt) {
-            Type[] args = pt.getActualTypeArguments();
-            if (i < args.length) {
-                Type arg = args[i];
-                if (arg instanceof Class<?> c) {
-                    return c;
-                }
-                if (arg instanceof ParameterizedType ipt) {
-                    return (Class<?>) ipt.getRawType();
-                }
-                if (arg instanceof WildcardType wt && wt.getUpperBounds().length > 0) {
-                    Type ub = wt.getUpperBounds()[0];
-                    if (ub instanceof Class<?> c) {
-                        return c;
-                    }
-                }
-            }
-        }
-        return Object.class;
+        return TypeInference.extractGenericParameter(t, i);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -708,6 +691,14 @@ public class ConfigurationManager {
         }
     }
 
+    private static void logInfo(String m) {
+        if (logger != null) {
+            logger.info(m);
+        } else {
+            System.out.println("[Config] [INFO] " + m);
+        }
+    }
+
     /**
      * Interface for custom type serialization logic.
      *
@@ -745,9 +736,145 @@ public class ConfigurationManager {
         }
     }
 
+    // ======================== Version Management ========================
+
+    private record VersionCheckResult(Field versionField, int expectedVersion, int actualVersion, boolean autoBackup, boolean migrate) {
+        boolean needsUpgrade() {
+            return versionField != null && actualVersion != expectedVersion && expectedVersion != -1;
+        }
+    }
+
+    private static VersionCheckResult checkVersion(Class<? extends ConfigurationFile> clazz, File file) throws Exception {
+        // Find @Version field
+        Field versionField = null;
+        int expectedVersion = -1;
+        boolean autoBackup = true;
+        boolean migrate = true;
+
+        for (Field field : clazz.getFields()) {
+            if (field.isAnnotationPresent(gloomlib.configuration.annotations.Version.class)) {
+                versionField = field;
+                var annotation = field.getAnnotation(gloomlib.configuration.annotations.Version.class);
+                autoBackup = annotation.autoBackup();
+                migrate = annotation.migrate();
+                
+                // Get expected version from annotation or field default
+                if (annotation.value() != -1) {
+                    expectedVersion = annotation.value();
+                } else {
+                    Object instance = createInstance(clazz);
+                    field.setAccessible(true);
+                    Object val = field.get(instance);
+                    if (val instanceof Integer intVal) {
+                        expectedVersion = intVal;
+                    }
+                }
+                break;
+            }
+        }
+
+        // No version field found
+        if (versionField == null) {
+            return new VersionCheckResult(null, -1, -1, false, false);
+        }
+
+        // Read actual version from file
+        YamlConfiguration yaml = loadYaml(file);
+        String versionKey = camelToKebab(versionField.getName());
+        int actualVersion = yaml.getInt(versionKey, -1);
+
+        return new VersionCheckResult(versionField, expectedVersion, actualVersion, autoBackup, migrate);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T extends ConfigurationFile> T handleVersionUpgrade(Class<T> clazz, File file, VersionCheckResult versionCheck) throws Exception {
+        logInfo("Configuration version upgrade detected: " + versionCheck.actualVersion + " → " + versionCheck.expectedVersion);
+        
+        // Backup old configuration
+        if (versionCheck.autoBackup) {
+            File backup = ConfigBackupManager.backup(file, "v" + versionCheck.actualVersion);
+            if (backup != null) {
+                logInfo("Old configuration backed up to: " + backup.getName());
+            }
+        }
+
+        // Attempt data migration if enabled
+        YamlConfiguration oldYaml = null;
+        if (versionCheck.migrate) {
+            oldYaml = loadYaml(file);
+        }
+
+        // Delete old file and create new one
+        if (!file.delete()) {
+            logWarn("Failed to delete old configuration file");
+        }
+
+        // Create new configuration with defaults (skip version check)
+        createIfNotExist(file);
+        T newInstance = loadWithoutVersionCheck(clazz, file);
+
+        // Migrate data if enabled
+        if (versionCheck.migrate && oldYaml != null) {
+            migrateConfigData(oldYaml, newInstance);
+            save(newInstance, file);
+            logInfo("Configuration data migrated from version " + versionCheck.actualVersion);
+        }
+
+        return newInstance;
+    }
+
+    /**
+     * Loads configuration without version checking (used during upgrades).
+     */
+    @SuppressWarnings("unchecked")
+    private static <T extends ConfigurationFile> T loadWithoutVersionCheck(Class<T> clazz, File file) throws Exception {
+        YamlConfiguration yaml = loadYaml(file);
+        T instance = createInstance(clazz);
+        instance.setYaml(yaml);
+        instance.setFile(file);
+
+        populateInstance(instance, yaml, file);
+        return instance;
+    }    private static void migrateConfigData(YamlConfiguration oldYaml, ConfigurationFile newInstance) throws Exception {
+        for (FieldMeta meta : getCachedMeta(newInstance.getClass())) {
+            String key = meta.key();
+            
+            // Skip version field itself
+            if (meta.field.isAnnotationPresent(gloomlib.configuration.annotations.Version.class)) {
+                continue;
+            }
+
+            // Try to migrate value if it exists in old config
+            if (oldYaml.contains(key)) {
+                try {
+                    Object value = oldYaml.get(key);
+                    Object deserializedValue = deserialize(value, meta.field.getType(), meta.field.getGenericType());
+                    meta.set(newInstance, deserializedValue);
+                } catch (Exception e) {
+                    logWarn("Failed to migrate field '" + key + "': " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    // ======================== Enhanced Type Inference ========================
+
+    private static Object deserializeWithFallback(Object raw, Class<?> type, Type genericType, Object defaultValue) {
+        try {
+            return deserialize(raw, type, genericType);
+        } catch (Exception e) {
+            String typeName = type.getSimpleName();
+            String rawStr = (raw != null) ? raw.toString() : "null";
+            logWarn(String.format("Failed to deserialize '%s' as %s: %s. Using default: %s", 
+                rawStr, typeName, e.getMessage(), defaultValue));
+            return defaultValue;
+        }
+    }
+
     private record FileCacheEntry(long lastModified, long size, YamlConfiguration yaml) {
         boolean isFresh(File file) {
             return file.lastModified() == lastModified && file.length() == size;
         }
     }
 }
+
