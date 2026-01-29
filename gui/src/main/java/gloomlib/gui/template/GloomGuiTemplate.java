@@ -30,12 +30,12 @@ public class GloomGuiTemplate {
     /**
      * Constructs a GUI template.
      *
-     * @param title the title
-     * @param rows the number of rows
-     * @param type the inventory type
-     * @param config the GUI configuration
-     * @param closeAction the action on close
-     * @param structure the layout structure
+     * @param title          the title
+     * @param rows           the number of rows
+     * @param type           the inventory type
+     * @param config         the GUI configuration
+     * @param closeAction    the action on close
+     * @param structure      the layout structure
      * @param charComponents component mapping for characters
      * @param slotComponents component mapping for slots
      */

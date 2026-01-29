@@ -32,7 +32,7 @@ public class ReactiveState<T> implements Supplier<T> {
      * Creates a reactive state from a value.
      *
      * @param value the value
-     * @param <T> the type
+     * @param <T>   the type
      * @return the reactive state
      */
     public static <T> ReactiveState<T> of(T value) {
@@ -111,7 +111,7 @@ public class ReactiveState<T> implements Supplier<T> {
      * Maps this state to another reactive state.
      *
      * @param mapper the mapper function
-     * @param <R> the result type
+     * @param <R>    the result type
      * @return the mapped state
      */
     public <R> ReactiveState<R> map(Function<T, R> mapper) {

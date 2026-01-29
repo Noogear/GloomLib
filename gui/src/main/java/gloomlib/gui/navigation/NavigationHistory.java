@@ -14,12 +14,13 @@ import java.util.Deque;
  */
 public final class NavigationHistory {
 
+    private static final long CLEANUP_INTERVAL_MS = 1000;
+    private static final int MAX_SEQUENCE_LENGTH = 10;
     private final Player player;
     private final Deque<WeakReference<Window>> stack = new ArrayDeque<>();
+    private final Object lock = new Object();
     private volatile int maxDepth = 50;
     private volatile long lastCleanupTime = 0;
-    private static final long CLEANUP_INTERVAL_MS = 1000;
-    private final Object lock = new Object();
 
     NavigationHistory(@NotNull Player player) {
         this.player = player;
@@ -35,9 +36,9 @@ public final class NavigationHistory {
             if (window.isClosed()) {
                 return;
             }
-            
+
             cleanDeadReferencesThrottled();
-            
+
             if (!stack.isEmpty()) {
                 WeakReference<Window> topRef = stack.peek();
                 if (topRef != null) {
@@ -47,11 +48,11 @@ public final class NavigationHistory {
                     }
                 }
             }
-            
+
             stack.push(new WeakReference<>(window));
-            
+
             deduplicateRepeatingSequences();
-            
+
             if (stack.size() >= maxDepth) {
                 stack.removeFirst();
             }
@@ -66,15 +67,15 @@ public final class NavigationHistory {
     public boolean back() {
         return backInternal(0);
     }
-    
+
     private boolean backInternal(int recursionDepth) {
         if (recursionDepth > 10) {
             return false;
         }
-        
+
         synchronized (lock) {
             cleanDeadReferencesThrottled();
-            
+
             if (stack.isEmpty()) {
                 return false;
             }
@@ -85,11 +86,11 @@ public final class NavigationHistory {
             }
 
             Window previous = previousRef.get();
-            
+
             if (previous == null || previous.isClosed()) {
                 return backInternal(recursionDepth + 1);
             }
-            
+
             Window currentWindow = getCurrentOpenWindow();
             if (currentWindow == previous) {
                 return backInternal(recursionDepth + 1);
@@ -112,7 +113,7 @@ public final class NavigationHistory {
     public @Nullable Window peek() {
         synchronized (lock) {
             cleanDeadReferencesThrottled();
-            
+
             if (stack.isEmpty()) {
                 return null;
             }
@@ -173,7 +174,7 @@ public final class NavigationHistory {
         if (now - lastCleanupTime < CLEANUP_INTERVAL_MS) {
             return;
         }
-        
+
         lastCleanupTime = now;
         cleanDeadReferences();
     }
@@ -184,18 +185,16 @@ public final class NavigationHistory {
             return window == null || window.isClosed();
         });
     }
-    
-    private static final int MAX_SEQUENCE_LENGTH = 10;
-    
+
     private void deduplicateRepeatingSequences() {
         int size = stack.size();
         if (size < 4) return;
-        
+
         @SuppressWarnings("unchecked")
         WeakReference<Window>[] stackArray = new WeakReference[size];
         Window[] windows = new Window[size];
         int[] hashes = new int[size];
-        
+
         int index = size - 1;
         for (WeakReference<Window> ref : stack) {
             stackArray[index] = ref;
@@ -206,32 +205,32 @@ public final class NavigationHistory {
             hashes[index] = System.identityHashCode(windows[index]);
             index--;
         }
-        
+
         int maxLen = Math.min(size / 2, MAX_SEQUENCE_LENGTH);
-        
+
         for (int seqLen = maxLen; seqLen >= 2; seqLen--) {
             int seq1Start = size - seqLen;
-            
+
             int seq2Start = seq1Start - seqLen;
-            
+
             if (seq2Start < 0) continue;
-            
+
             if (seq2Start == 0) continue;
-            
-            if (hashes[seq1Start] != hashes[seq2Start] || 
-                hashes[size - 1] != hashes[seq1Start - 1]) {
+
+            if (hashes[seq1Start] != hashes[seq2Start] ||
+                    hashes[size - 1] != hashes[seq1Start - 1]) {
                 continue;
             }
-            
+
             boolean isRepeating = true;
             for (int i = 0; i < seqLen; i++) {
                 if (hashes[seq1Start + i] != hashes[seq2Start + i] ||
-                    windows[seq1Start + i] != windows[seq2Start + i]) {
+                        windows[seq1Start + i] != windows[seq2Start + i]) {
                     isRepeating = false;
                     break;
                 }
             }
-            
+
             if (isRepeating) {
                 for (int i = 0; i < seqLen; i++) {
                     stack.removeLast();
@@ -240,7 +239,7 @@ public final class NavigationHistory {
             }
         }
     }
-    
+
     private @Nullable Window getCurrentOpenWindow() {
         if (player.getOpenInventory().getTopInventory().getHolder() instanceof Window window) {
             return window;

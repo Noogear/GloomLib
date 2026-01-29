@@ -129,8 +129,8 @@ public final class ConfigBackupManager {
     /**
      * Cleans up old backup files, keeping only the most recent N backups.
      *
-     * @param file          the configuration file whose backups should be cleaned
-     * @param keepCount     number of recent backups to keep
+     * @param file      the configuration file whose backups should be cleaned
+     * @param keepCount number of recent backups to keep
      * @return number of backups deleted
      */
     public static int cleanOldBackups(@NotNull File file, int keepCount) {

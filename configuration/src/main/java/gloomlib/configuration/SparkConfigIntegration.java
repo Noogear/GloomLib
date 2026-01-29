@@ -124,18 +124,18 @@ public final class SparkConfigIntegration {
             if (field.isAnnotationPresent(Sensitive.class)) {
                 Sensitive annotation = field.getAnnotation(Sensitive.class);
                 if (annotation.hideFromMonitoring()) {
-                    String path = prefix.isEmpty() ? 
-                        camelToKebab(field.getName()) : 
-                        prefix + "." + camelToKebab(field.getName());
+                    String path = prefix.isEmpty() ?
+                            camelToKebab(field.getName()) :
+                            prefix + "." + camelToKebab(field.getName());
                     hiddenPaths.add(path);
                 }
             }
 
             // Recursively scan nested ConfigurationPart
             if (ConfigurationPart.class.isAssignableFrom(field.getType())) {
-                String newPrefix = prefix.isEmpty() ? 
-                    camelToKebab(field.getName()) : 
-                    prefix + "." + camelToKebab(field.getName());
+                String newPrefix = prefix.isEmpty() ?
+                        camelToKebab(field.getName()) :
+                        prefix + "." + camelToKebab(field.getName());
                 scanSensitiveFields(field.getType(), newPrefix);
             }
         }
@@ -168,17 +168,17 @@ public final class SparkConfigIntegration {
     /**
      * Helper record for batch registration.
      *
-     * @param <T> configuration type
-     * @param file configuration file
+     * @param <T>         configuration type
+     * @param file        configuration file
      * @param configClass configuration class
      */
     public record ConfigPair<T extends ConfigurationFile>(File file, Class<T> configClass) {
-        
+
         /**
          * Creates a ConfigPair instance.
          *
-         * @param <T> configuration type
-         * @param file configuration file
+         * @param <T>         configuration type
+         * @param file        configuration file
          * @param configClass configuration class
          * @return new ConfigPair instance
          */

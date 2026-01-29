@@ -45,10 +45,10 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
      * Constructs a new abstract window.
      *
      * @param viewer the viewer player
-     * @param title the window title
-     * @param gui the GUI instance
-     * @param type the inventory type
-     * @param size the inventory size
+     * @param title  the window title
+     * @param gui    the GUI instance
+     * @param type   the inventory type
+     * @param size   the inventory size
      */
     public AbstractWindow(Player viewer, Component title, GloomGui gui, InventoryType type, int size) {
         this.viewer = viewer;
@@ -200,8 +200,8 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
      * Registers a handler for a specific state transition.
      *
      * @param fromState the starting state
-     * @param toState the ending state
-     * @param handler the handler
+     * @param toState   the ending state
+     * @param handler   the handler
      */
     public void onStateChange(WindowState fromState, WindowState toState, BiConsumer<WindowState, WindowState> handler) {
         String key = fromState + "_to_" + toState;
@@ -275,7 +275,7 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
      * Updates the window title for a specific viewer.
      *
      * @param viewer the viewer player
-     * @param title the new title component
+     * @param title  the new title component
      */
     @SuppressWarnings("deprecation")
     public void updateTitle(@NotNull final HumanEntity viewer, final Component title) {

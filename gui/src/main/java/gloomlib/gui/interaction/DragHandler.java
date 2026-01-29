@@ -20,9 +20,9 @@ public final class DragHandler {
     /**
      * Handles a drag interaction.
      *
-     * @param dragType the drag type
+     * @param dragType    the drag type
      * @param draggedItem the item being dragged
-     * @param slots the set of slot indices
+     * @param slots       the set of slot indices
      * @param getSlotItem function to retrieve current slot items
      * @return the drag result
      */
@@ -125,9 +125,9 @@ public final class DragHandler {
     /**
      * Calculates a preview of the distribution.
      *
-     * @param dragType the drag type
+     * @param dragType    the drag type
      * @param totalAmount the total amount
-     * @param slots the set of slot indices
+     * @param slots       the set of slot indices
      * @return a map of distributions
      */
     @NotNull
@@ -169,7 +169,7 @@ public final class DragHandler {
     /**
      * Result of a drag operation.
      *
-     * @param remaining the remaining item on the cursor
+     * @param remaining    the remaining item on the cursor
      * @param updatedSlots the map of updated slots
      */
     public record DragResult(

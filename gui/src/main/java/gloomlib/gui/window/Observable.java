@@ -10,18 +10,18 @@ public interface Observable {
     /**
      * Adds an observer to a specific slot.
      *
-     * @param who the observer
+     * @param who  the observer
      * @param what the slot index to observe
-     * @param how the notification hint
+     * @param how  the notification hint
      */
     void addObserver(@NotNull Observer who, int what, int how);
 
     /**
      * Removes an observer from a specific slot.
      *
-     * @param who the observer to remove
+     * @param who  the observer to remove
      * @param what the slot index
-     * @param how the notification hint
+     * @param how  the notification hint
      */
     void removeObserver(@NotNull Observer who, int what, int how);
 

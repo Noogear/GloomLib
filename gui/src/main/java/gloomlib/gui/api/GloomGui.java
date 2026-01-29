@@ -53,13 +53,13 @@ public final class GloomGui implements Gui.Normal {
     /**
      * Constructs a new GloomGui.
      *
-     * @param player the player context
-     * @param title the GUI title
-     * @param rows the number of rows
-     * @param type the inventory type
-     * @param configuration the GUI configuration
-     * @param closeAction the action on close
-     * @param structure the layout structure
+     * @param player         the player context
+     * @param title          the GUI title
+     * @param rows           the number of rows
+     * @param type           the inventory type
+     * @param configuration  the GUI configuration
+     * @param closeAction    the action on close
+     * @param structure      the layout structure
      * @param charComponents the character components
      * @param slotComponents the slot components
      */
@@ -322,8 +322,7 @@ public final class GloomGui implements Gui.Normal {
 
         if (event.getClickedInventory() == event.getInventory()) {
             handleGuiClick(event, clicker, clickType, slot);
-        }
-        else if (event.getClickedInventory() != null) {
+        } else if (event.getClickedInventory() != null) {
             handlePlayerInventoryClick(event, clicker, clickType);
         }
     }
@@ -663,7 +662,7 @@ public final class GloomGui implements Gui.Normal {
     /**
      * Sets a slot element.
      *
-     * @param slot the slot
+     * @param slot    the slot
      * @param element the element
      */
     @Override
@@ -720,9 +719,9 @@ public final class GloomGui implements Gui.Normal {
     /**
      * Adds an observer.
      *
-     * @param who the observer
+     * @param who  the observer
      * @param what the subject
-     * @param how notification hint
+     * @param how  notification hint
      */
     @Override
     public void addObserver(@NotNull Observer who, int what, int how) {
@@ -733,9 +732,9 @@ public final class GloomGui implements Gui.Normal {
     /**
      * Removes an observer.
      *
-     * @param who the observer
+     * @param who  the observer
      * @param what the subject
-     * @param how notification hint
+     * @param how  notification hint
      */
     @Override
     public void removeObserver(@NotNull Observer who, int what, int how) {

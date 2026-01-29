@@ -83,7 +83,7 @@ public abstract class ConfigurationFile extends ConfigurationPart {
     public CompletableFuture<Void> reloadAsync() {
         if (file == null) {
             return CompletableFuture.failedFuture(
-                new IllegalStateException("Cannot reload: File path is not set.")
+                    new IllegalStateException("Cannot reload: File path is not set.")
             );
         }
         return CompletableFuture.runAsync(() -> {
@@ -125,7 +125,7 @@ public abstract class ConfigurationFile extends ConfigurationPart {
     public CompletableFuture<File> backupAsync() {
         if (file == null) {
             return CompletableFuture.failedFuture(
-                new IllegalStateException("Cannot backup: File path is not set.")
+                    new IllegalStateException("Cannot backup: File path is not set.")
             );
         }
         return ConfigBackupManager.backupAsync(file);

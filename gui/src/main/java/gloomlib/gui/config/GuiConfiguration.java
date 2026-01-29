@@ -3,8 +3,8 @@ package gloomlib.gui.config;
 /**
  * Configuration for GUI behavior and updates.
  *
- * @param updateStrategy the strategy for updating slots
- * @param tickRate the tick rate for periodic updates
+ * @param updateStrategy   the strategy for updating slots
+ * @param tickRate         the tick rate for periodic updates
  * @param enableAnimations whether animations are enabled
  */
 public record GuiConfiguration(

@@ -56,7 +56,7 @@ public sealed interface SlotElement permits
      * Slot element representing a component at an index.
      *
      * @param component the component
-     * @param index the component index
+     * @param index     the component index
      */
     record ComponentSlot(
             @NotNull GloomComponent component,
@@ -72,7 +72,7 @@ public sealed interface SlotElement permits
          * Observes the component.
          *
          * @param observer the observer
-         * @param how notification hint
+         * @param how      notification hint
          */
         public void observe(@NotNull Observer observer, int how) {
             if (component instanceof Observable observable) {
@@ -84,7 +84,7 @@ public sealed interface SlotElement permits
          * Unobserves the component.
          *
          * @param observer the observer to remove
-         * @param how notification hint
+         * @param how      notification hint
          */
         public void unobserve(@NotNull Observer observer, int how) {
             if (component instanceof Observable observable) {
@@ -96,7 +96,7 @@ public sealed interface SlotElement permits
     /**
      * Slot element linking to another GUI slot.
      *
-     * @param gui the target GUI
+     * @param gui  the target GUI
      * @param slot the target slot
      */
     record GuiLink(
@@ -139,7 +139,7 @@ public sealed interface SlotElement permits
          * Observes the entire link chain.
          *
          * @param observer the observer
-         * @param how notification hint
+         * @param how      notification hint
          */
         public void observeChain(@NotNull Observer observer, int how) {
             for (SlotElement element : traverse()) {
@@ -153,7 +153,7 @@ public sealed interface SlotElement permits
          * Unobserves the entire link chain.
          *
          * @param observer the observer to remove
-         * @param how notification hint
+         * @param how      notification hint
          */
         public void unobserveChain(@NotNull Observer observer, int how) {
             for (SlotElement element : traverse()) {
@@ -167,8 +167,8 @@ public sealed interface SlotElement permits
     /**
      * Slot element linking to a Bukkit inventory slot.
      *
-     * @param inventory the inventory
-     * @param slot the slot index
+     * @param inventory  the inventory
+     * @param slot       the slot index
      * @param background the background item
      */
     record InventoryLink(
@@ -181,7 +181,7 @@ public sealed interface SlotElement permits
          * Constructs an inventory link.
          *
          * @param inventory the inventory
-         * @param slot the slot index
+         * @param slot      the slot index
          */
         public InventoryLink(@NotNull Inventory inventory, int slot) {
             this(inventory, slot, null);

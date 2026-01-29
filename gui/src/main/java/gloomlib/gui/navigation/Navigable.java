@@ -16,20 +16,20 @@ public interface Navigable {
     @NotNull Window getWindow();
 
     /**
-     * Enables or disables navigation tracking for this window.
-     *
-     * @param enabled true to enable navigation
-     */
-    default void setNavigationEnabled(boolean enabled) {
-    }
-
-    /**
      * Checks if navigation is enabled for this window.
      *
      * @return true if navigation is enabled
      */
     default boolean isNavigationEnabled() {
         return true;
+    }
+
+    /**
+     * Enables or disables navigation tracking for this window.
+     *
+     * @param enabled true to enable navigation
+     */
+    default void setNavigationEnabled(boolean enabled) {
     }
 
     /**

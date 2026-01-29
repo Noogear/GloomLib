@@ -17,7 +17,7 @@ public class Paginator<T> {
     /**
      * Constructs a paginator with items and page size.
      *
-     * @param items the items
+     * @param items    the items
      * @param pageSize the page size
      */
     public Paginator(List<T> items, int pageSize) {

@@ -37,8 +37,8 @@ public class PagedComponent<T> implements GloomComponent {
     /**
      * Constructs a paged component.
      *
-     * @param dataState the reactive data state
-     * @param pageSize the number of items per page
+     * @param dataState    the reactive data state
+     * @param pageSize     the number of items per page
      * @param itemRenderer the function to render each item
      * @param clickHandler the callback for item clicks
      */
@@ -80,8 +80,8 @@ public class PagedComponent<T> implements GloomComponent {
     /**
      * Constructs a paged component with static data.
      *
-     * @param staticData the data list
-     * @param pageSize the number of items per page
+     * @param staticData   the data list
+     * @param pageSize     the number of items per page
      * @param itemRenderer the function to render each item
      * @param clickHandler the callback for item clicks
      */

@@ -146,7 +146,7 @@ public class ItemBuilder {
      * Adds an enchantment.
      *
      * @param enchantment the enchantment
-     * @param level the level
+     * @param level       the level
      * @return this builder
      */
     public ItemBuilder enchant(@NotNull Enchantment enchantment, int level) {
@@ -215,11 +215,11 @@ public class ItemBuilder {
     /**
      * Sets persistent data.
      *
-     * @param key the key
-     * @param type the data type
+     * @param key   the key
+     * @param type  the data type
      * @param value the value
-     * @param <T> storage type
-     * @param <Z> object type
+     * @param <T>   storage type
+     * @param <Z>   object type
      * @return this builder
      */
     public <T, Z> ItemBuilder pdc(@NotNull NamespacedKey key, @NotNull PersistentDataType<T, Z> type, @NotNull Z value) {
@@ -233,8 +233,8 @@ public class ItemBuilder {
      * Edits the item meta.
      *
      * @param metaClass the meta class
-     * @param consumer the editor
-     * @param <M> meta type
+     * @param consumer  the editor
+     * @param <M>       meta type
      * @return this builder
      */
     public <M extends ItemMeta> ItemBuilder editMeta(@NotNull Class<M> metaClass, @NotNull Consumer<M> consumer) {

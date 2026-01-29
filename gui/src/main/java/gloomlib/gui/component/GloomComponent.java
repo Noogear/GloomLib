@@ -103,8 +103,8 @@ public interface GloomComponent extends Cloneable {
          * Sets a reactive renderer.
          *
          * @param renderer the rendering function
-         * @param state the reactive state to observe
-         * @param <T> the state type
+         * @param state    the reactive state to observe
+         * @param <T>      the state type
          * @return this builder instance
          */
         @SuppressWarnings("unchecked")

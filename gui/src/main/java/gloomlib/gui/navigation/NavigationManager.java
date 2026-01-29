@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class NavigationManager {
 
     private static final NavigationManager INSTANCE = new NavigationManager();
-    
+
     private final Map<UUID, NavigationHistory> histories = new ConcurrentHashMap<>();
 
     private NavigationManager() {
@@ -82,13 +82,13 @@ public final class NavigationManager {
         if (player == null) {
             return;
         }
-        
+
         NavigationHistory history = histories.remove(player.getUniqueId());
         if (history != null) {
             history.clear();
         }
     }
-    
+
     /**
      * Clears all navigation histories.
      */

@@ -4,8 +4,6 @@ import gloomlib.gui.util.BundleUtils;
 import gloomlib.gui.util.GuiItemUtils;
 import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
-import org.bukkit.event.inventory.ClickType;
-import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -20,14 +18,11 @@ public final class ClickActionHandler {
     private ClickActionHandler() {
     }
 
-    private record PrioritizedSlot(int slot, int priority) {
-    }
-
     /**
      * Handles left-click interaction.
      *
-     * @param player the player performing the action
-     * @param slotItem the item in the slot
+     * @param player     the player performing the action
+     * @param slotItem   the item in the slot
      * @param cursorItem the item on the cursor
      * @return the click result
      */
@@ -73,8 +68,8 @@ public final class ClickActionHandler {
     /**
      * Handles right-click interaction.
      *
-     * @param player the player performing the action
-     * @param slotItem the item in the slot
+     * @param player     the player performing the action
+     * @param slotItem   the item in the slot
      * @param cursorItem the item on the cursor
      * @return the click result
      */
@@ -130,11 +125,11 @@ public final class ClickActionHandler {
     /**
      * Handles shift-click with priority support.
      *
-     * @param slotItem the item in the slot
+     * @param slotItem        the item in the slot
      * @param targetInventory the target inventory
-     * @param startSlot the start slot
-     * @param endSlot the end slot
-     * @param priority the priority strategy
+     * @param startSlot       the start slot
+     * @param endSlot         the end slot
+     * @param priority        the priority strategy
      * @return the shift-click result
      */
     @NotNull
@@ -167,7 +162,7 @@ public final class ClickActionHandler {
 
         for (PrioritizedSlot ps : slots) {
             if (GuiItemUtils.isEmpty(remaining)) break;
-            
+
             ItemStack targetItem = targetInventory.getItem(ps.slot);
             if (!GuiItemUtils.isEmpty(targetItem) && GuiItemUtils.canStackWith(targetItem, remaining)) {
                 GuiItemUtils.AddResult result = GuiItemUtils.addItem(targetItem, remaining);
@@ -178,7 +173,7 @@ public final class ClickActionHandler {
 
         for (PrioritizedSlot ps : slots) {
             if (GuiItemUtils.isEmpty(remaining)) break;
-            
+
             if (GuiItemUtils.isEmpty(targetInventory.getItem(ps.slot))) {
                 targetInventory.setItem(ps.slot, remaining.clone());
                 remaining = null;
@@ -193,10 +188,10 @@ public final class ClickActionHandler {
     /**
      * Handles shift-click.
      *
-     * @param slotItem the item in the slot
+     * @param slotItem        the item in the slot
      * @param targetInventory the target inventory
-     * @param startSlot the start slot
-     * @param endSlot the end slot
+     * @param startSlot       the start slot
+     * @param endSlot         the end slot
      * @return the shift-click result
      */
     @NotNull
@@ -236,8 +231,8 @@ public final class ClickActionHandler {
     /**
      * Handles number key hotbar swap.
      *
-     * @param slotItem the item in the slot
-     * @param hotbarSlot the hotbar slot
+     * @param slotItem        the item in the slot
+     * @param hotbarSlot      the hotbar slot
      * @param playerInventory the player's inventory
      * @return the hotbar swap result
      */
@@ -261,10 +256,10 @@ public final class ClickActionHandler {
     /**
      * Handles double-click to collect similar items.
      *
-     * @param cursorItem the cursor item
+     * @param cursorItem      the cursor item
      * @param sourceInventory the source inventory
-     * @param startSlot the start slot
-     * @param endSlot the end slot
+     * @param startSlot       the start slot
+     * @param endSlot         the end slot
      * @return the double-click result
      */
     @NotNull
@@ -308,7 +303,7 @@ public final class ClickActionHandler {
     /**
      * Handles middle-click for cloning.
      *
-     * @param player the player
+     * @param player   the player
      * @param slotItem the item in the slot
      * @return the middle-click result
      */
@@ -329,7 +324,7 @@ public final class ClickActionHandler {
     /**
      * Handles offhand swap.
      *
-     * @param slotItem the item in the slot
+     * @param slotItem        the item in the slot
      * @param playerInventory the player's inventory
      * @return the offhand swap result
      */
@@ -349,8 +344,8 @@ public final class ClickActionHandler {
      * Handles item drop.
      *
      * @param slotItem the item in the slot
-     * @param dropAll whether to drop all
-     * @param player the player
+     * @param dropAll  whether to drop all
+     * @param player   the player
      * @return the drop result
      */
     @NotNull
@@ -374,12 +369,15 @@ public final class ClickActionHandler {
         return new DropResult(slotItem, false);
     }
 
+    private record PrioritizedSlot(int slot, int priority) {
+    }
+
     /**
      * Click result.
      *
-     * @param newSlotItem the new item in the slot
+     * @param newSlotItem   the new item in the slot
      * @param newCursorItem the new item on the cursor
-     * @param changed whether a change occurred
+     * @param changed       whether a change occurred
      */
     public record ClickResult(
             @Nullable ItemStack newSlotItem,
@@ -400,7 +398,7 @@ public final class ClickActionHandler {
      * Shift-click result.
      *
      * @param remaining the remaining item
-     * @param moved whether items were moved
+     * @param moved     whether items were moved
      */
     public record ShiftClickResult(
             @Nullable ItemStack remaining,
@@ -412,7 +410,7 @@ public final class ClickActionHandler {
      * Number key result.
      *
      * @param newSlotItem the new item in the slot
-     * @param swapped whether a swap occurred
+     * @param swapped     whether a swap occurred
      */
     public record HotbarSwapResult(
             @Nullable ItemStack newSlotItem,
@@ -424,7 +422,7 @@ public final class ClickActionHandler {
      * Double-click result.
      *
      * @param newCursorItem the new cursor item
-     * @param collected whether items were collected
+     * @param collected     whether items were collected
      */
     public record DoubleClickResult(
             @Nullable ItemStack newCursorItem,
@@ -436,7 +434,7 @@ public final class ClickActionHandler {
      * Middle-click result.
      *
      * @param newCursorItem the new cursor item
-     * @param cloned whether the item was cloned
+     * @param cloned        whether the item was cloned
      */
     public record MiddleClickResult(
             @Nullable ItemStack newCursorItem,
@@ -448,7 +446,7 @@ public final class ClickActionHandler {
      * Offhand swap result.
      *
      * @param newSlotItem the new item in the slot
-     * @param swapped whether a swap occurred
+     * @param swapped     whether a swap occurred
      */
     public record OffhandSwapResult(
             @Nullable ItemStack newSlotItem,
@@ -460,7 +458,7 @@ public final class ClickActionHandler {
      * Drop result.
      *
      * @param newSlotItem the remaining item in the slot
-     * @param dropped whether items were dropped
+     * @param dropped     whether items were dropped
      */
     public record DropResult(
             @Nullable ItemStack newSlotItem,

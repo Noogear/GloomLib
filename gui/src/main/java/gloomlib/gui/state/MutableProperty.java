@@ -20,7 +20,7 @@ public interface MutableProperty<T> extends Property<T> {
      * Creates a new mutable property with an initial value.
      *
      * @param initialValue the initial value
-     * @param <T> the type
+     * @param <T>          the type
      * @return the mutable property
      */
     @NotNull

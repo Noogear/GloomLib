@@ -40,7 +40,7 @@ public class GuiStructure {
     /**
      * Defines a component for a symbol.
      *
-     * @param symbol the character symbol
+     * @param symbol    the character symbol
      * @param component the component
      * @return this structure
      */
@@ -86,7 +86,7 @@ public class GuiStructure {
         /**
          * Sets the size of the grid.
          *
-         * @param width the width
+         * @param width  the width
          * @param height the height
          * @return this builder
          */
@@ -99,7 +99,7 @@ public class GuiStructure {
         /**
          * Defines a component for a symbol.
          *
-         * @param symbol the symbol
+         * @param symbol    the symbol
          * @param component the component
          * @return this builder
          */
@@ -111,7 +111,7 @@ public class GuiStructure {
         /**
          * Adds a border with the given symbol and component.
          *
-         * @param symbol the symbol
+         * @param symbol    the symbol
          * @param component the component
          * @return this builder
          */
@@ -145,7 +145,7 @@ public class GuiStructure {
         /**
          * Fills all remaining dots with the given symbol and component.
          *
-         * @param symbol the symbol
+         * @param symbol    the symbol
          * @param component the component
          * @return this builder
          */
@@ -161,12 +161,12 @@ public class GuiStructure {
         /**
          * Fills a rectangular region with the given symbol and component.
          *
-         * @param symbol the symbol
+         * @param symbol    the symbol
          * @param component the component
-         * @param startX the starting X
-         * @param startY the starting Y
-         * @param width the width
-         * @param height the height
+         * @param startX    the starting X
+         * @param startY    the starting Y
+         * @param width     the width
+         * @param height    the height
          * @return this builder
          */
         public Builder region(char symbol, GloomComponent component, int startX, int startY, int width, int height) {
@@ -190,7 +190,7 @@ public class GuiStructure {
          * Fills a row with a repeating pattern.
          *
          * @param rowIndex the row index
-         * @param pattern the pattern string
+         * @param pattern  the pattern string
          * @return this builder
          */
         public Builder rowPattern(int rowIndex, String pattern) {

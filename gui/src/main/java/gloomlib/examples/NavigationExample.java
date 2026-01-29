@@ -18,7 +18,7 @@ import org.bukkit.entity.Player;
  *   <li>{@code ctx.getNavigationDepth()} - 获取导航深度</li>
  *   <li>{@code ctx.clearNavigationHistory()} - 清空导航历史</li>
  * </ul>
- * 
+ *
  * <p><b>关键变化：</b>
  * <ul>
  *   <li>❌ 旧方式：{@code .withBackButton('B')} - 已删除</li>
@@ -37,18 +37,18 @@ public class NavigationExample {
      */
     public void openMenuWithSimpleBackButton(Player player) {
         GloomGuiBuilder.chest()
-            .title(Component.text("简单导航"))
-            .rows(3)
-            .structure(
-                "GGGGGGGGG",
-                "G.......G",
-                "GGGBGGGGG"
-            )
-            .define('G', createBorder())
-            .define('B', createSimpleBackButton())
-            .define('.', createEmptyComponent())
-            .navigationEnabled(true)  // 启用导航跟踪
-            .open(player);
+                .title(Component.text("简单导航"))
+                .rows(3)
+                .structure(
+                        "GGGGGGGGG",
+                        "G.......G",
+                        "GGGBGGGGG"
+                )
+                .define('G', createBorder())
+                .define('B', createSimpleBackButton())
+                .define('.', createEmptyComponent())
+                .navigationEnabled(true)  // 启用导航跟踪
+                .open(player);
     }
 
     /**
@@ -60,18 +60,18 @@ public class NavigationExample {
      */
     public void openMenuWithSmartBackButton(Player player) {
         GloomGuiBuilder.chest()
-            .title(Component.text("智能导航"))
-            .rows(3)
-            .structure(
-                "GGGGGGGGG",
-                "G.......G",
-                "GGGBGGGGG"
-            )
-            .define('G', createBorder())
-            .define('B', createSmartBackButton())  // ✨ 智能返回/关闭
-            .define('.', createEmptyComponent())
-            .withAutoBack()  // 自动启用导航跟踪
-            .open(player);
+                .title(Component.text("智能导航"))
+                .rows(3)
+                .structure(
+                        "GGGGGGGGG",
+                        "G.......G",
+                        "GGGBGGGGG"
+                )
+                .define('G', createBorder())
+                .define('B', createSmartBackButton())  // ✨ 智能返回/关闭
+                .define('.', createEmptyComponent())
+                .withAutoBack()  // 自动启用导航跟踪
+                .open(player);
     }
 
     /**
@@ -81,34 +81,34 @@ public class NavigationExample {
      */
     public void openMenuWithFeedbackBackButton(Player player) {
         GloomGuiBuilder.chest()
-            .title(Component.text("带反馈的导航"))
-            .rows(3)
-            .structure(
-                "GGGGGGGGG",
-                "G.......G",
-                "GGGBGGGGG"
-            )
-            .define('G', createBorder())
-            .define('B', GloomComponent.builder()
-                .icon(ItemBuilder.from(Material.ARROW)
-                    .name(Component.text("返回").color(NamedTextColor.YELLOW))
-                    .lore(Component.text("点击返回上一页").color(NamedTextColor.GRAY))
-                    .build())
-                .onClick(ctx -> {
-                    if (ctx.navigateBack()) {
-                        ctx.player().sendMessage(
-                            Component.text("✓ 已返回上一页").color(NamedTextColor.GREEN)
-                        );
-                    } else {
-                        ctx.player().sendMessage(
-                            Component.text("✗ 无上一页可返回").color(NamedTextColor.RED)
-                        );
-                    }
-                })
-                .build())
-            .define('.', createEmptyComponent())
-            .navigationEnabled(true)
-            .open(player);
+                .title(Component.text("带反馈的导航"))
+                .rows(3)
+                .structure(
+                        "GGGGGGGGG",
+                        "G.......G",
+                        "GGGBGGGGG"
+                )
+                .define('G', createBorder())
+                .define('B', GloomComponent.builder()
+                        .icon(ItemBuilder.from(Material.ARROW)
+                                .name(Component.text("返回").color(NamedTextColor.YELLOW))
+                                .lore(Component.text("点击返回上一页").color(NamedTextColor.GRAY))
+                                .build())
+                        .onClick(ctx -> {
+                            if (ctx.navigateBack()) {
+                                ctx.player().sendMessage(
+                                        Component.text("✓ 已返回上一页").color(NamedTextColor.GREEN)
+                                );
+                            } else {
+                                ctx.player().sendMessage(
+                                        Component.text("✗ 无上一页可返回").color(NamedTextColor.RED)
+                                );
+                            }
+                        })
+                        .build())
+                .define('.', createEmptyComponent())
+                .navigationEnabled(true)
+                .open(player);
     }
 
     /**
@@ -118,32 +118,32 @@ public class NavigationExample {
      */
     public void openMenuWithConditionalBackButton(Player player) {
         GloomGuiBuilder.chest()
-            .title(Component.text("条件导航"))
-            .rows(3)
-            .structure(
-                "GGGGGGGGG",
-                "G.......G",
-                "GGGBGGGGG"
-            )
-            .define('G', createBorder())
-            .define('B', GloomComponent.builder()
-                .icon(ItemBuilder.from(Material.ARROW)
-                    .name(Component.text("返回").color(NamedTextColor.YELLOW))
-                    .build())
-                .onClick(ctx -> {
-                    // 先检查是否可以返回
-                    if (!ctx.canNavigateBack()) {
-                        ctx.player().sendMessage(
-                            Component.text("这是第一页，无法返回").color(NamedTextColor.RED)
-                        );
-                        return;
-                    }
-                    ctx.navigateBack();
-                })
-                .build())
-            .define('.', createEmptyComponent())
-            .navigationEnabled(true)
-            .open(player);
+                .title(Component.text("条件导航"))
+                .rows(3)
+                .structure(
+                        "GGGGGGGGG",
+                        "G.......G",
+                        "GGGBGGGGG"
+                )
+                .define('G', createBorder())
+                .define('B', GloomComponent.builder()
+                        .icon(ItemBuilder.from(Material.ARROW)
+                                .name(Component.text("返回").color(NamedTextColor.YELLOW))
+                                .build())
+                        .onClick(ctx -> {
+                            // 先检查是否可以返回
+                            if (!ctx.canNavigateBack()) {
+                                ctx.player().sendMessage(
+                                        Component.text("这是第一页，无法返回").color(NamedTextColor.RED)
+                                );
+                                return;
+                            }
+                            ctx.navigateBack();
+                        })
+                        .build())
+                .define('.', createEmptyComponent())
+                .navigationEnabled(true)
+                .open(player);
     }
 
     // ==================== 高级导航模式 ====================
@@ -155,18 +155,18 @@ public class NavigationExample {
      */
     public void openMenuWithAutoBack(Player player) {
         GloomGuiBuilder.chest()
-            .title(Component.text("自动返回"))
-            .rows(3)
-            .structure(
-                "GGGGGGGGG",
-                "G.......G",
-                "GGGGGGGGG"
-            )
-            .define('G', createBorder())
-            .define('.', createEmptyComponent())
-            .navigationEnabled(true)
-            .withAutoBack()  // ESC 键自动返回
-            .open(player);
+                .title(Component.text("自动返回"))
+                .rows(3)
+                .structure(
+                        "GGGGGGGGG",
+                        "G.......G",
+                        "GGGGGGGGG"
+                )
+                .define('G', createBorder())
+                .define('.', createEmptyComponent())
+                .navigationEnabled(true)
+                .withAutoBack()  // ESC 键自动返回
+                .open(player);
     }
 
     /**
@@ -176,37 +176,37 @@ public class NavigationExample {
      */
     public void openMenuWithMultiActionButton(Player player) {
         GloomGuiBuilder.chest()
-            .title(Component.text("多功能导航"))
-            .rows(3)
-            .structure(
-                "GGGGGGGGG",
-                "G.......G",
-                "GGGBGGGGG"
-            )
-            .define('G', createBorder())
-            .define('B', GloomComponent.builder()
-                .icon(ItemBuilder.from(Material.ARROW)
-                    .name(Component.text("保存并返回").color(NamedTextColor.YELLOW))
-                    .lore(
-                        Component.text("点击保存当前数据").color(NamedTextColor.GRAY),
-                        Component.text("并返回上一页").color(NamedTextColor.GRAY)
-                    )
-                    .build())
-                .onClick(ctx -> {
-                    // 执行保存逻辑
-                    savePlayerData(ctx.player());
-                    
-                    // 然后返回
-                    if (ctx.navigateBack()) {
-                        ctx.player().sendMessage(
-                            Component.text("✓ 数据已保存并返回").color(NamedTextColor.GREEN)
-                        );
-                    }
-                })
-                .build())
-            .define('.', createEmptyComponent())
-            .navigationEnabled(true)
-            .open(player);
+                .title(Component.text("多功能导航"))
+                .rows(3)
+                .structure(
+                        "GGGGGGGGG",
+                        "G.......G",
+                        "GGGBGGGGG"
+                )
+                .define('G', createBorder())
+                .define('B', GloomComponent.builder()
+                        .icon(ItemBuilder.from(Material.ARROW)
+                                .name(Component.text("保存并返回").color(NamedTextColor.YELLOW))
+                                .lore(
+                                        Component.text("点击保存当前数据").color(NamedTextColor.GRAY),
+                                        Component.text("并返回上一页").color(NamedTextColor.GRAY)
+                                )
+                                .build())
+                        .onClick(ctx -> {
+                            // 执行保存逻辑
+                            savePlayerData(ctx.player());
+
+                            // 然后返回
+                            if (ctx.navigateBack()) {
+                                ctx.player().sendMessage(
+                                        Component.text("✓ 数据已保存并返回").color(NamedTextColor.GREEN)
+                                );
+                            }
+                        })
+                        .build())
+                .define('.', createEmptyComponent())
+                .navigationEnabled(true)
+                .open(player);
     }
 
     /**
@@ -216,37 +216,37 @@ public class NavigationExample {
      */
     public void openConfirmationDialog(Player player, Runnable onConfirm) {
         GloomGuiBuilder.chest()
-            .title(Component.text("确认操作"))
-            .rows(3)
-            .structure(
-                "GGGGGGGGG",
-                "G..Y.N..G",
-                "GGGGGGGGG"
-            )
-            .define('G', createBorder())
-            .define('Y', GloomComponent.builder()
-                .icon(ItemBuilder.from(Material.GREEN_CONCRETE)
-                    .name(Component.text("确认").color(NamedTextColor.GREEN))
-                    .build())
-                .onClick(ctx -> {
-                    onConfirm.run();  // 执行确认操作
-                    ctx.navigateBack();  // 返回上一页
-                })
-                .build())
-            .define('N', GloomComponent.builder()
-                .icon(ItemBuilder.from(Material.RED_CONCRETE)
-                    .name(Component.text("取消").color(NamedTextColor.RED))
-                    .build())
-                .onClick(ctx -> {
-                    ctx.navigateBack();  // 直接返回
-                    ctx.player().sendMessage(
-                        Component.text("操作已取消").color(NamedTextColor.GRAY)
-                    );
-                })
-                .build())
-            .define('.', createEmptyComponent())
-            .navigationEnabled(true)
-            .open(player);
+                .title(Component.text("确认操作"))
+                .rows(3)
+                .structure(
+                        "GGGGGGGGG",
+                        "G..Y.N..G",
+                        "GGGGGGGGG"
+                )
+                .define('G', createBorder())
+                .define('Y', GloomComponent.builder()
+                        .icon(ItemBuilder.from(Material.GREEN_CONCRETE)
+                                .name(Component.text("确认").color(NamedTextColor.GREEN))
+                                .build())
+                        .onClick(ctx -> {
+                            onConfirm.run();  // 执行确认操作
+                            ctx.navigateBack();  // 返回上一页
+                        })
+                        .build())
+                .define('N', GloomComponent.builder()
+                        .icon(ItemBuilder.from(Material.RED_CONCRETE)
+                                .name(Component.text("取消").color(NamedTextColor.RED))
+                                .build())
+                        .onClick(ctx -> {
+                            ctx.navigateBack();  // 直接返回
+                            ctx.player().sendMessage(
+                                    Component.text("操作已取消").color(NamedTextColor.GRAY)
+                            );
+                        })
+                        .build())
+                .define('.', createEmptyComponent())
+                .navigationEnabled(true)
+                .open(player);
     }
 
     /**
@@ -256,39 +256,39 @@ public class NavigationExample {
      */
     public void openMenuWithDepthInfo(Player player) {
         GloomGuiBuilder.chest()
-            .title(Component.text("导航深度信息"))
-            .rows(3)
-            .structure(
-                "GGGGGGGGG",
-                "G.......G",
-                "GGGIBGGGG"
-            )
-            .define('G', createBorder())
-            .define('B', createSimpleBackButton())
-            .define('I', GloomComponent.builder()
-                .icon(ItemBuilder.from(Material.BOOK)
-                    .name(Component.text("导航信息").color(NamedTextColor.AQUA))
-                    .build())
-                .onClick(ctx -> {
-                    int depth = ctx.getNavigationDepth();
-                    ctx.player().sendMessage(
-                        Component.text("当前菜单层级: " + depth).color(NamedTextColor.YELLOW)
-                    );
-                    
-                    if (ctx.canNavigateBack()) {
-                        ctx.player().sendMessage(
-                            Component.text("可以返回上一页").color(NamedTextColor.GREEN)
-                        );
-                    } else {
-                        ctx.player().sendMessage(
-                            Component.text("这是第一页").color(NamedTextColor.RED)
-                        );
-                    }
-                })
-                .build())
-            .define('.', createEmptyComponent())
-            .navigationEnabled(true)
-            .open(player);
+                .title(Component.text("导航深度信息"))
+                .rows(3)
+                .structure(
+                        "GGGGGGGGG",
+                        "G.......G",
+                        "GGGIBGGGG"
+                )
+                .define('G', createBorder())
+                .define('B', createSimpleBackButton())
+                .define('I', GloomComponent.builder()
+                        .icon(ItemBuilder.from(Material.BOOK)
+                                .name(Component.text("导航信息").color(NamedTextColor.AQUA))
+                                .build())
+                        .onClick(ctx -> {
+                            int depth = ctx.getNavigationDepth();
+                            ctx.player().sendMessage(
+                                    Component.text("当前菜单层级: " + depth).color(NamedTextColor.YELLOW)
+                            );
+
+                            if (ctx.canNavigateBack()) {
+                                ctx.player().sendMessage(
+                                        Component.text("可以返回上一页").color(NamedTextColor.GREEN)
+                                );
+                            } else {
+                                ctx.player().sendMessage(
+                                        Component.text("这是第一页").color(NamedTextColor.RED)
+                                );
+                            }
+                        })
+                        .build())
+                .define('.', createEmptyComponent())
+                .navigationEnabled(true)
+                .open(player);
     }
 
     /**
@@ -298,28 +298,28 @@ public class NavigationExample {
      */
     public void openMainMenu(Player player) {
         GloomGuiBuilder.chest()
-            .title(Component.text("§6§l主菜单"))
-            .rows(3)
-            .structure(
-                "GGGGGGGGG",
-                "G123456GG",
-                "GGGXGGGGG"
-            )
-            .define('G', createBorder())
-            .define('1', createMenuItem("商店", Material.EMERALD, ctx -> openShopMenu(ctx.player())))
-            .define('2', createMenuItem("背包", Material.CHEST, ctx -> openInventoryMenu(ctx.player())))
-            .define('3', createMenuItem("任务", Material.WRITABLE_BOOK, ctx -> openQuestsMenu(ctx.player())))
-            .define('4', createMenuItem("技能", Material.ENCHANTED_BOOK, ctx -> openSkillsMenu(ctx.player())))
-            .define('5', createMenuItem("设置", Material.COMPARATOR, ctx -> openSettingsMenu(ctx.player())))
-            .define('6', createMenuItem("帮助", Material.BOOK, ctx -> openHelpMenu(ctx.player())))
-            .define('X', GloomComponent.builder()
-                .icon(ItemBuilder.from(Material.BARRIER)
-                    .name(Component.text("关闭").color(NamedTextColor.RED))
-                    .build())
-                .onClick(ctx -> ctx.player().closeInventory())
-                .build())
-            // 注意：主菜单通常不启用 navigationEnabled，因为它是顶层菜单
-            .open(player);
+                .title(Component.text("§6§l主菜单"))
+                .rows(3)
+                .structure(
+                        "GGGGGGGGG",
+                        "G123456GG",
+                        "GGGXGGGGG"
+                )
+                .define('G', createBorder())
+                .define('1', createMenuItem("商店", Material.EMERALD, ctx -> openShopMenu(ctx.player())))
+                .define('2', createMenuItem("背包", Material.CHEST, ctx -> openInventoryMenu(ctx.player())))
+                .define('3', createMenuItem("任务", Material.WRITABLE_BOOK, ctx -> openQuestsMenu(ctx.player())))
+                .define('4', createMenuItem("技能", Material.ENCHANTED_BOOK, ctx -> openSkillsMenu(ctx.player())))
+                .define('5', createMenuItem("设置", Material.COMPARATOR, ctx -> openSettingsMenu(ctx.player())))
+                .define('6', createMenuItem("帮助", Material.BOOK, ctx -> openHelpMenu(ctx.player())))
+                .define('X', GloomComponent.builder()
+                        .icon(ItemBuilder.from(Material.BARRIER)
+                                .name(Component.text("关闭").color(NamedTextColor.RED))
+                                .build())
+                        .onClick(ctx -> ctx.player().closeInventory())
+                        .build())
+                // 注意：主菜单通常不启用 navigationEnabled，因为它是顶层菜单
+                .open(player);
     }
 
     // ==================== 辅助方法 ====================
@@ -329,10 +329,10 @@ public class NavigationExample {
      */
     private GloomComponent createBorder() {
         return GloomComponent.builder()
-            .icon(ItemBuilder.from(Material.GRAY_STAINED_GLASS_PANE)
-                .name(Component.empty())
-                .build())
-            .build();
+                .icon(ItemBuilder.from(Material.GRAY_STAINED_GLASS_PANE)
+                        .name(Component.empty())
+                        .build())
+                .build();
     }
 
     /**
@@ -340,8 +340,8 @@ public class NavigationExample {
      */
     private GloomComponent createEmptyComponent() {
         return GloomComponent.builder()
-            .icon(ItemBuilder.from(Material.AIR).build())
-            .build();
+                .icon(ItemBuilder.from(Material.AIR).build())
+                .build();
     }
 
     /**
@@ -349,12 +349,12 @@ public class NavigationExample {
      */
     private GloomComponent createSimpleBackButton() {
         return GloomComponent.builder()
-            .icon(ItemBuilder.from(Material.ARROW)
-                .name(Component.text("返回").color(NamedTextColor.YELLOW))
-                .lore(Component.text("点击返回上一页").color(NamedTextColor.GRAY))
-                .build())
-            .onClick(ctx -> ctx.navigateBack())
-            .build();
+                .icon(ItemBuilder.from(Material.ARROW)
+                        .name(Component.text("返回").color(NamedTextColor.YELLOW))
+                        .lore(Component.text("点击返回上一页").color(NamedTextColor.GRAY))
+                        .build())
+                .onClick(ctx -> ctx.navigateBack())
+                .build();
     }
 
     /**
@@ -364,12 +364,12 @@ public class NavigationExample {
      */
     private GloomComponent createSmartBackButton() {
         return GloomComponent.builder()
-            .icon(ItemBuilder.from(Material.ARROW)
-                .name(Component.text("返回").color(NamedTextColor.YELLOW))
-                .lore(Component.text("点击返回/关闭").color(NamedTextColor.GRAY))
-                .build())
-            .onClick(ctx -> ctx.navigateBackOrClose())  // ✨ 智能返回或关闭
-            .build();
+                .icon(ItemBuilder.from(Material.ARROW)
+                        .name(Component.text("返回").color(NamedTextColor.YELLOW))
+                        .lore(Component.text("点击返回/关闭").color(NamedTextColor.GRAY))
+                        .build())
+                .onClick(ctx -> ctx.navigateBackOrClose())  // ✨ 智能返回或关闭
+                .build();
     }
 
     /**
@@ -377,30 +377,30 @@ public class NavigationExample {
      */
     private GloomComponent createMenuItem(String name, Material icon, java.util.function.Consumer<gloomlib.gui.interaction.InteractionContext> action) {
         return GloomComponent.builder()
-            .icon(ItemBuilder.from(icon)
-                .name(Component.text(name).color(NamedTextColor.YELLOW))
-                .build())
-            .onClick(action)
-            .build();
+                .icon(ItemBuilder.from(icon)
+                        .name(Component.text(name).color(NamedTextColor.YELLOW))
+                        .build())
+                .onClick(action)
+                .build();
     }
 
     // ==================== 示例子菜单 ====================
 
     private void openShopMenu(Player player) {
         GloomGuiBuilder.chest()
-            .title(Component.text("商店"))
-            .rows(3)
-            .structure(
-                "GGGGGGGGG",
-                "G.......G",
-                "GGGBGGGGG"
-            )
-            .define('G', createBorder())
-            .define('B', createSimpleBackButton())
-            .define('.', createEmptyComponent())
-            .navigationEnabled(true)
-            .withAutoBack()
-            .open(player);
+                .title(Component.text("商店"))
+                .rows(3)
+                .structure(
+                        "GGGGGGGGG",
+                        "G.......G",
+                        "GGGBGGGGG"
+                )
+                .define('G', createBorder())
+                .define('B', createSimpleBackButton())
+                .define('.', createEmptyComponent())
+                .navigationEnabled(true)
+                .withAutoBack()
+                .open(player);
     }
 
     private void openInventoryMenu(Player player) {

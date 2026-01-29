@@ -33,7 +33,7 @@ public interface Property<T> extends Supplier<T> {
      * Maps this property to another value.
      *
      * @param mapper the mapper function
-     * @param <R> the result type
+     * @param <R>    the result type
      * @return the mapped property
      */
     @NotNull
@@ -45,7 +45,7 @@ public interface Property<T> extends Supplier<T> {
      * Flat maps this property to another property.
      *
      * @param mapper the mapper function
-     * @param <R> the result type
+     * @param <R>    the result type
      * @return the flat mapped property
      */
     @NotNull

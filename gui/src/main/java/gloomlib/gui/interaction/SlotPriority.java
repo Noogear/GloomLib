@@ -35,26 +35,6 @@ public interface SlotPriority {
     int PRIORITY_HIGHEST = 200;
 
     /**
-     * Gets the priority of accepting the specified item in a slot.
-     * 
-     * @param slot the slot index
-     * @param item the item to place
-     * @return the priority value
-     */
-    int getPriority(int slot, @Nullable ItemStack item);
-
-    /**
-     * Checks if the slot accepts the specified item.
-     * 
-     * @param slot the slot index
-     * @param item the item to place
-     * @return true if the item is accepted
-     */
-    default boolean acceptsItem(int slot, @Nullable ItemStack item) {
-        return getPriority(slot, item) > PRIORITY_NONE;
-    }
-
-    /**
      * Creates a normal priority strategy.
      *
      * @return a normal priority strategy
@@ -82,5 +62,25 @@ public interface SlotPriority {
     @NotNull
     static SlotPriority high() {
         return (slot, item) -> PRIORITY_HIGH;
+    }
+
+    /**
+     * Gets the priority of accepting the specified item in a slot.
+     *
+     * @param slot the slot index
+     * @param item the item to place
+     * @return the priority value
+     */
+    int getPriority(int slot, @Nullable ItemStack item);
+
+    /**
+     * Checks if the slot accepts the specified item.
+     *
+     * @param slot the slot index
+     * @param item the item to place
+     * @return true if the item is accepted
+     */
+    default boolean acceptsItem(int slot, @Nullable ItemStack item) {
+        return getPriority(slot, item) > PRIORITY_NONE;
     }
 }

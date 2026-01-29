@@ -29,9 +29,9 @@ public class ScrollComponent<T> implements GloomComponent {
     /**
      * Constructs a scroll component.
      *
-     * @param dataState the reactive data state
+     * @param dataState    the reactive data state
      * @param viewportSize the number of visible items
-     * @param renderer the function to render each item
+     * @param renderer     the function to render each item
      * @param clickHandler the callback for item clicks
      */
     public ScrollComponent(ReactiveState<List<T>> dataState,
@@ -56,9 +56,9 @@ public class ScrollComponent<T> implements GloomComponent {
     /**
      * Constructs a scroll component with static data.
      *
-     * @param staticData the data list
+     * @param staticData   the data list
      * @param viewportSize the number of visible items
-     * @param renderer the function to render each item
+     * @param renderer     the function to render each item
      * @param clickHandler the callback for item clicks
      */
     public ScrollComponent(List<T> staticData,

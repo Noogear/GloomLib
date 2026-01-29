@@ -11,11 +11,11 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Interaction context record containing click interaction information.
  *
- * @param player the player who triggered the interaction
- * @param clickType the click type
- * @param action the inventory action
- * @param slot the clicked slot
- * @param item the current item
+ * @param player         the player who triggered the interaction
+ * @param clickType      the click type
+ * @param action         the inventory action
+ * @param slot           the clicked slot
+ * @param item           the current item
  * @param componentIndex the component index
  */
 public record InteractionContext(

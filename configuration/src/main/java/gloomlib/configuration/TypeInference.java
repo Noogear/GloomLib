@@ -11,16 +11,16 @@ import java.util.concurrent.ConcurrentHashMap;
  * Advanced type inference utility for resolving complex generic types with caching support.
  */
 public final class TypeInference {
-    
+
     private static final Map<TypeCacheKey, Class<?>> GENERIC_TYPE_CACHE = new ConcurrentHashMap<>();
     private static final Map<CompatibilityCacheKey, Boolean> COMPATIBILITY_CACHE = new ConcurrentHashMap<>();
     private static final Map<Class<?>, Map<TypeVariable<?>, Type>> INHERITANCE_CACHE = new ConcurrentHashMap<>();
-    
+
     /**
      * Extracts generic parameter type at the specified index.
      * Supports ParameterizedType, WildcardType, TypeVariable, and GenericArrayType.
      *
-     * @param type the generic type
+     * @param type  the generic type
      * @param index the parameter index (0-based)
      * @return the resolved class, or Object.class if resolution fails
      */
@@ -29,19 +29,19 @@ public final class TypeInference {
         if (type == null) {
             return Object.class;
         }
-        
+
         // Cache check
         TypeCacheKey cacheKey = new TypeCacheKey(type, index);
         Class<?> cached = GENERIC_TYPE_CACHE.get(cacheKey);
         if (cached != null) {
             return cached;
         }
-        
+
         Class<?> result = extractGenericParameterInternal(type, index);
         GENERIC_TYPE_CACHE.put(cacheKey, result);
         return result;
     }
-    
+
     private static Class<?> extractGenericParameterInternal(Type type, int index) {
         // 1. ParameterizedType: List<String>, Map<String, Integer>
         if (type instanceof ParameterizedType pt) {
@@ -50,7 +50,7 @@ public final class TypeInference {
                 return resolveType(args[index]);
             }
         }
-        
+
         // 2. TypeVariable: T extends Number
         if (type instanceof TypeVariable<?> tv) {
             Type[] bounds = tv.getBounds();
@@ -58,7 +58,7 @@ public final class TypeInference {
                 return resolveType(bounds[0]);
             }
         }
-        
+
         // 3. WildcardType: ? extends Number, ? super Integer
         if (type instanceof WildcardType wt) {
             Type[] upperBounds = wt.getUpperBounds();
@@ -66,17 +66,17 @@ public final class TypeInference {
                 return resolveType(upperBounds[0]);
             }
         }
-        
+
         // 4. GenericArrayType: T[]
         if (type instanceof GenericArrayType gat) {
             Type componentType = gat.getGenericComponentType();
             Class<?> componentClass = resolveType(componentType);
             return Array.newInstance(componentClass, 0).getClass();
         }
-        
+
         return Object.class;
     }
-    
+
     /**
      * Resolves a Type to Class recursively.
      *
@@ -89,7 +89,7 @@ public final class TypeInference {
         if (type instanceof Class<?> clazz) {
             return clazz;
         }
-        
+
         // 2. ParameterizedType: extract raw type
         if (type instanceof ParameterizedType pt) {
             Type rawType = pt.getRawType();
@@ -97,7 +97,7 @@ public final class TypeInference {
                 return clazz;
             }
         }
-        
+
         // 3. WildcardType: extract upper bound
         if (type instanceof WildcardType wt) {
             Type[] upperBounds = wt.getUpperBounds();
@@ -105,7 +105,7 @@ public final class TypeInference {
                 return resolveType(upperBounds[0]);
             }
         }
-        
+
         // 4. TypeVariable: extract upper bound
         if (type instanceof TypeVariable<?> tv) {
             Type[] bounds = tv.getBounds();
@@ -113,79 +113,79 @@ public final class TypeInference {
                 return resolveType(bounds[0]);
             }
         }
-        
+
         // 5. GenericArrayType: extract component type
         if (type instanceof GenericArrayType gat) {
             Type componentType = gat.getGenericComponentType();
             Class<?> componentClass = resolveType(componentType);
             return Array.newInstance(componentClass, 0).getClass();
         }
-        
+
         return Object.class;
     }
-    
+
     /**
      * Resolves generic inheritance chain from parent classes and interfaces.
      *
      * @param concreteClass the concrete class
-     * @param targetClass the target class or interface
+     * @param targetClass   the target class or interface
      * @return the mapping of type variables to actual types
      */
     @NotNull
     public static Map<TypeVariable<?>, Type> resolveInheritanceChain(
             @NotNull Class<?> concreteClass,
             @NotNull Class<?> targetClass) {
-        
+
         // Cache check
         Map<TypeVariable<?>, Type> cached = INHERITANCE_CACHE.get(concreteClass);
         if (cached != null) {
             return cached;
         }
-        
+
         Map<TypeVariable<?>, Type> result = new HashMap<>();
         resolveInheritanceChainRecursive(concreteClass, targetClass, result);
-        
+
         INHERITANCE_CACHE.put(concreteClass, result);
         return result;
     }
-    
+
     private static void resolveInheritanceChainRecursive(
             Class<?> current,
             Class<?> target,
             Map<TypeVariable<?>, Type> mappings) {
-        
+
         if (current == null || current == Object.class) {
             return;
         }
-        
+
         // Check parent class
         Type genericSuperclass = current.getGenericSuperclass();
         if (genericSuperclass instanceof ParameterizedType pt) {
             Class<?> rawClass = (Class<?>) pt.getRawType();
             TypeVariable<?>[] typeParams = rawClass.getTypeParameters();
             Type[] actualArgs = pt.getActualTypeArguments();
-            
+
             for (int i = 0; i < typeParams.length && i < actualArgs.length; i++) {
                 mappings.put(typeParams[i], actualArgs[i]);
             }
-            
+
             if (rawClass == target) {
                 return;
             }
             resolveInheritanceChainRecursive(rawClass, target, mappings);
         }
-        
+
         // Check interfaces
         for (Type genericInterface : current.getGenericInterfaces()) {
             if (genericInterface instanceof ParameterizedType pt) {
                 Class<?> rawClass = (Class<?>) pt.getRawType();
                 TypeVariable<?>[] typeParams = rawClass.getTypeParameters();
                 Type[] actualArgs = pt.getActualTypeArguments();
-                
+
                 for (int i = 0; i < typeParams.length && i < actualArgs.length; i++) {
                     mappings.put(typeParams[i], actualArgs[i]);
                 }
-                
+
                 if (rawClass == target) {
                     return;
                 }
@@ -193,7 +193,7 @@ public final class TypeInference {
             }
         }
     }
-    
+
     /**
      * Checks type compatibility.
      *
@@ -205,23 +205,23 @@ public final class TypeInference {
         if (sourceType == null || targetType == null) {
             return false;
         }
-        
+
         if (sourceType == targetType) {
             return true;
         }
-        
+
         // Cache check
         CompatibilityCacheKey cacheKey = new CompatibilityCacheKey(sourceType, targetType);
         Boolean cached = COMPATIBILITY_CACHE.get(cacheKey);
         if (cached != null) {
             return cached;
         }
-        
+
         boolean result = targetType.isAssignableFrom(sourceType);
         COMPATIBILITY_CACHE.put(cacheKey, result);
         return result;
     }
-    
+
     /**
      * Infers the value type from a field (e.g., Map value type, List element type).
      *
@@ -231,28 +231,28 @@ public final class TypeInference {
     @NotNull
     public static Class<?> inferFieldType(@NotNull Field field) {
         Class<?> fieldType = field.getType();
-        
+
         // 1. Map<K, V> -> infer V type
         if (Map.class.isAssignableFrom(fieldType)) {
             Type genericType = field.getGenericType();
             return extractGenericParameter(genericType, 1);
         }
-        
+
         // 2. List<T> -> infer T type
         if (List.class.isAssignableFrom(fieldType)) {
             Type genericType = field.getGenericType();
             return extractGenericParameter(genericType, 0);
         }
-        
+
         // 3. Set<T> -> infer T type
         if (Set.class.isAssignableFrom(fieldType)) {
             Type genericType = field.getGenericType();
             return extractGenericParameter(genericType, 0);
         }
-        
+
         return fieldType;
     }
-    
+
     /**
      * Gets all generic parameter types from a field.
      *
@@ -265,7 +265,7 @@ public final class TypeInference {
         if (!(genericType instanceof ParameterizedType pt)) {
             return new Class<?>[0];
         }
-        
+
         Type[] args = pt.getActualTypeArguments();
         Class<?>[] result = new Class<?>[args.length];
         for (int i = 0; i < args.length; i++) {
@@ -273,7 +273,7 @@ public final class TypeInference {
         }
         return result;
     }
-    
+
     /**
      * Clears all caches.
      */
@@ -282,7 +282,7 @@ public final class TypeInference {
         COMPATIBILITY_CACHE.clear();
         INHERITANCE_CACHE.clear();
     }
-    
+
     /**
      * Gets cache statistics.
      *
@@ -295,7 +295,7 @@ public final class TypeInference {
                 COMPATIBILITY_CACHE.size(),
                 INHERITANCE_CACHE.size());
     }
-    
+
     private record TypeCacheKey(Type type, int index) {
         @Override
         public boolean equals(Object obj) {
@@ -303,13 +303,13 @@ public final class TypeInference {
             if (!(obj instanceof TypeCacheKey other)) return false;
             return index == other.index && Objects.equals(type, other.type);
         }
-        
+
         @Override
         public int hashCode() {
             return Objects.hash(type, index);
         }
     }
-    
+
     private record CompatibilityCacheKey(Class<?> source, Class<?> target) {
         @Override
         public boolean equals(Object obj) {
@@ -317,7 +317,7 @@ public final class TypeInference {
             if (!(obj instanceof CompatibilityCacheKey other)) return false;
             return source == other.source && target == other.target;
         }
-        
+
         @Override
         public int hashCode() {
             return Objects.hash(System.identityHashCode(source), System.identityHashCode(target));
