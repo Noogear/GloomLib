@@ -2,3 +2,4 @@ rootProject.name = 'GloomLib'
 
 include "configuration"
 include "gui"
+include "translation"
