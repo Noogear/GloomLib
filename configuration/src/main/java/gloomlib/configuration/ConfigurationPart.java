@@ -7,6 +7,10 @@ import java.util.Map;
  * Represents a node in the configuration structure.
  * Provides capabilities for deep value retrieval.
  */
+
+/**
+ * Base class for nested configuration sections.
+ */
 public abstract class ConfigurationPart {
 
     /**

@@ -11,6 +11,7 @@ allprojects {
         maven { url = "https://repo.papermc.io/repository/maven-public/" }
         maven { url = "https://oss.sonatype.org/content/groups/public/" }
         maven { url = 'https://repo.extendedclip.com/releases/' }
+        maven { url = 'https://jitpack.io' }
     }
 }
 
@@ -50,6 +51,7 @@ subprojects {
         testImplementation libs.junit.jupiter
         testImplementation libs.mockito.core
         testImplementation libs.mockito.junit.jupiter
+        testImplementation libs.mockbukkit
     }
 
     idea {

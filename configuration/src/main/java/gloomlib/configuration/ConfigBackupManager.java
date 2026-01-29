@@ -1,0 +1,219 @@
+package gloomlib.configuration;
+
+import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.concurrent.CompletableFuture;
+
+/**
+ * Manages configuration file backups with automatic versioning and restoration capabilities.
+ */
+public final class ConfigBackupManager {
+
+    private static final SimpleDateFormat TIMESTAMP_FORMAT = new SimpleDateFormat("yyyyMMdd_HHmmss");
+    private static final String BACKUP_DIR_NAME = "backups";
+    private static ComponentLogger logger;
+
+    private ConfigBackupManager() {
+        throw new UnsupportedOperationException("Utility class");
+    }
+
+    /**
+     * Sets the logger for backup operations.
+     *
+     * @param componentLogger the logger to use
+     */
+    public static void setLogger(@NotNull ComponentLogger componentLogger) {
+        logger = componentLogger;
+    }
+
+    /**
+     * Creates a backup of the configuration file.
+     *
+     * @param file the file to backup
+     * @return the backup file, or null if backup failed
+     */
+    @Nullable
+    public static File backup(@NotNull File file) {
+        return backup(file, null);
+    }
+
+    /**
+     * Creates a backup of the configuration file with a specific reason suffix.
+     *
+     * @param file   the file to backup
+     * @param reason optional reason for the backup
+     * @return the backup file, or null if backup failed
+     */
+    @Nullable
+    public static File backup(@NotNull File file, @Nullable String reason) {
+        if (!file.exists()) {
+            logInfo("Cannot backup non-existent file: " + file.getName());
+            return null;
+        }
+
+        try {
+            File backupDir = new File(file.getParent(), BACKUP_DIR_NAME);
+            if (!backupDir.exists() && !backupDir.mkdirs()) {
+                logError("Failed to create backup directory: " + backupDir.getAbsolutePath());
+                return null;
+            }
+
+            String timestamp = TIMESTAMP_FORMAT.format(new Date());
+            String suffix = (reason != null && !reason.isEmpty()) ? "_" + reason : "";
+            String backupName = file.getName() + "." + timestamp + suffix + ".bak";
+            File backupFile = new File(backupDir, backupName);
+
+            Files.copy(file.toPath(), backupFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            logInfo("Created backup: " + backupFile.getName());
+            return backupFile;
+        } catch (IOException e) {
+            logError("Failed to backup file: " + file.getName(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Creates a backup asynchronously.
+     *
+     * @param file the file to backup
+     * @return a CompletableFuture containing the backup file
+     */
+    @NotNull
+    public static CompletableFuture<File> backupAsync(@NotNull File file) {
+        return backupAsync(file, null);
+    }
+
+    /**
+     * Creates a backup asynchronously with a specific reason.
+     *
+     * @param file   the file to backup
+     * @param reason optional reason for the backup
+     * @return a CompletableFuture containing the backup file
+     */
+    @NotNull
+    public static CompletableFuture<File> backupAsync(@NotNull File file, @Nullable String reason) {
+        return CompletableFuture.supplyAsync(() -> backup(file, reason));
+    }
+
+    /**
+     * Restores a configuration file from a backup.
+     *
+     * @param backupFile the backup file to restore from
+     * @param targetFile the target file to restore to
+     * @return true if restoration was successful
+     */
+    public static boolean restore(@NotNull File backupFile, @NotNull File targetFile) {
+        if (!backupFile.exists()) {
+            logError("Backup file does not exist: " + backupFile.getName());
+            return false;
+        }
+
+        try {
+            Files.copy(backupFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            logInfo("Restored configuration from backup: " + backupFile.getName());
+            return true;
+        } catch (IOException e) {
+            logError("Failed to restore from backup: " + backupFile.getName(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Cleans up old backup files, keeping only the most recent N backups.
+     *
+     * @param file      the configuration file whose backups should be cleaned
+     * @param keepCount number of recent backups to keep
+     * @return number of backups deleted
+     */
+    public static int cleanOldBackups(@NotNull File file, int keepCount) {
+        File backupDir = new File(file.getParent(), BACKUP_DIR_NAME);
+        if (!backupDir.exists() || !backupDir.isDirectory()) {
+            return 0;
+        }
+
+        File[] backups = backupDir.listFiles((dir, name) -> name.startsWith(file.getName()) && name.endsWith(".bak"));
+        if (backups == null || backups.length <= keepCount) {
+            return 0;
+        }
+
+        // Sort by last modified time (newest first)
+        java.util.Arrays.sort(backups, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+
+        int deleted = 0;
+        for (int i = keepCount; i < backups.length; i++) {
+            if (backups[i].delete()) {
+                deleted++;
+                logInfo("Deleted old backup: " + backups[i].getName());
+            }
+        }
+
+        return deleted;
+    }
+
+    /**
+     * Gets the total size of all backups for a configuration file (in bytes).
+     *
+     * @param file the configuration file
+     * @return total size in bytes
+     */
+    public static long getBackupSize(@NotNull File file) {
+        File backupDir = new File(file.getParent(), BACKUP_DIR_NAME);
+        if (!backupDir.exists()) {
+            return 0;
+        }
+
+        File[] backups = backupDir.listFiles((dir, name) -> name.startsWith(file.getName()) && name.endsWith(".bak"));
+        if (backups == null) {
+            return 0;
+        }
+
+        long totalSize = 0;
+        for (File backup : backups) {
+            totalSize += backup.length();
+        }
+        return totalSize;
+    }
+
+    /**
+     * Lists all backup files for a configuration file.
+     *
+     * @param file the configuration file
+     * @return array of backup files, or empty array if none exist
+     */
+    @NotNull
+    public static File[] listBackups(@NotNull File file) {
+        File backupDir = new File(file.getParent(), BACKUP_DIR_NAME);
+        if (!backupDir.exists()) {
+            return new File[0];
+        }
+
+        File[] backups = backupDir.listFiles((dir, name) -> name.startsWith(file.getName()) && name.endsWith(".bak"));
+        return backups != null ? backups : new File[0];
+    }
+
+    private static void logInfo(String message) {
+        if (logger != null) {
+            logger.info(message);
+        }
+    }
+
+    private static void logError(String message) {
+        if (logger != null) {
+            logger.error(message);
+        }
+    }
+
+    private static void logError(String message, Throwable throwable) {
+        if (logger != null) {
+            logger.error(message, throwable);
+        }
+    }
+}

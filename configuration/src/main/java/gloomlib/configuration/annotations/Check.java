@@ -22,7 +22,8 @@ public @interface Check {
      *
      * @return the validator class
      */
-    Class<? extends Validator> value() default Validator.class;
+    @SuppressWarnings("rawtypes")
+    Class<? extends Validator> value() default NoOpValidator.class;
 
     /**
      * [Reflection Mode] The class containing the validation method.
@@ -53,5 +54,19 @@ public @interface Check {
          * @return the validated (and potentially corrected) value
          */
         T validate(T value);
+    }
+
+    /**
+     * Default no-op validator (used when no validator is specified).
+     */
+    @SuppressWarnings("rawtypes")
+    /**
+     * No-op validator used as a safe default value for annotations.
+     */
+    final class NoOpValidator implements Validator {
+        @Override
+        public Object validate(Object value) {
+            return value;
+        }
     }
 }
