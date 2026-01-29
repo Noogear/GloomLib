@@ -7,17 +7,19 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 
+/**
+ * Component that links to a specific slot in an external inventory.
+ */
 public record InventoryLinkComponent(Inventory linkedInventory, int linkedSlot,
                                      boolean allowInteraction) implements GloomComponent {
 
     public InventoryLinkComponent {
         if (linkedInventory == null) {
-            throw new IllegalArgumentException("链接的背包不能为 null");
+            throw new IllegalArgumentException("Linked inventory cannot be null");
         }
         if (linkedSlot < 0 || linkedSlot >= linkedInventory.getSize()) {
-            throw new IllegalArgumentException("槽位索引超出范围: " + linkedSlot);
+            throw new IllegalArgumentException("Slot index out of range: " + linkedSlot);
         }
-
     }
 
     public InventoryLinkComponent(Inventory linkedInventory, int linkedSlot) {

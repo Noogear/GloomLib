@@ -41,20 +41,37 @@ public class ItemBuilder {
      * Creates a new builder for the specified material.
      *
      * @param material the material
-     * @return a new builder instance
+     * @return a new builder
      */
     public static ItemBuilder from(@NotNull Material material) {
         return new ItemBuilder(new ItemStack(material));
     }
 
+    /**
+     * Creates a new builder from an existing item stack.
+     *
+     * @param itemStack the item stack
+     * @return a new builder
+     */
     public static ItemBuilder from(@NotNull ItemStack itemStack) {
         return new ItemBuilder(itemStack.clone());
     }
 
+    /**
+     * Creates a new skull builder.
+     *
+     * @return a new skull builder
+     */
     public static SkullBuilder skull() {
         return new SkullBuilder();
     }
 
+    /**
+     * Sets the display name.
+     *
+     * @param name the name
+     * @return this builder
+     */
     public ItemBuilder name(@Nullable Component name) {
         if (meta != null && name != null) {
             meta.displayName(name.decoration(TextDecoration.ITALIC, false));
@@ -62,6 +79,12 @@ public class ItemBuilder {
         return this;
     }
 
+    /**
+     * Sets the lore.
+     *
+     * @param lore the lore
+     * @return this builder
+     */
     public ItemBuilder lore(@NotNull List<Component> lore) {
         if (meta != null) {
             meta.lore(lore.stream()
@@ -71,15 +94,33 @@ public class ItemBuilder {
         return this;
     }
 
+    /**
+     * Sets the lore.
+     *
+     * @param lore the lore
+     * @return this builder
+     */
     public ItemBuilder lore(@NotNull Component... lore) {
         return lore(Arrays.asList(lore));
     }
 
+    /**
+     * Sets the amount.
+     *
+     * @param amount the amount
+     * @return this builder
+     */
     public ItemBuilder amount(int amount) {
         itemStack.setAmount(amount);
         return this;
     }
 
+    /**
+     * Sets the damage.
+     *
+     * @param damage the damage
+     * @return this builder
+     */
     public ItemBuilder damage(int damage) {
         if (meta instanceof Damageable damageable) {
             damageable.setDamage(damage);
@@ -87,6 +128,12 @@ public class ItemBuilder {
         return this;
     }
 
+    /**
+     * Sets the custom model data.
+     *
+     * @param data the model data
+     * @return this builder
+     */
     @SuppressWarnings("deprecation")
     public ItemBuilder modelData(int data) {
         if (meta != null) {
@@ -95,6 +142,13 @@ public class ItemBuilder {
         return this;
     }
 
+    /**
+     * Adds an enchantment.
+     *
+     * @param enchantment the enchantment
+     * @param level the level
+     * @return this builder
+     */
     public ItemBuilder enchant(@NotNull Enchantment enchantment, int level) {
         if (meta != null) {
             meta.addEnchant(enchantment, level, true);
@@ -102,6 +156,12 @@ public class ItemBuilder {
         return this;
     }
 
+    /**
+     * Removes an enchantment.
+     *
+     * @param enchantment the enchantment
+     * @return this builder
+     */
     public ItemBuilder removeEnchant(@NotNull Enchantment enchantment) {
         if (meta != null) {
             meta.removeEnchant(enchantment);
@@ -109,6 +169,12 @@ public class ItemBuilder {
         return this;
     }
 
+    /**
+     * Adds item flags.
+     *
+     * @param flags the flags
+     * @return this builder
+     */
     public ItemBuilder flags(@NotNull ItemFlag... flags) {
         if (meta != null) {
             meta.addItemFlags(flags);
@@ -116,6 +182,12 @@ public class ItemBuilder {
         return this;
     }
 
+    /**
+     * Removes item flags.
+     *
+     * @param flags the flags
+     * @return this builder
+     */
     public ItemBuilder removeFlags(@NotNull ItemFlag... flags) {
         if (meta != null) {
             meta.removeItemFlags(flags);
@@ -123,6 +195,12 @@ public class ItemBuilder {
         return this;
     }
 
+    /**
+     * Toggles the glow effect.
+     *
+     * @param glow true to glow
+     * @return this builder
+     */
     public ItemBuilder glow(boolean glow) {
         if (glow) {
             enchant(Enchantment.UNBREAKING, 1);
@@ -134,6 +212,16 @@ public class ItemBuilder {
         return this;
     }
 
+    /**
+     * Sets persistent data.
+     *
+     * @param key the key
+     * @param type the data type
+     * @param value the value
+     * @param <T> storage type
+     * @param <Z> object type
+     * @return this builder
+     */
     public <T, Z> ItemBuilder pdc(@NotNull NamespacedKey key, @NotNull PersistentDataType<T, Z> type, @NotNull Z value) {
         if (meta != null) {
             meta.getPersistentDataContainer().set(key, type, value);
@@ -141,6 +229,14 @@ public class ItemBuilder {
         return this;
     }
 
+    /**
+     * Edits the item meta.
+     *
+     * @param metaClass the meta class
+     * @param consumer the editor
+     * @param <M> meta type
+     * @return this builder
+     */
     public <M extends ItemMeta> ItemBuilder editMeta(@NotNull Class<M> metaClass, @NotNull Consumer<M> consumer) {
         if (metaClass.isInstance(meta)) {
             consumer.accept(metaClass.cast(meta));
@@ -148,6 +244,12 @@ public class ItemBuilder {
         return this;
     }
 
+    /**
+     * Edits the item meta.
+     *
+     * @param consumer the editor
+     * @return this builder
+     */
     public ItemBuilder editMeta(@NotNull Consumer<ItemMeta> consumer) {
         if (meta != null) {
             consumer.accept(meta);
@@ -155,23 +257,43 @@ public class ItemBuilder {
         return this;
     }
 
+    /**
+     * Builds the item stack.
+     *
+     * @return the built item stack
+     */
     @NotNull
     public ItemStack build() {
         itemStack.setItemMeta(meta);
         return itemStack;
     }
 
+    /**
+     * Builder for player skulls.
+     */
     public static class SkullBuilder extends ItemBuilder {
 
         private SkullBuilder() {
             super(new ItemStack(Material.PLAYER_HEAD));
         }
 
+        /**
+         * Sets the skull owner.
+         *
+         * @param player the player
+         * @return this builder
+         */
         public SkullBuilder owner(@NotNull OfflinePlayer player) {
             editMeta(SkullMeta.class, meta -> meta.setOwningPlayer(player));
             return this;
         }
 
+        /**
+         * Sets the skull texture.
+         *
+         * @param base64 the base64 texture
+         * @return this builder
+         */
         public SkullBuilder texture(@NotNull String base64) {
             editMeta(SkullMeta.class, meta -> {
                 PlayerProfile profile = Bukkit.createProfile(UUID.randomUUID());

@@ -11,19 +11,43 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
+/**
+ * Interface representing an observable property.
+ *
+ * @param <T> the property type
+ */
 public interface Property<T> extends Supplier<T> {
 
     @Nullable
     @Override
     T get();
 
+    /**
+     * Observes the property with a weak reference.
+     *
+     * @param consumer the consumer
+     */
     void observeWeak(@NotNull Consumer<T> consumer);
 
+    /**
+     * Maps this property to another value.
+     *
+     * @param mapper the mapper function
+     * @param <R> the result type
+     * @return the mapped property
+     */
     @NotNull
     default <R> Property<R> map(@NotNull Function<T, R> mapper) {
         return new MappedProperty<>(this, mapper);
     }
 
+    /**
+     * Flat maps this property to another property.
+     *
+     * @param mapper the mapper function
+     * @param <R> the result type
+     * @return the flat mapped property
+     */
     @NotNull
     default <R> Property<R> flatMap(@NotNull Function<T, Property<R>> mapper) {
         return new FlatMappedProperty<>(this, mapper);

@@ -13,19 +13,38 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Interface representing an element in a GUI slot.
+ */
 public sealed interface SlotElement permits
         SlotElement.ComponentSlot,
         SlotElement.GuiLink,
         SlotElement.InventoryLink {
 
+    /**
+     * Renders the element for a player.
+     *
+     * @param player the player
+     * @return the rendered item stack
+     */
     @Nullable
     ItemStack render(@Nullable Player player);
 
+    /**
+     * Gets the holding element.
+     *
+     * @return the holding element
+     */
     @NotNull
     default SlotElement getHoldingElement() {
         return this;
     }
 
+    /**
+     * Traverses the element hierarchy.
+     *
+     * @return the list of elements
+     */
     @NotNull
     default List<SlotElement> traverse() {
         List<SlotElement> path = new ArrayList<>();
@@ -33,6 +52,12 @@ public sealed interface SlotElement permits
         return path;
     }
 
+    /**
+     * Slot element representing a component at an index.
+     *
+     * @param component the component
+     * @param index the component index
+     */
     record ComponentSlot(
             @NotNull GloomComponent component,
             int index
@@ -43,12 +68,24 @@ public sealed interface SlotElement permits
             return component.render(index);
         }
 
+        /**
+         * Observes the component.
+         *
+         * @param observer the observer
+         * @param how notification hint
+         */
         public void observe(@NotNull Observer observer, int how) {
             if (component instanceof Observable observable) {
                 observable.addObserver(observer, index, how);
             }
         }
 
+        /**
+         * Unobserves the component.
+         *
+         * @param observer the observer to remove
+         * @param how notification hint
+         */
         public void unobserve(@NotNull Observer observer, int how) {
             if (component instanceof Observable observable) {
                 observable.removeObserver(observer, index, how);
@@ -56,6 +93,12 @@ public sealed interface SlotElement permits
         }
     }
 
+    /**
+     * Slot element linking to another GUI slot.
+     *
+     * @param gui the target GUI
+     * @param slot the target slot
+     */
     record GuiLink(
             @NotNull GloomGui gui,
             int slot
@@ -67,16 +110,14 @@ public sealed interface SlotElement permits
             if (component != null) {
                 return component.render(gui.getComponentIndex(slot));
             }
-            ItemStack background = gui.getBackground();
-            return background;
+            return gui.getBackground();
         }
 
         @Override
         public @NotNull SlotElement getHoldingElement() {
             GloomComponent component = gui.getComponent(slot);
             if (component != null) {
-                SlotElement element = new ComponentSlot(component, gui.getComponentIndex(slot));
-                return element.getHoldingElement();
+                return new ComponentSlot(component, gui.getComponentIndex(slot)).getHoldingElement();
             }
             return this;
         }
@@ -88,25 +129,34 @@ public sealed interface SlotElement permits
 
             GloomComponent component = gui.getComponent(slot);
             if (component != null) {
-                SlotElement element = new ComponentSlot(component, gui.getComponentIndex(slot));
-                path.addAll(element.traverse());
+                path.addAll(new ComponentSlot(component, gui.getComponentIndex(slot)).traverse());
             }
 
             return path;
         }
 
+        /**
+         * Observes the entire link chain.
+         *
+         * @param observer the observer
+         * @param how notification hint
+         */
         public void observeChain(@NotNull Observer observer, int how) {
-            List<SlotElement> chain = traverse();
-            for (SlotElement element : chain) {
+            for (SlotElement element : traverse()) {
                 if (element instanceof ComponentSlot componentSlot) {
                     componentSlot.observe(observer, how);
                 }
             }
         }
 
+        /**
+         * Unobserves the entire link chain.
+         *
+         * @param observer the observer to remove
+         * @param how notification hint
+         */
         public void unobserveChain(@NotNull Observer observer, int how) {
-            List<SlotElement> chain = traverse();
-            for (SlotElement element : chain) {
+            for (SlotElement element : traverse()) {
                 if (element instanceof ComponentSlot componentSlot) {
                     componentSlot.unobserve(observer, how);
                 }
@@ -114,12 +164,25 @@ public sealed interface SlotElement permits
         }
     }
 
+    /**
+     * Slot element linking to a Bukkit inventory slot.
+     *
+     * @param inventory the inventory
+     * @param slot the slot index
+     * @param background the background item
+     */
     record InventoryLink(
             @NotNull Inventory inventory,
             int slot,
             @Nullable ItemStack background
     ) implements SlotElement {
 
+        /**
+         * Constructs an inventory link.
+         *
+         * @param inventory the inventory
+         * @param slot the slot index
+         */
         public InventoryLink(@NotNull Inventory inventory, int slot) {
             this(inventory, slot, null);
         }
@@ -127,24 +190,34 @@ public sealed interface SlotElement permits
         @Override
         public @Nullable ItemStack render(@Nullable Player player) {
             ItemStack item = inventory.getItem(slot);
-
-            if (item != null && !item.getType().isAir()) {
-                return item;
-            }
-
-            return background;
+            return (item != null && !item.getType().isAir()) ? item : background;
         }
 
+        /**
+         * Checks if the slot is empty.
+         *
+         * @return true if empty
+         */
         public boolean isEmpty() {
             ItemStack item = inventory.getItem(slot);
             return item == null || item.getType().isAir();
         }
 
+        /**
+         * Gets the item in the slot.
+         *
+         * @return the item
+         */
         @Nullable
         public ItemStack getItem() {
             return inventory.getItem(slot);
         }
 
+        /**
+         * Sets the item in the slot.
+         *
+         * @param item the item
+         */
         public void setItem(@Nullable ItemStack item) {
             inventory.setItem(slot, item);
         }

@@ -6,9 +6,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Bundle item utility class (MC 1.21+).
- * Handles Bundle container insertion and extraction logic.
- * Uses reflection and version detection since Paper API may vary across versions.
+ * Utility class for Bundle item operations.
  */
 public final class BundleUtils {
 
@@ -31,9 +29,9 @@ public final class BundleUtils {
     }
 
     /**
-     * Checks if the current server supports Bundle.
+     * Checks if the current server supports Bundles.
      *
-     * @return true if Bundle is supported
+     * @return true if supported
      */
     public static boolean isBundleSupported() {
         return BUNDLE_SUPPORTED;
@@ -43,7 +41,7 @@ public final class BundleUtils {
      * Checks if an item is a Bundle.
      *
      * @param item the item to check
-     * @return true if the item is a Bundle
+     * @return true if it is a Bundle
      */
     public static boolean isBundle(@Nullable ItemStack item) {
         if (!BUNDLE_SUPPORTED || GuiItemUtils.isEmpty(item)) {
@@ -57,7 +55,7 @@ public final class BundleUtils {
      *
      * @param bundle the Bundle item
      * @param toInsert the item to insert
-     * @return the insert result [new Bundle, remaining item]
+     * @return the insert result
      */
     @NotNull
     public static InsertResult insertIntoBundle(@NotNull ItemStack bundle, @NotNull ItemStack toInsert) {
@@ -96,7 +94,7 @@ public final class BundleUtils {
      * Extracts the first item from a Bundle.
      *
      * @param bundle the Bundle item
-     * @return the extract result [new Bundle, extracted item]
+     * @return the extract result
      */
     @NotNull
     public static ExtractResult extractFromBundle(@NotNull ItemStack bundle) {
@@ -127,12 +125,6 @@ public final class BundleUtils {
         return new ExtractResult(bundle, null);
     }
 
-    /**
-     * Calculates the total amount of items in a Bundle.
-     *
-     * @param items the list of items
-     * @return the total amount
-     */
     private static int getTotalAmount(java.util.List<ItemStack> items) {
         return items.stream()
                 .mapToInt(ItemStack::getAmount)
@@ -140,16 +132,16 @@ public final class BundleUtils {
     }
 
     /**
-     * Bundle insert result.
+     * Result of a Bundle insert operation.
      *
-     * @param newBundle the new Bundle after insertion
-     * @param remaining the remaining item that could not be inserted
+     * @param newBundle the new Bundle item
+     * @param remaining the remaining item
      */
     public record InsertResult(@NotNull ItemStack newBundle, @Nullable ItemStack remaining) {
         /**
-         * Checks if there are remaining items that could not be inserted.
+         * Checks if there are remaining items.
          *
-         * @return {@code true} if remaining items exist, {@code false} otherwise
+         * @return true if items remain
          */
         public boolean hasRemaining() {
             return !GuiItemUtils.isEmpty(remaining);
@@ -157,16 +149,16 @@ public final class BundleUtils {
     }
 
     /**
-     * Bundle extract result.
+     * Result of a Bundle extract operation.
      *
-     * @param newBundle the new Bundle after extraction
+     * @param newBundle the new Bundle item
      * @param extracted the extracted item
      */
     public record ExtractResult(@NotNull ItemStack newBundle, @Nullable ItemStack extracted) {
         /**
-         * Checks if an item was successfully extracted.
+         * Checks if an item was extracted.
          *
-         * @return {@code true} if extraction occurred, {@code false} otherwise
+         * @return true if extracted
          */
         public boolean wasExtracted() {
             return !GuiItemUtils.isEmpty(extracted);

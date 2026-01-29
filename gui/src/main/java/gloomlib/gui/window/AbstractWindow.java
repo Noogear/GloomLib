@@ -23,80 +23,32 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 
 /**
- * Base implementation of {@link Window} with state management and lifecycle handling.
- * <p>
- * Tracks window state (open/closed/closing), manages component observers,
- * and handles periodic updates with desync detection.
+ * Base implementation of Window with state management and lifecycle handling.
  */
 public class AbstractWindow implements Window, InventoryHolder, Observer {
 
-    /**
-     * The player viewing this window.
-     */
     protected final Player viewer;
-
-    /**
-     * The window title component.
-     */
     protected final Component title;
-
-    /**
-     * The GUI managing components for this window.
-     */
     protected final GloomGui gui;
-    /**
-     * Whether the window is closed.
-     */
     protected final AtomicBoolean isClosed = new AtomicBoolean(false);
-    /**
-     * Tick counters for each slot.
-     */
     protected final Map<Integer, Integer> slotTickCounters = new ConcurrentHashMap<>();
-    /**
-     * State change handlers.
-     */
     protected final Map<String, BiConsumer<WindowState, WindowState>> stateChangeHandlers = new ConcurrentHashMap<>();
-    /**
-     * The inventory type.
-     */
     private final InventoryType type;
-    /**
-     * The inventory size (for chest types).
-     */
     private final int size;
-    /**
-     * The Bukkit inventory instance.
-     */
     protected Inventory inventory;
-
-    /**
-     * Server-side window state.
-     */
     protected volatile WindowState serverWindowState = WindowState.CLOSED;
-
-    /**
-     * Client-side window state.
-     */
     protected volatile WindowState clientWindowState = WindowState.CLOSED;
-
-    /**
-     * Last ping time for desync detection.
-     */
     protected volatile long lastPingTime = 0;
-
-    /**
-     * Last periodic update check time.
-     */
     protected volatile long lastUpdatePeriodCheck = 0;
 
     /**
      * Constructs a new abstract window.
      *
-     * @param viewer the player viewing the window
-     * @param title  the window title
-     * @param gui    the GUI instance
-     * @param type   the inventory type
-     * @param size   the inventory size (for chest types)
+     * @param viewer the viewer player
+     * @param title the window title
+     * @param gui the GUI instance
+     * @param type the inventory type
+     * @param size the inventory size
      */
     public AbstractWindow(Player viewer, Component title, GloomGui gui, InventoryType type, int size) {
         this.viewer = viewer;
@@ -110,7 +62,6 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
      * Creates the Bukkit inventory for this window.
      *
      * @return the created inventory
-     * @throws IllegalArgumentException if chest size is invalid
      */
     protected Inventory createInventory() {
         if (type == InventoryType.CHEST) {
@@ -177,8 +128,6 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
 
     /**
      * Checks for window state desync between client and server.
-     * <p>
-     * Pings every 1 second to detect if the player closed the inventory client-side.
      */
     protected void checkWindowStateSync() {
         long now = System.currentTimeMillis();
@@ -193,9 +142,7 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
     }
 
     /**
-     * Checks for periodic component updates based on tick counters.
-     * <p>
-     * Increments per-slot counters and marks dirty when update period reached.
+     * Checks for periodic component updates.
      */
     protected void checkPeriodicUpdates() {
         for (int slot = 0; slot < gui.getSize(); slot++) {
@@ -216,9 +163,6 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
 
     /**
      * Handles client-server desync detection.
-     * <p>
-     * Called when the client closed but server state is still open.
-     * Forces window closure and cleanup.
      */
     protected void handleDesync() {
         if (clientWindowState == WindowState.CLOSED && serverWindowState != WindowState.CLOSED) {
@@ -230,7 +174,7 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
     }
 
     /**
-     * Changes the window state and notifies registered handlers.
+     * Changes the window state and notifies handlers.
      *
      * @param newState the new window state
      */
@@ -256,8 +200,8 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
      * Registers a handler for a specific state transition.
      *
      * @param fromState the starting state
-     * @param toState   the ending state
-     * @param handler   the handler to invoke
+     * @param toState the ending state
+     * @param handler the handler
      */
     public void onStateChange(WindowState fromState, WindowState toState, BiConsumer<WindowState, WindowState> handler) {
         String key = fromState + "_to_" + toState;
@@ -267,7 +211,7 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
     /**
      * Registers a handler for any state change.
      *
-     * @param handler the handler to invoke on any transition
+     * @param handler the handler
      */
     public void onAnyStateChange(BiConsumer<WindowState, WindowState> handler) {
         stateChangeHandlers.put("*", handler);
@@ -330,8 +274,8 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
     /**
      * Updates the window title for a specific viewer.
      *
-     * @param viewer the viewer entity
-     * @param title  the new title component
+     * @param viewer the viewer player
+     * @param title the new title component
      */
     @SuppressWarnings("deprecation")
     public void updateTitle(@NotNull final HumanEntity viewer, final Component title) {

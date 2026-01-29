@@ -12,6 +12,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 
+/**
+ * Template class for creating GUI instances.
+ */
 public class GloomGuiTemplate {
 
     private final Component title;
@@ -24,6 +27,18 @@ public class GloomGuiTemplate {
     private final Map<Character, GloomComponent> charComponents;
     private final Map<Integer, GloomComponent> slotComponents;
 
+    /**
+     * Constructs a GUI template.
+     *
+     * @param title the title
+     * @param rows the number of rows
+     * @param type the inventory type
+     * @param config the GUI configuration
+     * @param closeAction the action on close
+     * @param structure the layout structure
+     * @param charComponents component mapping for characters
+     * @param slotComponents component mapping for slots
+     */
     public GloomGuiTemplate(Component title,
                             int rows,
                             InventoryType type,
@@ -42,6 +57,12 @@ public class GloomGuiTemplate {
         this.slotComponents = slotComponents;
     }
 
+    /**
+     * Creates a GUI instance for a player from this template.
+     *
+     * @param player the player
+     * @return the GUI instance
+     */
     public GloomGui create(Player player) {
         Map<GloomComponent, GloomComponent> prototypeToClone = new HashMap<>();
 

@@ -27,8 +27,6 @@ import java.util.function.Consumer;
 
 /**
  * Core GUI implementation with component management and reactive state.
- * <p>
- * Optimized with array-based slot lookups and batch update support.
  */
 public final class GloomGui implements Gui.Normal {
 
@@ -55,15 +53,15 @@ public final class GloomGui implements Gui.Normal {
     /**
      * Constructs a new GloomGui.
      *
-     * @param player         the player for scheduler context
-     * @param title          the GUI title
-     * @param rows           the number of rows (for chest types)
-     * @param type           the inventory type
-     * @param configuration  the GUI configuration
-     * @param closeAction    the close event handler (nullable)
-     * @param structure      the structure pattern (nullable)
-     * @param charComponents the character-to-component mapping
-     * @param slotComponents the slot-to-component mapping
+     * @param player the player context
+     * @param title the GUI title
+     * @param rows the number of rows
+     * @param type the inventory type
+     * @param configuration the GUI configuration
+     * @param closeAction the action on close
+     * @param structure the layout structure
+     * @param charComponents the character components
+     * @param slotComponents the slot components
      */
     public GloomGui(Player player,
                     Component title,
@@ -84,6 +82,11 @@ public final class GloomGui implements Gui.Normal {
         calculateLayout(type, structure, charComponents, slotComponents);
     }
 
+    /**
+     * Gets the Bukkit inventory.
+     *
+     * @return the inventory
+     */
     @Override
     @Nullable
     public Inventory getInventory() {
@@ -127,7 +130,6 @@ public final class GloomGui implements Gui.Normal {
             this.componentIndices.put(slot, 0);
         });
 
-        // 性能优化：构建数组索引
         buildSlotArrays();
 
         this.tickingSlots.clear();
@@ -138,9 +140,6 @@ public final class GloomGui implements Gui.Normal {
         });
     }
 
-    /**
-     * 构建槽位数组索引，提供 O(1) 访问性能
-     */
     private void buildSlotArrays() {
         this.slotToComponent = new GloomComponent[size];
         this.slotToComponentIndex = new int[size];
@@ -151,6 +150,11 @@ public final class GloomGui implements Gui.Normal {
         }
     }
 
+    /**
+     * Binds the GUI to a window.
+     *
+     * @param window the window to bind
+     */
     @Override
     public void bindToWindow(@NotNull AbstractWindow window) {
         this.inventory = window.getInventory();
@@ -178,6 +182,9 @@ public final class GloomGui implements Gui.Normal {
         }
     }
 
+    /**
+     * Redraws the entire GUI.
+     */
     @Override
     public void redraw() {
         if (inventory == null) return;
@@ -186,6 +193,9 @@ public final class GloomGui implements Gui.Normal {
         flushUpdates();
     }
 
+    /**
+     * Cycles the GUI state.
+     */
     @Override
     public void tick() {
         if (inventory == null) return;
@@ -200,16 +210,27 @@ public final class GloomGui implements Gui.Normal {
         flushUpdates();
     }
 
+    /**
+     * Marks a slot as dirty.
+     *
+     * @param slot the slot index
+     */
     public void markDirty(int slot) {
         if (slot >= 0 && slot < size) {
             dirtySlots.set(slot);
         }
     }
 
+    /**
+     * Marks all slots as dirty.
+     */
     public void markAllDirty() {
         dirtySlots.set(0, size);
     }
 
+    /**
+     * Flushes all pending updates to the inventory.
+     */
     public void flushUpdates() {
         if (inventory == null || batchUpdateMode) return;
 
@@ -221,10 +242,16 @@ public final class GloomGui implements Gui.Normal {
         dirtySlots.clear();
     }
 
+    /**
+     * Begins a batch update.
+     */
     public void beginBatchUpdate() {
         batchUpdateMode = true;
     }
 
+    /**
+     * Ends a batch update.
+     */
     public void endBatchUpdate() {
         batchUpdateMode = false;
         flushUpdates();
@@ -255,6 +282,11 @@ public final class GloomGui implements Gui.Normal {
         return current.getAmount() != newItem.getAmount();
     }
 
+    /**
+     * Handles the close event.
+     *
+     * @param event the close event
+     */
     public void handleClose(InventoryCloseEvent event) {
         if (closeAction != null) {
             closeAction.accept(event);
@@ -273,8 +305,12 @@ public final class GloomGui implements Gui.Normal {
         }
     }
 
+    /**
+     * Handles click events.
+     *
+     * @param event the click event
+     */
     public void handleClick(InventoryClickEvent event) {
-        // 冻结状态拦截所有点击
         if (frozen.get()) {
             event.setCancelled(true);
             return;
@@ -284,11 +320,9 @@ public final class GloomGui implements Gui.Normal {
         ClickType clickType = event.getClick();
         int slot = event.getSlot();
 
-        // 点击 GUI 区域
         if (event.getClickedInventory() == event.getInventory()) {
             handleGuiClick(event, clicker, clickType, slot);
         }
-        // 点击玩家背包区域
         else if (event.getClickedInventory() != null) {
             handlePlayerInventoryClick(event, clicker, clickType);
         }
@@ -299,19 +333,15 @@ public final class GloomGui implements Gui.Normal {
         ItemStack slotItem = event.getCurrentItem();
         ItemStack cursorItem = event.getCursor();
 
-        // InventoryLinkComponent 特殊处理
         if (component instanceof InventoryLinkComponent link) {
             if (!link.allowInteraction()) {
                 event.setCancelled(true);
             }
-            // 允许交互的 InventoryLink 不取消事件，让 Bukkit 处理
             return;
         }
 
-        // 默认取消 GUI 区域的所有事件
         event.setCancelled(true);
 
-        // 使用 ClickActionHandler 处理不同类型的点击
         boolean changed = false;
         ItemStack newSlotItem = null;
         ItemStack newCursorItem = null;
@@ -331,7 +361,6 @@ public final class GloomGui implements Gui.Normal {
             }
             case SHIFT_LEFT, SHIFT_RIGHT -> {
                 PlayerInventory playerInv = clicker.getInventory();
-                // 使用优先级策略处理 Shift+点击
                 ClickActionHandler.ShiftClickResult result = ClickActionHandler.handleShiftClickWithPriority(
                         slotItem, playerInv, 0, 36, slotPriority
                 );
@@ -389,11 +418,9 @@ public final class GloomGui implements Gui.Normal {
                 }
             }
             default -> {
-                // UNKNOWN, WINDOW_BORDER_LEFT, WINDOW_BORDER_RIGHT, CREATIVE 等不处理
             }
         }
 
-        // 应用变更
         if (changed) {
             if (newSlotItem != null || clickType.isLeftClick() || clickType.isRightClick()
                     || clickType == ClickType.SWAP_OFFHAND || clickType == ClickType.DROP
@@ -407,7 +434,6 @@ public final class GloomGui implements Gui.Normal {
             }
         }
 
-        // 调用组件的 onClick 回调
         if (component != null) {
             InteractionContext context = new InteractionContext(
                     clicker, clickType, event.getAction(), slot, slotItem, getComponentIndex(slot)
@@ -424,18 +450,21 @@ public final class GloomGui implements Gui.Normal {
     }
 
     private void handlePlayerInventoryClick(InventoryClickEvent event, Player clicker, ClickType clickType) {
-        // 阻止 Shift+点击从玩家背包移动物品到 GUI（GUI 槽位由组件控制）
         if (clickType.isShiftClick() && event.getAction().toString().contains("MOVE_TO")) {
             event.setCancelled(true);
         }
     }
 
+    /**
+     * Handles drag events.
+     *
+     * @param event the drag event
+     */
     public void handleDrag(InventoryDragEvent event) {
         Set<Integer> rawSlots = event.getRawSlots();
         Set<Integer> guiSlots = new java.util.HashSet<>();
         Set<Integer> linkSlots = new java.util.HashSet<>();
 
-        // 分类槽位：GUI 槽位 vs InventoryLink 槽位
         for (int rawSlot : rawSlots) {
             if (rawSlot < size) {
                 GloomComponent component = getComponent(rawSlot);
@@ -447,13 +476,11 @@ public final class GloomGui implements Gui.Normal {
             }
         }
 
-        // 如果涉及非InventoryLink的GUI槽位，取消事件
         if (!guiSlots.isEmpty()) {
             event.setCancelled(true);
             return;
         }
 
-        // 如果只涉及InventoryLink槽位，使用DragHandler处理
         if (!linkSlots.isEmpty()) {
             ItemStack draggedItem = event.getOldCursor();
             DragHandler.DragResult result = DragHandler.handleDrag(
@@ -469,7 +496,6 @@ public final class GloomGui implements Gui.Normal {
                     }
             );
 
-            // 应用结果
             event.setCancelled(true);
             result.updatedSlots().forEach((slot, item) -> {
                 GloomComponent comp = getComponent(slot);
@@ -484,27 +510,53 @@ public final class GloomGui implements Gui.Normal {
         }
     }
 
+    /**
+     * Gets the player.
+     *
+     * @return the player
+     */
     @Override
     @NotNull
     public Player getPlayer() {
         return player;
     }
 
+    /**
+     * Gets the title.
+     *
+     * @return the title
+     */
     @Override
     @NotNull
     public Component getTitle() {
         return title;
     }
 
+    /**
+     * Gets the size.
+     *
+     * @return the size
+     */
     @Override
     public int getSize() {
         return size;
     }
 
+    /**
+     * Gets the configuration.
+     *
+     * @return the configuration
+     */
     public GuiConfiguration getConfiguration() {
         return configuration;
     }
 
+    /**
+     * Gets a component at a slot.
+     *
+     * @param slot the slot
+     * @return the component
+     */
     @Override
     @Nullable
     public GloomComponent getComponent(int slot) {
@@ -514,6 +566,12 @@ public final class GloomGui implements Gui.Normal {
         return slotToComponent[slot];
     }
 
+    /**
+     * Gets the component index at a slot.
+     *
+     * @param slot the slot
+     * @return the index
+     */
     @Override
     public int getComponentIndex(int slot) {
         if (slot < 0 || slot >= size) {
@@ -522,39 +580,71 @@ public final class GloomGui implements Gui.Normal {
         return slotToComponentIndex[slot];
     }
 
+    /**
+     * Gets the layout map.
+     *
+     * @return the layout
+     */
     @Override
     @NotNull
     public Map<Integer, GloomComponent> getLayout() {
         return Collections.unmodifiableMap(components);
     }
 
+    /**
+     * Gets the frozen property.
+     *
+     * @return the property
+     */
     public Property<Boolean> getFrozen() {
         return frozen;
     }
 
+    /**
+     * Checks if the GUI is frozen.
+     *
+     * @return true if frozen
+     */
     @Override
     public boolean isFrozen() {
         return frozen.get();
     }
 
+    /**
+     * Sets the frozen state.
+     *
+     * @param frozen the state
+     */
     @Override
     public void setFrozen(boolean frozen) {
         this.frozen.set(frozen);
     }
 
+    /**
+     * Gets the background item.
+     *
+     * @return the background
+     */
     @Override
     @Nullable
     public ItemStack getBackground() {
         return background.get();
     }
 
+    /**
+     * Sets the background item.
+     *
+     * @param background the background
+     */
     @Override
     public void setBackground(@Nullable ItemStack background) {
         this.background.set(background);
     }
 
     /**
-     * 获取当前的槽位优先级策略
+     * Gets the slot priority.
+     *
+     * @return the priority
      */
     @NotNull
     public SlotPriority getSlotPriority() {
@@ -562,32 +652,55 @@ public final class GloomGui implements Gui.Normal {
     }
 
     /**
-     * 设置 Shift+点击的槽位优先级策略
+     * Sets the slot priority.
      *
-     * @param priority 优先级策略
+     * @param priority the priority
      */
     public void setSlotPriority(@NotNull SlotPriority priority) {
         this.slotPriority = priority;
     }
 
+    /**
+     * Sets a slot element.
+     *
+     * @param slot the slot
+     * @param element the element
+     */
     @Override
     public void setSlotElement(int slot, @NotNull SlotElement element) {
         slotElements.put(slot, element);
         markDirty(slot);
     }
 
+    /**
+     * Gets a slot element.
+     *
+     * @param slot the slot
+     * @return the element
+     */
     @Override
     @Nullable
     public SlotElement getSlotElement(int slot) {
         return slotElements.get(slot);
     }
 
+    /**
+     * Removes a slot element.
+     *
+     * @param slot the slot
+     */
     @Override
     public void removeSlotElement(int slot) {
         slotElements.remove(slot);
         markDirty(slot);
     }
 
+    /**
+     * Renders a slot.
+     *
+     * @param slot the slot
+     * @return the item stack
+     */
     @Override
     @Nullable
     public ItemStack renderSlot(int slot) {
@@ -604,12 +717,26 @@ public final class GloomGui implements Gui.Normal {
         return background.get();
     }
 
+    /**
+     * Adds an observer.
+     *
+     * @param who the observer
+     * @param what the subject
+     * @param how notification hint
+     */
     @Override
     public void addObserver(@NotNull Observer who, int what, int how) {
         observers.computeIfAbsent(what, k -> ConcurrentHashMap.newKeySet())
                 .add(new ObserverEntry(who, how));
     }
 
+    /**
+     * Removes an observer.
+     *
+     * @param who the observer
+     * @param what the subject
+     * @param how notification hint
+     */
     @Override
     public void removeObserver(@NotNull Observer who, int what, int how) {
         Set<ObserverEntry> slotObservers = observers.get(what);
@@ -621,6 +748,11 @@ public final class GloomGui implements Gui.Normal {
         }
     }
 
+    /**
+     * Removes all observers for an object.
+     *
+     * @param who the observer
+     */
     @Override
     public void removeAllObservers(@NotNull Observer who) {
         observers.values().forEach(set ->
@@ -629,6 +761,11 @@ public final class GloomGui implements Gui.Normal {
         observers.entrySet().removeIf(entry -> entry.getValue().isEmpty());
     }
 
+    /**
+     * Notifies observers of a slot change.
+     *
+     * @param slot the slot
+     */
     public void notifySlotObservers(int slot) {
         Set<ObserverEntry> slotObservers = observers.get(slot);
         if (slotObservers != null) {
@@ -636,12 +773,21 @@ public final class GloomGui implements Gui.Normal {
         }
     }
 
+    /**
+     * Notifies all observers.
+     */
     public void notifyAllObservers() {
         for (int slot = 0; slot < size; slot++) {
             notifySlotObservers(slot);
         }
     }
 
+    /**
+     * Gets the update period for a subject.
+     *
+     * @param what the subject
+     * @return the period
+     */
     @Override
     public int getUpdatePeriod(int what) {
         SlotElement element = slotElements.get(what);

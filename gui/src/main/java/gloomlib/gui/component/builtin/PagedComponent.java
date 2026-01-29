@@ -13,6 +13,11 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
+/**
+ * Component that displays a paged list of data.
+ *
+ * @param <T> the data type
+ */
 public class PagedComponent<T> implements GloomComponent {
 
     private final ReactiveState<List<T>> dataState;
@@ -29,6 +34,14 @@ public class PagedComponent<T> implements GloomComponent {
     private boolean dirty = true;
     private int cachedPage = -1;
 
+    /**
+     * Constructs a paged component.
+     *
+     * @param dataState the reactive data state
+     * @param pageSize the number of items per page
+     * @param itemRenderer the function to render each item
+     * @param clickHandler the callback for item clicks
+     */
     public PagedComponent(ReactiveState<List<T>> dataState,
                           int pageSize,
                           Function<T, ItemStack> itemRenderer,
@@ -64,6 +77,14 @@ public class PagedComponent<T> implements GloomComponent {
         this.pageState.subscribe(this.pageListener);
     }
 
+    /**
+     * Constructs a paged component with static data.
+     *
+     * @param staticData the data list
+     * @param pageSize the number of items per page
+     * @param itemRenderer the function to render each item
+     * @param clickHandler the callback for item clicks
+     */
     public PagedComponent(List<T> staticData,
                           int pageSize,
                           Function<T, ItemStack> itemRenderer,

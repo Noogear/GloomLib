@@ -40,30 +40,30 @@ public sealed interface Gui extends Observable permits Gui.Normal, Gui.Paged {
     int getSize();
 
     /**
-     * Checks if the GUI is frozen (interactions disabled).
+     * Checks if the GUI is frozen.
      *
-     * @return {@code true} if frozen, {@code false} otherwise
+     * @return true if frozen
      */
     boolean isFrozen();
 
     /**
      * Sets the frozen state.
      *
-     * @param frozen {@code true} to freeze interactions
+     * @param frozen true to freeze interactions
      */
     void setFrozen(boolean frozen);
 
     /**
      * Gets the background item.
      *
-     * @return the background item, or {@code null} if none
+     * @return the background item
      */
     @Nullable ItemStack getBackground();
 
     /**
      * Sets the background item for empty slots.
      *
-     * @param background the background item (nullable)
+     * @param background the background item
      */
     void setBackground(@Nullable ItemStack background);
 
@@ -71,14 +71,14 @@ public sealed interface Gui extends Observable permits Gui.Normal, Gui.Paged {
      * Gets the slot element at an index.
      *
      * @param slot the slot index
-     * @return the slot element, or {@code null} if empty
+     * @return the slot element
      */
     @Nullable SlotElement getSlotElement(int slot);
 
     /**
      * Sets a slot element at an index.
      *
-     * @param slot    the slot index
+     * @param slot the slot index
      * @param element the slot element
      */
     void setSlotElement(int slot, @NotNull SlotElement element);
@@ -94,7 +94,7 @@ public sealed interface Gui extends Observable permits Gui.Normal, Gui.Paged {
      * Renders a slot to an item stack.
      *
      * @param slot the slot index
-     * @return the rendered item, or {@code null} if empty
+     * @return the rendered item
      */
     @Nullable ItemStack renderSlot(int slot);
 
@@ -118,7 +118,7 @@ public sealed interface Gui extends Observable permits Gui.Normal, Gui.Paged {
     /**
      * Gets the Bukkit inventory.
      *
-     * @return the inventory, or {@code null} if not yet created
+     * @return the inventory
      */
     @Nullable Inventory getInventory();
 
@@ -131,7 +131,7 @@ public sealed interface Gui extends Observable permits Gui.Normal, Gui.Paged {
          * Gets the component at a slot.
          *
          * @param slot the slot index
-         * @return the component, or {@code null} if none
+         * @return the component
          */
         @Nullable GloomComponent getComponent(int slot);
 

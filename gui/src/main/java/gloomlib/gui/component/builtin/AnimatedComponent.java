@@ -11,9 +11,6 @@ import java.util.function.Consumer;
 
 /**
  * Component that displays an animated sequence of item frames.
- * <p>
- * Cycles through frames at a specified tick rate, optionally repeating.
- * Frames are pre-cached for performance.
  */
 public class AnimatedComponent implements GloomComponent {
 
@@ -28,10 +25,10 @@ public class AnimatedComponent implements GloomComponent {
     /**
      * Constructs an animated component.
      *
-     * @param frames       the animation frames
-     * @param tickRate     the ticks between frame changes
-     * @param repeat       whether to loop the animation
-     * @param clickHandler the click handler (nullable)
+     * @param frames the animation frames
+     * @param tickRate the ticks between frame changes
+     * @param repeat whether to loop
+     * @param clickHandler the click handler
      */
     public AnimatedComponent(List<ItemStack> frames, int tickRate, boolean repeat, Consumer<InteractionContext> clickHandler) {
         this.frames = new ArrayList<>(frames);

@@ -20,8 +20,8 @@ public class Components {
      * Creates a simple button component.
      *
      * @param material the button material
-     * @param name     the display name
-     * @param action   the click handler
+     * @param name the display name
+     * @param action the click handler
      * @return a button component
      */
     public static GloomComponent button(Material material, String name, Consumer<gloomlib.gui.interaction.InteractionContext> action) {
@@ -32,7 +32,7 @@ public class Components {
     }
 
     /**
-     * Creates a filler component (decorative, non-interactive).
+     * Creates a filler component.
      *
      * @param material the filler material
      * @return a filler component
@@ -44,12 +44,12 @@ public class Components {
     }
 
     /**
-     * Creates a reactive toggle component that switches between two states.
+     * Creates a reactive toggle component.
      *
-     * @param state   the reactive boolean state
-     * @param onMat   the material when active
-     * @param onText  the text when active
-     * @param offMat  the material when inactive
+     * @param state the reactive boolean state
+     * @param onMat the material when active
+     * @param onText the text when active
+     * @param offMat the material when inactive
      * @param offText the text when inactive
      * @return a toggle component
      */
@@ -70,8 +70,8 @@ public class Components {
      * Creates a next-page button for paged components.
      *
      * @param pager the paged component to control
-     * @param mat   the button material
-     * @param name  the button display name
+     * @param mat the button material
+     * @param name the button display name
      * @return a next-page button component
      */
     public static GloomComponent pageNext(PagedComponent<?> pager, Material mat, String name) {
@@ -88,8 +88,8 @@ public class Components {
      * Creates a previous-page button for paged components.
      *
      * @param pager the paged component to control
-     * @param mat   the button material
-     * @param name  the button display name
+     * @param mat the button material
+     * @param name the button display name
      * @return a previous-page button component
      */
     public static GloomComponent pagePrev(PagedComponent<?> pager, Material mat, String name) {
@@ -106,8 +106,8 @@ public class Components {
      * Creates a scroll-up button for scrollable components.
      *
      * @param scroller the scrollable component to control
-     * @param mat      the button material
-     * @param name     the button display name
+     * @param mat the button material
+     * @param name the button display name
      * @return a scroll-up button component
      */
     public static GloomComponent scrollUp(ScrollComponent<?> scroller, Material mat, String name) {
@@ -124,8 +124,8 @@ public class Components {
      * Creates a scroll-down button for scrollable components.
      *
      * @param scroller the scrollable component to control
-     * @param mat      the button material
-     * @param name     the button display name
+     * @param mat the button material
+     * @param name the button display name
      * @return a scroll-down button component
      */
     public static GloomComponent scrollDown(ScrollComponent<?> scroller, Material mat, String name) {

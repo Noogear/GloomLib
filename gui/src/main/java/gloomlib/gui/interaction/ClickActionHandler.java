@@ -13,17 +13,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Click action handler implementing complete Minecraft vanilla click interaction logic.
- * <p>
- * Supports:
- * - Left/right click (pick, place, stack, swap)
- * - Shift+click cross-inventory movement (with priority)
- * - Number key hotbar swap
- * - Double-click item collection
- * - Middle-click clone (creative mode)
- * - Offhand swap (F key)
- * - Item drop (Q key)
- * - Bundle support (MC 1.21+)
+ * Click action handler implementing Minecraft vanilla click interaction logic.
  */
 public final class ClickActionHandler {
 
@@ -35,13 +25,6 @@ public final class ClickActionHandler {
 
     /**
      * Handles left-click interaction.
-     * <p>
-     * Logic:
-     * - Empty cursor + slot has item → pick up all
-     * - Cursor has item + empty slot → place all
-     * - Similar items → attempt stack
-     * - Different items → swap
-     * - Bundle special handling (MC 1.21+): insert/extract items
      *
      * @param player the player performing the action
      * @param slotItem the item in the slot
@@ -89,13 +72,6 @@ public final class ClickActionHandler {
 
     /**
      * Handles right-click interaction.
-     * <p>
-     * Logic:
-     * - Empty cursor + slot has item → pick up half (rounded up)
-     * - Cursor has item + empty slot → place 1 item
-     * - Similar items → add 1 to slot
-     * - Different items → swap
-     * - Bundle special handling (MC 1.21+): extract first item
      *
      * @param player the player performing the action
      * @param slotItem the item in the slot
@@ -152,18 +128,13 @@ public final class ClickActionHandler {
     }
 
     /**
-     * Handles Shift+Click (quick move to another inventory) - with priority support.
-     * <p>
-     * Logic:
-     * 1. Sort slots by priority
-     * 2. Fill high-priority existing stacks first
-     * 3. Then fill high-priority empty slots
+     * Handles shift-click with priority support.
      *
      * @param slotItem the item in the slot
      * @param targetInventory the target inventory
-     * @param startSlot the start slot (inclusive)
-     * @param endSlot the end slot (exclusive)
-     * @param priority the priority strategy (nullable, uses default if null)
+     * @param startSlot the start slot
+     * @param endSlot the end slot
+     * @param priority the priority strategy
      * @return the shift-click result
      */
     @NotNull
@@ -220,16 +191,12 @@ public final class ClickActionHandler {
     }
 
     /**
-     * Handles Shift+Click (quick move to another inventory) - simplified version.
-     * <p>
-     * Logic:
-     * 1. Fill existing similar stacks first
-     * 2. Then find empty slots
+     * Handles shift-click.
      *
      * @param slotItem the item in the slot
      * @param targetInventory the target inventory
-     * @param startSlot the start slot (inclusive)
-     * @param endSlot the end slot (exclusive)
+     * @param startSlot the start slot
+     * @param endSlot the end slot
      * @return the shift-click result
      */
     @NotNull
@@ -267,14 +234,12 @@ public final class ClickActionHandler {
     }
 
     /**
-     * Handles number key (1-9) hotbar swap.
-     * <p>
-     * Swaps the clicked slot with the corresponding hotbar slot item.
+     * Handles number key hotbar swap.
      *
      * @param slotItem the item in the slot
-     * @param hotbarSlot the hotbar slot (0-8)
+     * @param hotbarSlot the hotbar slot
      * @param playerInventory the player's inventory
-     * @return the number key result
+     * @return the hotbar swap result
      */
     @NotNull
     public static HotbarSwapResult handleHotbarSwap(
@@ -295,13 +260,11 @@ public final class ClickActionHandler {
 
     /**
      * Handles double-click to collect similar items.
-     * <p>
-     * Collects similar items from all accessible inventories to the cursor.
      *
-     * @param cursorItem the cursor item (as template)
-     * @param sourceInventory the source inventory (GUI or player inventory)
-     * @param startSlot the start slot (inclusive)
-     * @param endSlot the end slot (exclusive)
+     * @param cursorItem the cursor item
+     * @param sourceInventory the source inventory
+     * @param startSlot the start slot
+     * @param endSlot the end slot
      * @return the double-click result
      */
     @NotNull
@@ -343,9 +306,7 @@ public final class ClickActionHandler {
     }
 
     /**
-     * Handles middle-click (creative mode clone).
-     * <p>
-     * Only in creative mode, clones the slot item to cursor (full stack).
+     * Handles middle-click for cloning.
      *
      * @param player the player
      * @param slotItem the item in the slot
@@ -366,9 +327,7 @@ public final class ClickActionHandler {
     }
 
     /**
-     * Handles offhand swap (F key).
-     * <p>
-     * Swaps the slot item with the player's offhand item.
+     * Handles offhand swap.
      *
      * @param slotItem the item in the slot
      * @param playerInventory the player's inventory
@@ -387,12 +346,10 @@ public final class ClickActionHandler {
     }
 
     /**
-     * Handles item drop (Q key or Ctrl+Q).
-     * <p>
-     * Q key drops 1 item, Ctrl+Q drops all.
+     * Handles item drop.
      *
      * @param slotItem the item in the slot
-     * @param dropAll whether to drop all items
+     * @param dropAll whether to drop all
      * @param player the player
      * @return the drop result
      */
@@ -417,14 +374,12 @@ public final class ClickActionHandler {
         return new DropResult(slotItem, false);
     }
 
-    // ==================== Result Classes ====================
-
     /**
-     * Click result (left-click/right-click).
+     * Click result.
      *
      * @param newSlotItem the new item in the slot
      * @param newCursorItem the new item on the cursor
-     * @param changed whether the interaction caused a change
+     * @param changed whether a change occurred
      */
     public record ClickResult(
             @Nullable ItemStack newSlotItem,
@@ -432,7 +387,7 @@ public final class ClickActionHandler {
             boolean changed
     ) {
         /**
-         * Creates a no-change result (nothing happened).
+         * Creates a no-change result.
          *
          * @return a ClickResult with no changes
          */
@@ -444,8 +399,8 @@ public final class ClickActionHandler {
     /**
      * Shift-click result.
      *
-     * @param remaining the remaining item after transfer
-     * @param moved whether any items were moved
+     * @param remaining the remaining item
+     * @param moved whether items were moved
      */
     public record ShiftClickResult(
             @Nullable ItemStack remaining,
@@ -456,7 +411,7 @@ public final class ClickActionHandler {
     /**
      * Number key result.
      *
-     * @param newSlotItem the new item in the clicked slot
+     * @param newSlotItem the new item in the slot
      * @param swapped whether a swap occurred
      */
     public record HotbarSwapResult(
@@ -468,8 +423,8 @@ public final class ClickActionHandler {
     /**
      * Double-click result.
      *
-     * @param newCursorItem the new cursor item after collection
-     * @param collected whether any items were collected
+     * @param newCursorItem the new cursor item
+     * @param collected whether items were collected
      */
     public record DoubleClickResult(
             @Nullable ItemStack newCursorItem,
@@ -480,7 +435,7 @@ public final class ClickActionHandler {
     /**
      * Middle-click result.
      *
-     * @param newCursorItem the cloned item (full stack)
+     * @param newCursorItem the new cursor item
      * @param cloned whether the item was cloned
      */
     public record MiddleClickResult(
@@ -505,7 +460,7 @@ public final class ClickActionHandler {
      * Drop result.
      *
      * @param newSlotItem the remaining item in the slot
-     * @param dropped whether any items were dropped
+     * @param dropped whether items were dropped
      */
     public record DropResult(
             @Nullable ItemStack newSlotItem,

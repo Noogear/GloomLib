@@ -6,8 +6,6 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * Slot priority interface for controlling where items are placed during Shift+click.
- * References InvUI's priority system, allowing components to define item acceptance priority.
- * Higher priority slots are tried first during Shift+click operations.
  */
 public interface SlotPriority {
 
@@ -39,25 +37,27 @@ public interface SlotPriority {
     /**
      * Gets the priority of accepting the specified item in a slot.
      * 
-     * @param slot slot index
-     * @param item item to place
-     * @return priority value; PRIORITY_NONE means not accepting
+     * @param slot the slot index
+     * @param item the item to place
+     * @return the priority value
      */
     int getPriority(int slot, @Nullable ItemStack item);
 
     /**
      * Checks if the slot accepts the specified item.
      * 
-     * @param slot slot index
-     * @param item item to place
-     * @return whether the item is accepted
+     * @param slot the slot index
+     * @param item the item to place
+     * @return true if the item is accepted
      */
     default boolean acceptsItem(int slot, @Nullable ItemStack item) {
         return getPriority(slot, item) > PRIORITY_NONE;
     }
 
     /**
-     * Creates the default priority strategy (all slots at normal priority).
+     * Creates a normal priority strategy.
+     *
+     * @return a normal priority strategy
      */
     @NotNull
     static SlotPriority normal() {
@@ -65,7 +65,9 @@ public interface SlotPriority {
     }
 
     /**
-     * Creates a strategy that rejects all items.
+     * Creates a priority strategy that rejects all items.
+     *
+     * @return a none priority strategy
      */
     @NotNull
     static SlotPriority none() {
@@ -74,6 +76,8 @@ public interface SlotPriority {
 
     /**
      * Creates a high priority strategy.
+     *
+     * @return a high priority strategy
      */
     @NotNull
     static SlotPriority high() {

@@ -9,13 +9,30 @@ import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
+/**
+ * Interface representing a mutable observable property.
+ *
+ * @param <T> the property type
+ */
 public interface MutableProperty<T> extends Property<T> {
 
+    /**
+     * Creates a new mutable property with an initial value.
+     *
+     * @param initialValue the initial value
+     * @param <T> the type
+     * @return the mutable property
+     */
     @NotNull
     static <T> MutableProperty<T> of(@Nullable T initialValue) {
         return new MutablePropertyImpl<>(initialValue);
     }
 
+    /**
+     * Sets a new value for the property.
+     *
+     * @param value the new value
+     */
     void set(@Nullable T value);
 
     class MutablePropertyImpl<T> implements MutableProperty<T> {

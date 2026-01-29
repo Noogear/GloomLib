@@ -11,8 +11,6 @@ import java.util.Set;
 
 /**
  * Handler for drag interactions across multiple inventory slots.
- * <p>
- * Supports EVEN distribution (split evenly) and SINGLE distribution (one per slot).
  */
 public final class DragHandler {
 
@@ -22,11 +20,11 @@ public final class DragHandler {
     /**
      * Handles a drag interaction.
      *
-     * @param dragType    the drag type (EVEN or SINGLE)
+     * @param dragType the drag type
      * @param draggedItem the item being dragged
-     * @param slots       the set of slot indices affected
+     * @param slots the set of slot indices
      * @param getSlotItem function to retrieve current slot items
-     * @return the drag result with remaining item and updated slots
+     * @return the drag result
      */
     @NotNull
     public static DragResult handleDrag(
@@ -125,12 +123,12 @@ public final class DragHandler {
     }
 
     /**
-     * Calculates a preview of how items will be distributed.
+     * Calculates a preview of the distribution.
      *
-     * @param dragType    the drag type (EVEN or SINGLE)
-     * @param totalAmount the total amount to distribute
-     * @param slots       the set of slot indices
-     * @return a map of slot indices to distributed amounts
+     * @param dragType the drag type
+     * @param totalAmount the total amount
+     * @param slots the set of slot indices
+     * @return a map of distributions
      */
     @NotNull
     public static Map<Integer, Integer> calculatePreview(
@@ -171,8 +169,8 @@ public final class DragHandler {
     /**
      * Result of a drag operation.
      *
-     * @param remaining    the remaining item on the cursor
-     * @param updatedSlots the map of updated slot indices to new items
+     * @param remaining the remaining item on the cursor
+     * @param updatedSlots the map of updated slots
      */
     public record DragResult(
             @NotNull ItemStack remaining,

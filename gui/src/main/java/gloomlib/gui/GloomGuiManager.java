@@ -11,9 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 /**
- * Manages GUI window tick scheduling with Folia compatibility.
- * <p>
- * Singleton that coordinates periodic updates for GUI windows using entity schedulers.
+ * Manages GUI window tick scheduling.
  */
 public class GloomGuiManager {
 
@@ -25,7 +23,7 @@ public class GloomGuiManager {
     }
 
     /**
-     * Initializes the GUI manager with a plugin instance.
+     * Initializes the GUI manager.
      *
      * @param pl the plugin
      */
@@ -54,9 +52,9 @@ public class GloomGuiManager {
     }
 
     /**
-     * Registers a window for periodic tick updates.
+     * Registers a window for periodic updates.
      *
-     * @param window   the window to register
+     * @param window the window to register
      * @param tickRate the tick interval
      */
     public static void register(Window window, int tickRate) {
@@ -117,7 +115,7 @@ public class GloomGuiManager {
     }
 
     /**
-     * Unregisters a window from periodic updates.
+     * Unregisters a window from updates.
      *
      * @param window the window to unregister
      */
@@ -136,7 +134,7 @@ public class GloomGuiManager {
     }
 
     /**
-     * Shuts down the GUI manager and cancels all running window tasks.
+     * Shuts down the GUI manager.
      */
     public static void shutdown() {
         if (instance == null) {

@@ -7,8 +7,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * GUI item operation utility class.
- * Provides common operations like stacking, adding, and removing items for interaction handler reuse.
+ * Utility class for GUI item operations.
  */
 public final class GuiItemUtils {
 
@@ -19,7 +18,7 @@ public final class GuiItemUtils {
      * Checks if an item is empty.
      *
      * @param item the item to check
-     * @return {@code true} if the item is null, AIR, or has amount &lt;= 0
+     * @return true if empty
      */
     public static boolean isEmpty(@Nullable ItemStack item) {
         return item == null || item.getType() == Material.AIR || item.getAmount() <= 0;
@@ -30,7 +29,7 @@ public final class GuiItemUtils {
      *
      * @param a the first item
      * @param b the second item
-     * @return true if the items can stack
+     * @return true if stackable
      */
     public static boolean canStackWith(@Nullable ItemStack a, @Nullable ItemStack b) {
         if (isEmpty(a) || isEmpty(b)) {
@@ -43,16 +42,16 @@ public final class GuiItemUtils {
      * Gets the maximum stack size of an item.
      *
      * @param item the item
-     * @return the maximum stack size
+     * @return the max stack size
      */
     public static int getMaxStackSize(@NotNull ItemStack item) {
         return item.getMaxStackSize();
     }
 
     /**
-     * Creates an empty item (for clearing slots).
+     * Creates an empty item.
      *
-     * @return an empty ItemStack (AIR)
+     * @return an empty ItemStack
      */
     @NotNull
     public static ItemStack createEmpty() {
@@ -60,10 +59,10 @@ public final class GuiItemUtils {
     }
 
     /**
-     * Safely clones an item (handles null).
+     * Safely clones an item.
      *
      * @param item the item to clone
-     * @return the cloned item, or null if the item is empty
+     * @return the cloned item
      */
     @Nullable
     public static ItemStack cloneSafe(@Nullable ItemStack item) {
@@ -73,9 +72,9 @@ public final class GuiItemUtils {
     /**
      * Attempts to add an item to a slot.
      *
-     * @param slotItem the current item in the slot
+     * @param slotItem the item in the slot
      * @param toAdd the item to add
-     * @return the add result [new slot item, remaining item]
+     * @return the add result
      */
     @NotNull
     public static AddResult addItem(@Nullable ItemStack slotItem, @NotNull ItemStack toAdd) {
@@ -112,9 +111,9 @@ public final class GuiItemUtils {
     /**
      * Removes items from a slot.
      *
-     * @param slotItem the current item in the slot
+     * @param slotItem the item in the slot
      * @param amount the amount to remove
-     * @return the remove result [new slot item, removed item]
+     * @return the remove result
      */
     @NotNull
     public static RemoveResult removeItem(@Nullable ItemStack slotItem, int amount) {
@@ -137,10 +136,10 @@ public final class GuiItemUtils {
     }
 
     /**
-     * Picks up half of the items (rounds up).
+     * Picks up half of the items.
      *
-     * @param slotItem the current item in the slot
-     * @return the remove result with half picked up
+     * @param slotItem the item in the slot
+     * @return the remove result
      */
     @NotNull
     public static RemoveResult pickupHalf(@Nullable ItemStack slotItem) {
@@ -159,7 +158,7 @@ public final class GuiItemUtils {
      *
      * @param a the first item
      * @param b the second item
-     * @return the swap result [b, a]
+     * @return the swap result
      */
     @NotNull
     public static SwapResult swap(@Nullable ItemStack a, @Nullable ItemStack b) {
@@ -171,9 +170,9 @@ public final class GuiItemUtils {
      *
      * @param inventory the inventory
      * @param item the item to stack
-     * @param start the start slot (inclusive)
-     * @param end the end slot (exclusive)
-     * @return the slot index, or -1 if not found
+     * @param start the start slot
+     * @param end the end slot
+     * @return the slot index
      */
     public static int findFirstStackableSlot(@NotNull Inventory inventory, @NotNull ItemStack item, int start, int end) {
         if (isEmpty(item)) {
@@ -194,9 +193,9 @@ public final class GuiItemUtils {
      * Finds the first empty slot in an inventory.
      *
      * @param inventory the inventory
-     * @param start the start slot (inclusive)
-     * @param end the end slot (exclusive)
-     * @return the slot index, or -1 if not found
+     * @param start the start slot
+     * @param end the end slot
+     * @return the slot index
      */
     public static int findFirstEmptySlot(@NotNull Inventory inventory, int start, int end) {
         for (int i = start; i < end; i++) {
@@ -209,34 +208,44 @@ public final class GuiItemUtils {
     }
 
     /**
-     * Add result.
+     * Result of an add operation.
      *
      * @param newSlotItem the new item in the slot
-     * @param remaining the remaining item that could not be added
+     * @param remaining the remaining item
      */
     public record AddResult(@Nullable ItemStack newSlotItem, @Nullable ItemStack remaining) {
+        /**
+         * Checks if there are remaining items.
+         *
+         * @return true if items remain
+         */
         public boolean hasRemaining() {
             return !isEmpty(remaining);
         }
     }
 
     /**
-     * Remove result.
+     * Result of a remove operation.
      *
-     * @param newSlotItem the new item in the slot after removal
+     * @param newSlotItem the new item in the slot
      * @param removed the removed item
      */
     public record RemoveResult(@Nullable ItemStack newSlotItem, @Nullable ItemStack removed) {
+        /**
+         * Checks if items were removed.
+         *
+         * @return true if removed
+         */
         public boolean wasRemoved() {
             return !isEmpty(removed);
         }
     }
 
     /**
-     * Swap result.
+     * Result of a swap operation.
      *
-     * @param newA the new value for a (was b)
-     * @param newB the new value for b (was a)
+     * @param newA the new item for A
+     * @param newB the new item for B
      */
     public record SwapResult(@Nullable ItemStack newA, @Nullable ItemStack newB) {
     }

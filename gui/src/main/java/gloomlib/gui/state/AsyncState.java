@@ -9,10 +9,7 @@ import java.util.function.Supplier;
 import java.util.logging.Level;
 
 /**
- * Reactive state with async data loading support using virtual threads (Java 21+).
- * <p>
- * Displays a loading value while fetching data, then updates to the result or error value.
- * Updates are automatically synchronized to the main thread for inventory operations.
+ * Reactive state with async data loading support using virtual threads.
  *
  * @param <T> the state value type
  */
@@ -33,12 +30,12 @@ public class AsyncState<T> extends ReactiveState<T> {
     /**
      * Creates an async state from a CompletableFuture supplier.
      *
-     * @param loader       the future supplier
-     * @param loadingValue the value to display while loading
-     * @param errorValue   the fallback value on error
-     * @param player       the player for scheduler context (nullable)
-     * @param <T>          the state type
-     * @return a new async state instance
+     * @param loader the future supplier
+     * @param loadingValue the loading value
+     * @param errorValue the error value
+     * @param player the player
+     * @param <T> the state type
+     * @return a new async state
      */
     public static <T> AsyncState<T> ofFuture(Supplier<CompletableFuture<T>> loader,
                                              T loadingValue,
@@ -50,14 +47,14 @@ public class AsyncState<T> extends ReactiveState<T> {
     }
 
     /**
-     * Creates an async state from a synchronous loader (executed async).
+     * Creates an async state from a synchronous loader.
      *
-     * @param loader       the data loader
-     * @param loadingValue the value to display while loading
-     * @param errorValue   the fallback value on error
-     * @param player       the player for scheduler context (nullable)
-     * @param <T>          the state type
-     * @return a new async state instance
+     * @param loader the data loader
+     * @param loadingValue the loading value
+     * @param errorValue the error value
+     * @param player the player
+     * @param <T> the state type
+     * @return a new async state
      */
     public static <T> AsyncState<T> of(Supplier<T> loader,
                                        T loadingValue,
@@ -70,7 +67,7 @@ public class AsyncState<T> extends ReactiveState<T> {
     /**
      * Reloads the state by executing the loader again.
      *
-     * @param loader the future supplier to reload from
+     * @param loader the future supplier
      */
     public void reload(Supplier<CompletableFuture<T>> loader) {
         setLoading(true);
@@ -142,7 +139,7 @@ public class AsyncState<T> extends ReactiveState<T> {
     /**
      * Checks if the state is currently loading.
      *
-     * @return {@code true} if loading, {@code false} otherwise
+     * @return true if loading
      */
     public boolean isLoading() {
         return isLoading;

@@ -11,9 +11,6 @@ import java.util.function.Function;
 
 /**
  * Core component interface for creating interactive GUI elements.
- * <p>
- * Components can be static (fixed icon) or reactive (state-driven).
- * Use {@link #builder()} to create instances with a fluent API.
  */
 public interface GloomComponent extends Cloneable {
 
@@ -44,14 +41,14 @@ public interface GloomComponent extends Cloneable {
     /**
      * Called every tick to check for updates.
      *
-     * @return {@code true} if the component changed, {@code false} otherwise
+     * @return true if the component changed
      */
     boolean onTick();
 
     /**
      * Gets the tick rate for this component.
      *
-     * @return the tick interval in ticks, or -1 if no ticking
+     * @return the tick interval
      */
     default int getTickRate() {
         return -1;
@@ -84,7 +81,7 @@ public interface GloomComponent extends Cloneable {
          * Sets the static icon for this component.
          *
          * @param icon the item stack to display
-         * @return this builder for chaining
+         * @return this builder instance
          */
         public Builder icon(ItemStack icon) {
             this.icon = icon;
@@ -95,7 +92,7 @@ public interface GloomComponent extends Cloneable {
          * Sets the click handler for this component.
          *
          * @param onClick the click handler
-         * @return this builder for chaining
+         * @return this builder instance
          */
         public Builder onClick(Consumer<InteractionContext> onClick) {
             this.onClick = onClick;
@@ -103,12 +100,12 @@ public interface GloomComponent extends Cloneable {
         }
 
         /**
-         * Sets a reactive renderer that transforms state to an item stack.
+         * Sets a reactive renderer.
          *
          * @param renderer the rendering function
-         * @param state    the reactive state to observe
-         * @param <T>      the state type
-         * @return this builder for chaining
+         * @param state the reactive state to observe
+         * @param <T> the state type
+         * @return this builder instance
          */
         @SuppressWarnings("unchecked")
         public <T> Builder onRender(Function<T, ItemStack> renderer, ReactiveState<T> state) {
@@ -120,8 +117,8 @@ public interface GloomComponent extends Cloneable {
         /**
          * Sets the tick rate for periodic updates.
          *
-         * @param tickRate the tick interval, or -1 for no ticking
-         * @return this builder for chaining
+         * @param tickRate the tick interval
+         * @return this builder instance
          */
         public Builder tickRate(int tickRate) {
             this.tickRate = tickRate;
@@ -129,7 +126,7 @@ public interface GloomComponent extends Cloneable {
         }
 
         /**
-         * Builds the component with the configured properties.
+         * Builds the component.
          *
          * @return a new component instance
          */
@@ -144,7 +141,6 @@ public interface GloomComponent extends Cloneable {
             private final ReactiveState<?> state;
             private final int tickRate;
 
-            // Performance optimization: static component render cache
             private final ItemStack cachedIcon;
             private boolean dirty = true;
             private ItemStack cachedRender = null;
@@ -156,7 +152,6 @@ public interface GloomComponent extends Cloneable {
                 this.state = state;
                 this.tickRate = tickRate;
 
-                // Performance optimization: pre-clone static icon (no renderer and state)
                 if (renderer == null && state == null) {
                     this.cachedIcon = this.icon.clone();
                 } else {
@@ -170,12 +165,10 @@ public interface GloomComponent extends Cloneable {
 
             @Override
             public @NotNull ItemStack render(int index) {
-                // Performance optimization: static component returns cached icon
                 if (cachedIcon != null) {
                     return cachedIcon;
                 }
 
-                // Reactive component: use dirty flag cache
                 if (renderer != null && state != null) {
                     if (dirty || cachedRender == null) {
                         cachedRender = renderer.apply(state.get());
@@ -184,7 +177,6 @@ public interface GloomComponent extends Cloneable {
                     return cachedRender;
                 }
 
-                // Other cases return icon
                 return icon;
             }
 

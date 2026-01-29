@@ -6,6 +6,9 @@ import gloomlib.gui.component.GloomComponent;
 import java.util.*;
 import java.util.function.Function;
 
+/**
+ * Utility for defining and building GUI layouts using a grid structure.
+ */
 public class GuiStructure {
 
     private final String[] structure;
@@ -16,30 +19,61 @@ public class GuiStructure {
         this.definitions.putAll(definitions);
     }
 
+    /**
+     * Constructs a GUI structure with the given layout.
+     *
+     * @param structure the layout rows
+     */
     public GuiStructure(String... structure) {
         this.structure = structure;
     }
 
+    /**
+     * Creates a new builder for a GUI structure.
+     *
+     * @return the builder
+     */
     public static Builder builder() {
         return new Builder();
     }
 
+    /**
+     * Defines a component for a symbol.
+     *
+     * @param symbol the character symbol
+     * @param component the component
+     * @return this structure
+     */
     public GuiStructure define(char symbol, GloomComponent component) {
         definitions.put(symbol, component);
         return this;
     }
 
+    /**
+     * Applies this structure to a GUI builder.
+     *
+     * @param builder the GUI builder
+     */
     public void apply(GloomGuiBuilder builder) {
         builder.structure(structure);
         definitions.forEach(builder::define);
     }
 
+    /**
+     * Builder class for GuiStructure.
+     */
     public static class Builder {
         private final Map<Character, GloomComponent> definitions = new HashMap<>();
         private List<String> gridRows = new ArrayList<>();
         private int width = 9;
         private int height = 3;
 
+        /**
+         * Sets the grid layout.
+         *
+         * @param rows the layout rows
+         * @return this builder
+         */
         public Builder grid(String... rows) {
             this.gridRows = Arrays.asList(rows);
             this.height = rows.length;
@@ -49,17 +83,38 @@ public class GuiStructure {
             return this;
         }
 
+        /**
+         * Sets the size of the grid.
+         *
+         * @param width the width
+         * @param height the height
+         * @return this builder
+         */
         public Builder size(int width, int height) {
             this.width = width;
             this.height = height;
             return this;
         }
 
+        /**
+         * Defines a component for a symbol.
+         *
+         * @param symbol the symbol
+         * @param component the component
+         * @return this builder
+         */
         public Builder define(char symbol, GloomComponent component) {
             definitions.put(symbol, component);
             return this;
         }
 
+        /**
+         * Adds a border with the given symbol and component.
+         *
+         * @param symbol the symbol
+         * @param component the component
+         * @return this builder
+         */
         public Builder border(char symbol, GloomComponent component) {
             definitions.put(symbol, component);
 
@@ -87,6 +142,13 @@ public class GuiStructure {
             return this;
         }
 
+        /**
+         * Fills all remaining dots with the given symbol and component.
+         *
+         * @param symbol the symbol
+         * @param component the component
+         * @return this builder
+         */
         public Builder fillRemaining(char symbol, GloomComponent component) {
             definitions.put(symbol, component);
 
@@ -96,6 +158,17 @@ public class GuiStructure {
             return this;
         }
 
+        /**
+         * Fills a rectangular region with the given symbol and component.
+         *
+         * @param symbol the symbol
+         * @param component the component
+         * @param startX the starting X
+         * @param startY the starting Y
+         * @param width the width
+         * @param height the height
+         * @return this builder
+         */
         public Builder region(char symbol, GloomComponent component, int startX, int startY, int width, int height) {
             definitions.put(symbol, component);
 
@@ -113,6 +186,13 @@ public class GuiStructure {
             return this;
         }
 
+        /**
+         * Fills a row with a repeating pattern.
+         *
+         * @param rowIndex the row index
+         * @param pattern the pattern string
+         * @return this builder
+         */
         public Builder rowPattern(int rowIndex, String pattern) {
             while (gridRows.size() <= rowIndex) {
                 gridRows.add(".".repeat(width));
@@ -128,6 +208,12 @@ public class GuiStructure {
             return this;
         }
 
+        /**
+         * Generates the grid layout using a generator function.
+         *
+         * @param generator the generator function
+         * @return this builder
+         */
         public Builder generate(Function<int[], Character> generator) {
             gridRows.clear();
             for (int y = 0; y < height; y++) {
@@ -141,6 +227,11 @@ public class GuiStructure {
             return this;
         }
 
+        /**
+         * Builds the GUI structure.
+         *
+         * @return the built structure
+         */
         public GuiStructure build() {
             String[] structureArray = gridRows.toArray(new String[0]);
             return new GuiStructure(structureArray, definitions);

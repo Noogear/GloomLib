@@ -3,16 +3,16 @@ package gloomlib.gui.window;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Observable interface for the observer pattern in GUI contexts.
+ * Interface for observable GUI elements.
  */
 public interface Observable {
 
     /**
-     * Adds an observer to watch a specific slot.
+     * Adds an observer to a specific slot.
      *
-     * @param who the observer implementation
+     * @param who the observer
      * @param what the slot index to observe
-     * @param how the notification parameter (slot hint)
+     * @param how the notification hint
      */
     void addObserver(@NotNull Observer who, int what, int how);
 
@@ -21,22 +21,22 @@ public interface Observable {
      *
      * @param who the observer to remove
      * @param what the slot index
-     * @param how the notification parameter
+     * @param how the notification hint
      */
     void removeObserver(@NotNull Observer who, int what, int how);
 
     /**
-     * Removes all observations by the given observer.
+     * Removes all observations by an observer.
      *
      * @param who the observer to remove
      */
     void removeAllObservers(@NotNull Observer who);
 
     /**
-     * Gets the update period for a slot in ticks.
+     * Gets the update period for a slot.
      *
      * @param what the slot index
-     * @return the tick interval, or -1 if no periodic updates
+     * @return the tick interval
      */
     default int getUpdatePeriod(int what) {
         return -1;

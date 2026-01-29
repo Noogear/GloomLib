@@ -9,17 +9,13 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Interaction context record containing complete click interaction information.
- * Uses Java 16+ record feature for immutable data carrier.
- * Supports complete interaction type detection including MC 1.21+ features.
- * <p>
- * Reference: InvUI AbstractGui click handling logic.
+ * Interaction context record containing click interaction information.
  *
- * @param player         the player who triggered the interaction
- * @param clickType      the click type
- * @param action         the inventory action
- * @param slot           the clicked slot
- * @param item           the current item
+ * @param player the player who triggered the interaction
+ * @param clickType the click type
+ * @param action the inventory action
+ * @param slot the clicked slot
+ * @param item the current item
  * @param componentIndex the component index
  */
 public record InteractionContext(
@@ -50,16 +46,16 @@ public record InteractionContext(
     }
 
     /**
-     * Checks if this is a Shift+click.
+     * Checks if this is a shift click.
      *
-     * @return true if Shift click
+     * @return true if shift click
      */
     public boolean isShiftClick() {
         return clickType.isShiftClick();
     }
 
     /**
-     * Checks if this is a number key click (1-9 hotbar swap).
+     * Checks if this is a number key click.
      *
      * @return true if number key click
      */
@@ -68,7 +64,7 @@ public record InteractionContext(
     }
 
     /**
-     * Checks if this is a drop action (Q key or Ctrl+Q).
+     * Checks if this is a drop action.
      *
      * @return true if drop action
      */
@@ -77,7 +73,7 @@ public record InteractionContext(
     }
 
     /**
-     * Checks if this is a control drop (Ctrl+Q).
+     * Checks if this is a control drop.
      *
      * @return true if control drop
      */
@@ -86,7 +82,7 @@ public record InteractionContext(
     }
 
     /**
-     * Checks if this is a double click to collect similar items.
+     * Checks if this is a double click.
      *
      * @return true if double click
      */
@@ -95,7 +91,7 @@ public record InteractionContext(
     }
 
     /**
-     * Checks if this is a middle click in creative mode.
+     * Checks if this is a middle click.
      *
      * @return true if middle click
      */
@@ -104,7 +100,7 @@ public record InteractionContext(
     }
 
     /**
-     * Checks if this is an offhand swap (F key).
+     * Checks if this is an offhand swap.
      *
      * @return true if offhand swap
      */
@@ -164,7 +160,7 @@ public record InteractionContext(
     }
 
     /**
-     * Checks if this is a move to other inventory action (Shift+click).
+     * Checks if this is a move to other inventory action.
      *
      * @return true if moving to other inventory
      */
@@ -173,7 +169,7 @@ public record InteractionContext(
     }
 
     /**
-     * Checks if this is a swap action (number key or offhand key).
+     * Checks if this is a swap action.
      *
      * @return true if swapping slots
      */
@@ -185,7 +181,7 @@ public record InteractionContext(
     }
 
     /**
-     * Checks if this is a clone action (creative mode middle click).
+     * Checks if this is a clone action.
      *
      * @return true if cloning
      */
@@ -212,7 +208,7 @@ public record InteractionContext(
     }
 
     /**
-     * Gets the interaction description (for debugging).
+     * Gets the interaction description.
      *
      * @return the interaction description string
      */
@@ -223,10 +219,8 @@ public record InteractionContext(
 
     /**
      * Navigates back to the previous window.
-     * Closes the current window and opens the previous window from navigation history.
-     * This method can be called in any component's onClick handler for flexible navigation control.
      *
-     * @return true if successfully navigated back, false if no history exists
+     * @return true if successfully navigated back
      */
     public boolean navigateBack() {
         return NavigationManager.getInstance().back(player);
@@ -234,9 +228,8 @@ public record InteractionContext(
 
     /**
      * Checks if navigation back is possible.
-     * Checks if the player has navigation history. Can be used to conditionally show back button or enable/disable back functionality.
      *
-     * @return true if navigation history exists, false otherwise
+     * @return true if navigation history exists
      */
     public boolean canNavigateBack() {
         return NavigationManager.getInstance().hasHistory(player);
@@ -244,9 +237,8 @@ public record InteractionContext(
 
     /**
      * Gets the current navigation history depth.
-     * Returns the number of windows in the player's navigation stack. Can be used to display navigation path or limit navigation depth.
      *
-     * @return the number of windows in navigation history
+     * @return the number of windows in history
      */
     public int getNavigationDepth() {
         return NavigationManager.getInstance().getDepth(player);
@@ -254,16 +246,13 @@ public record InteractionContext(
 
     /**
      * Clears all navigation history.
-     * Removes all navigation history for the player. Typically used when returning to main menu or resetting UI state.
      */
     public void clearNavigationHistory() {
         NavigationManager.getInstance().clear(player);
     }
 
     /**
-     * Intelligently navigates back or closes the current window.
-     * Attempts to navigate back to the previous window. If no navigation history exists, closes the current window.
-     * This is the recommended method for creating universal back/close buttons.
+     * Navigates back or closes the current window.
      */
     public void navigateBackOrClose() {
         if (!navigateBack()) {

@@ -10,12 +10,20 @@ import org.jetbrains.annotations.NotNull;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Component that switches between different sub-components based on a tab ID.
+ */
 public class TabComponent implements GloomComponent {
 
     private final ReactiveState<String> activeTabState;
     private final Map<String, GloomComponent> tabs = new HashMap<>();
     private final GloomComponent fallback;
 
+    /**
+     * Constructs a tab component.
+     *
+     * @param defaultTab the initial active tab ID
+     */
     public TabComponent(String defaultTab) {
         this.activeTabState = new ReactiveState<>(defaultTab);
         this.fallback = GloomComponent.builder().icon(new ItemStack(Material.AIR)).build();

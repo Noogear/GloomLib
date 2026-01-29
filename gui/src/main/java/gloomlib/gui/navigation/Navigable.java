@@ -4,13 +4,7 @@ import gloomlib.gui.window.Window;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Marker interface for windows that support navigation.
- * <p>
- * Windows implementing this interface can be part of the navigation history chain.
- * When opened, they will automatically register themselves in the navigation stack.
- * <p>
- * Reference: Inspired by InvUI's window architecture where windows can maintain parent relationships,
- * adapted to GloomLib's builder pattern and reactive system.
+ * Interface for windows that support navigation.
  */
 public interface Navigable {
 
@@ -22,9 +16,7 @@ public interface Navigable {
     @NotNull Window getWindow();
 
     /**
-     * Enables navigation tracking for this window.
-     * <p>
-     * When enabled, this window will be pushed to the navigation stack when opened.
+     * Enables or disables navigation tracking for this window.
      *
      * @param enabled true to enable navigation
      */
@@ -42,8 +34,6 @@ public interface Navigable {
 
     /**
      * Navigates back to the previous window.
-     * <p>
-     * Convenience method that delegates to NavigationManager.
      *
      * @return true if navigation was successful
      */
@@ -58,7 +48,7 @@ public interface Navigable {
     /**
      * Checks if this window can navigate back.
      *
-     * @return true if there is navigation history
+     * @return true if history exists
      */
     default boolean canNavigateBack() {
         Window window = getWindow();

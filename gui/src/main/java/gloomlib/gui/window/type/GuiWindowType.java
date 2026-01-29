@@ -3,6 +3,9 @@ package gloomlib.gui.window.type;
 import org.bukkit.event.inventory.InventoryType;
 import org.jetbrains.annotations.NotNull;
 
+/**
+ * Enum representing supported GUI window types.
+ */
 public enum GuiWindowType {
 
     CHEST(InventoryType.CHEST, 9, true, 6),
@@ -53,6 +56,12 @@ public enum GuiWindowType {
         this.maxRows = maxRows;
     }
 
+    /**
+     * Gets the window type from a Bukkit inventory type.
+     *
+     * @param bukkitType the Bukkit type
+     * @return the window type
+     */
     @NotNull
     public static GuiWindowType fromBukkitType(@NotNull InventoryType bukkitType) {
         for (GuiWindowType type : values()) {
@@ -63,6 +72,12 @@ public enum GuiWindowType {
         throw new IllegalArgumentException("Unsupported inventory type: " + bukkitType);
     }
 
+    /**
+     * Checks if a Bukkit inventory type is supported.
+     *
+     * @param bukkitType the Bukkit type
+     * @return true if supported
+     */
     public static boolean isSupported(@NotNull InventoryType bukkitType) {
         for (GuiWindowType type : values()) {
             if (type.bukkitType == bukkitType) {
@@ -72,23 +87,49 @@ public enum GuiWindowType {
         return false;
     }
 
+    /**
+     * Gets the associated Bukkit inventory type.
+     *
+     * @return the Bukkit type
+     */
     @NotNull
     public InventoryType getBukkitType() {
         return bukkitType;
     }
 
+    /**
+     * Gets the default number of slots.
+     *
+     * @return the default slots
+     */
     public int getDefaultSlots() {
         return defaultSlots;
     }
 
+    /**
+     * Checks if the window is resizable.
+     *
+     * @return true if resizable
+     */
     public boolean isResizable() {
         return resizable;
     }
 
+    /**
+     * Gets the maximum number of rows.
+     *
+     * @return the max rows
+     */
     public int getMaxRows() {
         return maxRows;
     }
 
+    /**
+     * Gets the number of slots for a given number of rows.
+     *
+     * @param rows the number of rows
+     * @return the number of slots
+     */
     public int getSlotsForRows(int rows) {
         if (!resizable) {
             throw new UnsupportedOperationException(this + " is not resizable");
@@ -99,6 +140,11 @@ public enum GuiWindowType {
         return 9 * rows;
     }
 
+    /**
+     * Checks if this is a special container.
+     *
+     * @return true if special
+     */
     public boolean isSpecialContainer() {
         return switch (this) {
             case FURNACE, BLAST_FURNACE, SMOKER,
@@ -109,6 +155,11 @@ public enum GuiWindowType {
         };
     }
 
+    /**
+     * Checks if this is a storage container.
+     *
+     * @return true if storage
+     */
     public boolean isStorageContainer() {
         return switch (this) {
             case CHEST, HOPPER, DISPENSER, SHULKER_BOX -> true;
@@ -116,6 +167,11 @@ public enum GuiWindowType {
         };
     }
 
+    /**
+     * Gets the display name.
+     *
+     * @return the display name
+     */
     @NotNull
     public String getDisplayName() {
         return switch (this) {
