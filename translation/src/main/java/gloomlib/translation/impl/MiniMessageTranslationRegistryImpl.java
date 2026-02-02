@@ -1,5 +1,6 @@
 package gloomlib.translation.impl;
 
+import gloomlib.translation.api.LocaleFallback;
 import gloomlib.translation.api.MiniMessageTranslationRegistry;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
@@ -25,29 +26,39 @@ import static java.util.Objects.requireNonNull;
 /**
  * Implementation of {@link MiniMessageTranslationRegistry}.
  */
-
-/**
- * Implementation of {@link MiniMessageTranslationRegistry}.
- */
 public final class MiniMessageTranslationRegistryImpl implements Examinable, MiniMessageTranslationRegistry {
-
-    private static final Map<String, Locale> LOCALE_LANGUAGE_CACHE = new ConcurrentHashMap<>();
 
     private final Key name;
     private final Map<String, Translation> translations = new ConcurrentHashMap<>();
     private final Map<String, Component> componentCache = new ConcurrentHashMap<>();
     private volatile Locale defaultLocale = Locale.US;
     private final MiniMessage miniMessage;
+    private final LocaleFallback fallback;
 
     /**
-     * Creates new MiniMessage translation registry.
+     * Creates new MiniMessage translation registry with default fallback.
      *
      * @param name the registry key
      * @param miniMessage the MiniMessage instance
      */
     public MiniMessageTranslationRegistryImpl(final Key name, final MiniMessage miniMessage) {
+        this(name, miniMessage, JdkLocaleFallback.INSTANCE);
+    }
+
+    /**
+     * Creates new MiniMessage translation registry with custom fallback.
+     *
+     * @param name the registry key
+     * @param miniMessage the MiniMessage instance
+     * @param fallback the locale fallback strategy
+     */
+    public MiniMessageTranslationRegistryImpl(
+            final Key name,
+            final MiniMessage miniMessage,
+            final LocaleFallback fallback) {
         this.name = name;
         this.miniMessage = miniMessage;
+        this.fallback = requireNonNull(fallback, "fallback");
     }
 
     @Override
@@ -164,10 +175,12 @@ public final class MiniMessageTranslationRegistryImpl implements Examinable, Min
     final class Translation implements Examinable {
         private final String key;
         private final Map<Locale, String> formats;
+        private final Map<Locale, String> resolvedCache;
 
         Translation(final @NotNull String key) {
             this.key = requireNonNull(key, "translation key");
             this.formats = new ConcurrentHashMap<>();
+            this.resolvedCache = new ConcurrentHashMap<>();
         }
 
         void register(final @NotNull Locale locale, final @NotNull String format) {
@@ -178,19 +191,36 @@ public final class MiniMessageTranslationRegistryImpl implements Examinable, Min
                         String.format("Translation already exists: %s for %s", this.key, locale)
                 );
             }
+            resolvedCache.clear();
         }
 
+        /**
+         * Translates using CLDR fallback chain with caching.
+         *
+         * @param locale target locale
+         * @return translation string, or null if not found
+         */
         @Nullable String translate(final @NotNull Locale locale) {
-            String format = this.formats.get(requireNonNull(locale, "locale"));
-            if (format == null) {
-                String lang = locale.getLanguage();
-                Locale langLocale = LOCALE_LANGUAGE_CACHE.computeIfAbsent(lang, Locale::of);
-                format = this.formats.get(langLocale);
-                if (format == null) {
-                    format = this.formats.get(MiniMessageTranslationRegistryImpl.this.defaultLocale);
+            requireNonNull(locale, "locale");
+
+            String cached = resolvedCache.get(locale);
+            if (cached != null) {
+                return cached.isEmpty() ? null : cached;
+            }
+
+            String result = resolveTranslation(locale);
+            resolvedCache.put(locale, result != null ? result : "");
+            return result;
+        }
+
+        private @Nullable String resolveTranslation(Locale locale) {
+            for (Locale candidate : fallback.getFallbackChain(locale)) {
+                String format = this.formats.get(candidate);
+                if (format != null) {
+                    return format;
                 }
             }
-            return format;
+            return this.formats.get(MiniMessageTranslationRegistryImpl.this.defaultLocale);
         }
 
         @Override
