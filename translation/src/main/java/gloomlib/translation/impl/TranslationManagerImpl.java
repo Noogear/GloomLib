@@ -5,7 +5,7 @@ import gloomlib.translation.api.MiniMessageTranslator;
 import gloomlib.translation.api.TranslationManager;
 import gloomlib.translation.api.TranslationSource;
 import gloomlib.translation.config.FileSourceOptions;
-import gloomlib.translation.factory.FileSourceFactory;
+import gloomlib.translation.loader.TranslationLoader;
 import gloomlib.translation.util.MiniMessages;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
@@ -124,8 +124,7 @@ public final class TranslationManagerImpl implements TranslationManager {
                         LOGGER.info("Using cached locale: {} ({} keys)", locale, translations.size());
                     }
                 } else {
-                    TranslationSource source = FileSourceFactory.create(dataFolder, fileName, locale, options);
-                    source.load();
+                    TranslationSource source = TranslationLoader.load(dataFolder, fileName, locale, options);
 
                     translations = new HashMap<>();
                     for (String key : source.getKeys()) {

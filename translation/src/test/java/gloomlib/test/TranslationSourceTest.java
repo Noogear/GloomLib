@@ -1,47 +1,46 @@
 package gloomlib.test;
 
-import gloomlib.translation.source.PropertiesTranslationSource;
-import gloomlib.translation.source.YamlTranslationSource;
+import gloomlib.translation.impl.MapTranslationSource;
+import gloomlib.translation.loader.TranslationParsers;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@DisplayName("TranslationSource 实现测试")
+@DisplayName("TranslationSource Tests")
 class TranslationSourceTest {
 
     @TempDir
     Path tempDir;
 
     @Nested
-    @DisplayName("YamlTranslationSource 测试")
-    class YamlSourceTests {
+    @DisplayName("YAML Parsing Tests")
+    class YamlParsingTests {
 
         @Test
-        @DisplayName("应加载简单 YAML 文件")
-        void shouldLoadSimpleYaml() throws Exception {
+        @DisplayName("Should parse simple YAML")
+        void shouldParseSimpleYaml() throws Exception {
             Path yamlFile = tempDir.resolve("test.yml");
             Files.writeString(yamlFile, """
                 greeting: Hello World
                 farewell: Goodbye
                 """);
 
-            YamlTranslationSource source = new YamlTranslationSource(yamlFile, Locale.ENGLISH);
-            source.load();
+            Map<String, String> map = TranslationParsers.parseYaml(yamlFile, java.nio.charset.StandardCharsets.UTF_8);
 
-            assertEquals(Locale.ENGLISH, source.getLocale());
-            assertEquals(2, source.getKeys().size());
-            assertEquals("Hello World", source.getRaw("greeting"));
-            assertEquals("Goodbye", source.getRaw("farewell"));
+            assertEquals(2, map.size());
+            assertEquals("Hello World", map.get("greeting"));
+            assertEquals("Goodbye", map.get("farewell"));
         }
 
         @Test
-        @DisplayName("应展平嵌套 YAML 结构")
+        @DisplayName("Should flatten nested YAML")
         void shouldFlattenNestedYaml() throws Exception {
             Path yamlFile = tempDir.resolve("nested.yml");
             Files.writeString(yamlFile, """
@@ -53,16 +52,15 @@ class TranslationSourceTest {
                     created: Created successfully
                 """);
 
-            YamlTranslationSource source = new YamlTranslationSource(yamlFile, Locale.ENGLISH);
-            source.load();
+            Map<String, String> map = TranslationParsers.parseYaml(yamlFile, java.nio.charset.StandardCharsets.UTF_8);
 
-            assertEquals("Item not found", source.getRaw("messages.error.not_found"));
-            assertEquals("No permission", source.getRaw("messages.error.permission"));
-            assertEquals("Created successfully", source.getRaw("messages.success.created"));
+            assertEquals("Item not found", map.get("messages.error.not_found"));
+            assertEquals("No permission", map.get("messages.error.permission"));
+            assertEquals("Created successfully", map.get("messages.success.created"));
         }
 
         @Test
-        @DisplayName("应处理多层嵌套")
+        @DisplayName("Should handle deeply nested")
         void shouldHandleDeeplyNested() throws Exception {
             Path yamlFile = tempDir.resolve("deep.yml");
             Files.writeString(yamlFile, """
@@ -73,69 +71,24 @@ class TranslationSourceTest {
                         value: Deep value
                 """);
 
-            YamlTranslationSource source = new YamlTranslationSource(yamlFile, Locale.ENGLISH);
-            source.load();
+            Map<String, String> map = TranslationParsers.parseYaml(yamlFile, java.nio.charset.StandardCharsets.UTF_8);
 
-            assertEquals("Deep value", source.getRaw("level1.level2.level3.level4.value"));
+            assertEquals("Deep value", map.get("level1.level2.level3.level4.value"));
         }
 
         @Test
-        @DisplayName("应处理空文件")
+        @DisplayName("Should handle empty file")
         void shouldHandleEmptyFile() throws Exception {
             Path yamlFile = tempDir.resolve("empty.yml");
             Files.writeString(yamlFile, "");
 
-            YamlTranslationSource source = new YamlTranslationSource(yamlFile, Locale.ENGLISH);
-            source.load();
+            Map<String, String> map = TranslationParsers.parseYaml(yamlFile, java.nio.charset.StandardCharsets.UTF_8);
 
-            assertTrue(source.getKeys().isEmpty());
+            assertTrue(map.isEmpty());
         }
 
         @Test
-        @DisplayName("应返回键本身当键不存在")
-        void shouldReturnKeyWhenNotFound() throws Exception {
-            Path yamlFile = tempDir.resolve("test.yml");
-            Files.writeString(yamlFile, "key: value");
-
-            YamlTranslationSource source = new YamlTranslationSource(yamlFile, Locale.ENGLISH);
-            source.load();
-
-            assertEquals("nonexistent.key", source.getRaw("nonexistent.key"));
-        }
-
-        @Test
-        @DisplayName("reload 应清除旧数据")
-        void reloadShouldClearOldData() throws Exception {
-            Path yamlFile = tempDir.resolve("reload.yml");
-            Files.writeString(yamlFile, "old_key: old_value");
-
-            YamlTranslationSource source = new YamlTranslationSource(yamlFile, Locale.ENGLISH);
-            source.load();
-            assertEquals("old_value", source.getRaw("old_key"));
-
-            Files.writeString(yamlFile, "new_key: new_value");
-            source.load();
-
-            assertFalse(source.getKeys().contains("old_key"));
-            assertTrue(source.getKeys().contains("new_key"));
-            assertEquals("new_value", source.getRaw("new_key"));
-        }
-
-        @Test
-        @DisplayName("getKeys() 应返回不可变视图")
-        void getKeysShouldReturnUnmodifiableView() throws Exception {
-            Path yamlFile = tempDir.resolve("test.yml");
-            Files.writeString(yamlFile, "key: value");
-
-            YamlTranslationSource source = new YamlTranslationSource(yamlFile, Locale.ENGLISH);
-            source.load();
-
-            Set<String> keys = source.getKeys();
-            assertThrows(UnsupportedOperationException.class, () -> keys.add("new"));
-        }
-
-        @Test
-        @DisplayName("应处理 Unicode 内容")
+        @DisplayName("Should handle Unicode")
         void shouldHandleUnicode() throws Exception {
             Path yamlFile = tempDir.resolve("unicode.yml");
             Files.writeString(yamlFile, """
@@ -144,39 +97,36 @@ class TranslationSourceTest {
                 emoji: 🎉🎊
                 """);
 
-            YamlTranslationSource source = new YamlTranslationSource(yamlFile, Locale.CHINESE);
-            source.load();
+            Map<String, String> map = TranslationParsers.parseYaml(yamlFile, java.nio.charset.StandardCharsets.UTF_8);
 
-            assertEquals("你好世界", source.getRaw("chinese"));
-            assertEquals("こんにちは", source.getRaw("japanese"));
-            assertEquals("🎉🎊", source.getRaw("emoji"));
+            assertEquals("你好世界", map.get("chinese"));
+            assertEquals("こんにちは", map.get("japanese"));
+            assertEquals("🎉🎊", map.get("emoji"));
         }
     }
 
     @Nested
-    @DisplayName("PropertiesTranslationSource 测试")
-    class PropertiesSourceTests {
+    @DisplayName("Properties Parsing Tests")
+    class PropertiesParsingTests {
 
         @Test
-        @DisplayName("应加载 properties 文件")
-        void shouldLoadProperties() throws Exception {
+        @DisplayName("Should parse properties file")
+        void shouldParseProperties() throws Exception {
             Path propsFile = tempDir.resolve("test.properties");
             Files.writeString(propsFile, """
                 greeting=Hello World
                 farewell=Goodbye
                 """);
 
-            PropertiesTranslationSource source = new PropertiesTranslationSource(propsFile, Locale.ENGLISH);
-            source.load();
+            Map<String, String> map = TranslationParsers.parseProperties(propsFile, java.nio.charset.StandardCharsets.UTF_8);
 
-            assertEquals(Locale.ENGLISH, source.getLocale());
-            assertEquals(2, source.getKeys().size());
-            assertEquals("Hello World", source.getRaw("greeting"));
-            assertEquals("Goodbye", source.getRaw("farewell"));
+            assertEquals(2, map.size());
+            assertEquals("Hello World", map.get("greeting"));
+            assertEquals("Goodbye", map.get("farewell"));
         }
 
         @Test
-        @DisplayName("应处理点号分隔的键")
+        @DisplayName("Should handle dotted keys")
         void shouldHandleDottedKeys() throws Exception {
             Path propsFile = tempDir.resolve("dotted.properties");
             Files.writeString(propsFile, """
@@ -184,52 +134,25 @@ class TranslationSourceTest {
                 messages.success.created=Created successfully
                 """);
 
-            PropertiesTranslationSource source = new PropertiesTranslationSource(propsFile, Locale.ENGLISH);
-            source.load();
+            Map<String, String> map = TranslationParsers.parseProperties(propsFile, java.nio.charset.StandardCharsets.UTF_8);
 
-            assertEquals("Item not found", source.getRaw("messages.error.not_found"));
-            assertEquals("Created successfully", source.getRaw("messages.success.created"));
+            assertEquals("Item not found", map.get("messages.error.not_found"));
+            assertEquals("Created successfully", map.get("messages.success.created"));
         }
 
         @Test
-        @DisplayName("应处理空文件")
+        @DisplayName("Should handle empty file")
         void shouldHandleEmptyFile() throws Exception {
             Path propsFile = tempDir.resolve("empty.properties");
             Files.writeString(propsFile, "");
 
-            PropertiesTranslationSource source = new PropertiesTranslationSource(propsFile, Locale.ENGLISH);
-            source.load();
+            Map<String, String> map = TranslationParsers.parseProperties(propsFile, java.nio.charset.StandardCharsets.UTF_8);
 
-            assertTrue(source.getKeys().isEmpty());
+            assertTrue(map.isEmpty());
         }
 
         @Test
-        @DisplayName("应返回键本身当键不存在")
-        void shouldReturnKeyWhenNotFound() throws Exception {
-            Path propsFile = tempDir.resolve("test.properties");
-            Files.writeString(propsFile, "key=value");
-
-            PropertiesTranslationSource source = new PropertiesTranslationSource(propsFile, Locale.ENGLISH);
-            source.load();
-
-            assertEquals("nonexistent.key", source.getRaw("nonexistent.key"));
-        }
-
-        @Test
-        @DisplayName("getKeys() 应返回不可变视图")
-        void getKeysShouldReturnUnmodifiableView() throws Exception {
-            Path propsFile = tempDir.resolve("test.properties");
-            Files.writeString(propsFile, "key=value");
-
-            PropertiesTranslationSource source = new PropertiesTranslationSource(propsFile, Locale.ENGLISH);
-            source.load();
-
-            Set<String> keys = source.getKeys();
-            assertThrows(UnsupportedOperationException.class, () -> keys.add("new"));
-        }
-
-        @Test
-        @DisplayName("应处理 UTF-8 内容")
+        @DisplayName("Should handle UTF-8")
         void shouldHandleUtf8() throws Exception {
             Path propsFile = tempDir.resolve("unicode.properties");
             Files.writeString(propsFile, """
@@ -237,34 +160,46 @@ class TranslationSourceTest {
                 japanese=こんにちは
                 """);
 
-            PropertiesTranslationSource source = new PropertiesTranslationSource(propsFile, Locale.CHINESE);
-            source.load();
+            Map<String, String> map = TranslationParsers.parseProperties(propsFile, java.nio.charset.StandardCharsets.UTF_8);
 
-            assertEquals("你好世界", source.getRaw("chinese"));
-            assertEquals("こんにちは", source.getRaw("japanese"));
+            assertEquals("你好世界", map.get("chinese"));
+            assertEquals("こんにちは", map.get("japanese"));
         }
     }
 
     @Nested
-    @DisplayName("TranslationSource 通用行为测试")
-    class CommonBehaviorTests {
+    @DisplayName("MapTranslationSource Tests")
+    class MapTranslationSourceTests {
 
         @Test
-        @DisplayName("两种 source 的 getTranslations() 应返回空 Map")
-        void getTranslationsShouldReturnEmptyMap() throws Exception {
-            Path yamlFile = tempDir.resolve("test.yml");
-            Files.writeString(yamlFile, "key: value");
-            Path propsFile = tempDir.resolve("test.properties");
-            Files.writeString(propsFile, "key=value");
+        @DisplayName("Should return locale")
+        void shouldReturnLocale() {
+            MapTranslationSource source = new MapTranslationSource(Locale.ENGLISH, Map.of("key", "value"));
+            assertEquals(Locale.ENGLISH, source.getLocale());
+        }
 
-            YamlTranslationSource yamlSource = new YamlTranslationSource(yamlFile, Locale.ENGLISH);
-            yamlSource.load();
+        @Test
+        @DisplayName("Should return keys")
+        void shouldReturnKeys() {
+            MapTranslationSource source = new MapTranslationSource(Locale.ENGLISH, Map.of("k1", "v1", "k2", "v2"));
+            Set<String> keys = source.getKeys();
+            assertEquals(2, keys.size());
+            assertTrue(keys.contains("k1"));
+            assertTrue(keys.contains("k2"));
+        }
 
-            PropertiesTranslationSource propsSource = new PropertiesTranslationSource(propsFile, Locale.ENGLISH);
-            propsSource.load();
+        @Test
+        @DisplayName("Should return key when not found")
+        void shouldReturnKeyWhenNotFound() {
+            MapTranslationSource source = new MapTranslationSource(Locale.ENGLISH, Map.of("key", "value"));
+            assertEquals("nonexistent.key", source.getRaw("nonexistent.key"));
+        }
 
-            assertTrue(yamlSource.getTranslations().isEmpty());
-            assertTrue(propsSource.getTranslations().isEmpty());
+        @Test
+        @DisplayName("getTranslations() should return empty map")
+        void getTranslationsShouldReturnEmptyMap() {
+            MapTranslationSource source = new MapTranslationSource(Locale.ENGLISH, Map.of("key", "value"));
+            assertTrue(source.getTranslations().isEmpty());
         }
     }
 }
