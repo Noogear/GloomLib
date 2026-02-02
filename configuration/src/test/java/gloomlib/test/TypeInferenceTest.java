@@ -2,10 +2,11 @@ package gloomlib.test;
 
 import gloomlib.configuration.ConfigurationFile;
 import gloomlib.configuration.ConfigurationPart;
-import gloomlib.configuration.TypeInference;
+import gloomlib.configuration.util.TypeInference;
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.util.*;
 
@@ -252,7 +253,7 @@ public class TypeInferenceTest {
         System.out.println("\n=== Test 10: Edge Cases ===");
 
         // null 类型
-        Class<?> nullType = TypeInference.extractGenericParameter(null, 0);
+        Class<?> nullType = TypeInference.extractGenericParameter((Type) null, 0);
         assertEquals(Object.class, nullType, "null type should return Object.class");
         System.out.println("✓ null → Object.class");
 

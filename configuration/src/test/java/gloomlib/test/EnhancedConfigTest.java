@@ -1,8 +1,8 @@
 package gloomlib.test;
 
-import gloomlib.configuration.ConfigBackupManager;
 import gloomlib.configuration.ConfigurationManager;
-import gloomlib.configuration.SparkConfigIntegration;
+import gloomlib.configuration.integration.SparkConfigIntegration;
+import gloomlib.configuration.service.ConfigBackupManager;
 import org.junit.jupiter.api.*;
 
 import java.io.File;

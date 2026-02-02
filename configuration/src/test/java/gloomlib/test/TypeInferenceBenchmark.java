@@ -2,7 +2,7 @@ package gloomlib.test;
 
 import gloomlib.configuration.ConfigurationFile;
 import gloomlib.configuration.ConfigurationPart;
-import gloomlib.configuration.TypeInference;
+import gloomlib.configuration.util.TypeInference;
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Field;
@@ -220,7 +220,7 @@ public class TypeInferenceBenchmark {
             }
         }
         long hotTime = System.nanoTime() - hotStart;
-        long avgHotTime = hotTime / (BENCHMARK_ITERATIONS * fields.length);
+        long avgHotTime = hotTime / ((long) BENCHMARK_ITERATIONS * fields.length);
 
         System.out.printf("✓ Scanned %d fields%n", fields.length);
         System.out.printf("  - Cold cache (total): %,d ns%n", coldTime);
@@ -262,7 +262,7 @@ public class TypeInferenceBenchmark {
         System.out.println(TypeInference.getCacheStats());
         System.out.printf("  - Estimated memory: %,d bytes (%.2f KB)%n", memUsed, memUsed / 1024.0);
         System.out.printf("  - Memory per cache entry: ~%,d bytes%n",
-                memUsed / (fields.length * 3 + 3));
+                memUsed / (fields.length * 3L + 3));
     }
 
     // 测试配置类（包含各种复杂类型）

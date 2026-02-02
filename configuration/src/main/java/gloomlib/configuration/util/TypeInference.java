@@ -1,5 +1,6 @@
-package gloomlib.configuration;
+package gloomlib.configuration.util;
 
+import com.google.gson.reflect.TypeToken;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -9,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Advanced type inference utility for resolving complex generic types with caching support.
+ * Now supports Gson TypeToken for precise generic type resolution.
  */
 public final class TypeInference {
 
@@ -296,12 +298,52 @@ public final class TypeInference {
                 INHERITANCE_CACHE.size());
     }
 
+    /**
+     * Extracts generic parameter from a TypeToken at the specified index.
+     * <p>
+     * This method provides precise generic type resolution for complex types like
+     * {@code Map<UUID, List<ItemStack>>} using Gson's TypeToken.
+     * </p>
+     *
+     * @param typeToken the TypeToken containing generic type information
+     * @param index     the parameter index (0-based)
+     * @return the resolved class, or Object.class if resolution fails
+     */
+    @NotNull
+    public static Class<?> extractGenericParameter(@NotNull TypeToken<?> typeToken, int index) {
+        return extractGenericParameter(typeToken.getType(), index);
+    }
+
+    /**
+     * Gets the raw type from a TypeToken.
+     *
+     * @param typeToken the type token
+     * @return the raw type class
+     */
+    @NotNull
+    public static Class<?> getRawType(@NotNull TypeToken<?> typeToken) {
+        return typeToken.getRawType();
+    }
+
+    // ======================== TypeToken Support ========================
+
+    /**
+     * Gets the full generic Type from a TypeToken.
+     *
+     * @param typeToken the type token
+     * @return the generic type
+     */
+    @NotNull
+    public static Type getType(@NotNull TypeToken<?> typeToken) {
+        return typeToken.getType();
+    }
+
     private record TypeCacheKey(Type type, int index) {
         @Override
         public boolean equals(Object obj) {
             if (this == obj) return true;
-            if (!(obj instanceof TypeCacheKey other)) return false;
-            return index == other.index && Objects.equals(type, other.type);
+            if (!(obj instanceof TypeCacheKey(Type type1, int index1))) return false;
+            return index == index1 && Objects.equals(type, type1);
         }
 
         @Override
@@ -314,8 +356,8 @@ public final class TypeInference {
         @Override
         public boolean equals(Object obj) {
             if (this == obj) return true;
-            if (!(obj instanceof CompatibilityCacheKey other)) return false;
-            return source == other.source && target == other.target;
+            if (!(obj instanceof CompatibilityCacheKey(Class<?> source1, Class<?> target1))) return false;
+            return source == source1 && target == target1;
         }
 
         @Override

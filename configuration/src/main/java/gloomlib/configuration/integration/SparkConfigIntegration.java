@@ -1,5 +1,7 @@
-package gloomlib.configuration;
+package gloomlib.configuration.integration;
 
+import gloomlib.configuration.ConfigurationFile;
+import gloomlib.configuration.ConfigurationPart;
 import gloomlib.configuration.annotations.Sensitive;
 import org.jetbrains.annotations.NotNull;
 

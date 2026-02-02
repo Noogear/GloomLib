@@ -1,6 +1,6 @@
-package gloomlib.configuration;
+package gloomlib.configuration.service;
 
-import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
+import gloomlib.configuration.util.ConfigurationLogger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -19,19 +19,9 @@ public final class ConfigBackupManager {
 
     private static final SimpleDateFormat TIMESTAMP_FORMAT = new SimpleDateFormat("yyyyMMdd_HHmmss");
     private static final String BACKUP_DIR_NAME = "backups";
-    private static ComponentLogger logger;
 
     private ConfigBackupManager() {
         throw new UnsupportedOperationException("Utility class");
-    }
-
-    /**
-     * Sets the logger for backup operations.
-     *
-     * @param componentLogger the logger to use
-     */
-    public static void setLogger(@NotNull ComponentLogger componentLogger) {
-        logger = componentLogger;
     }
 
     /**
@@ -200,20 +190,14 @@ public final class ConfigBackupManager {
     }
 
     private static void logInfo(String message) {
-        if (logger != null) {
-            logger.info(message);
-        }
+        ConfigurationLogger.info(message);
     }
 
     private static void logError(String message) {
-        if (logger != null) {
-            logger.error(message);
-        }
+        ConfigurationLogger.error(message, null);
     }
 
     private static void logError(String message, Throwable throwable) {
-        if (logger != null) {
-            logger.error(message, throwable);
-        }
+        ConfigurationLogger.error(message, throwable);
     }
 }

@@ -1,5 +1,6 @@
 package gloomlib.configuration;
 
+import gloomlib.configuration.service.ConfigBackupManager;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.jetbrains.annotations.NotNull;
 
@@ -41,7 +42,7 @@ public abstract class ConfigurationFile extends ConfigurationPart {
         return file;
     }
 
-    void setFile(File file) {
+    public void setFile(File file) {
         this.file = file;
     }
 
