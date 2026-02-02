@@ -24,7 +24,7 @@ public interface MiniMessageTranslationRegistry extends Translator {
     /**
      * Creates a new translation registry.
      *
-     * @param name the registry name key
+     * @param name        the registry name key
      * @param miniMessage the MiniMessage instance to use for deserialization
      * @return a new registry instance
      */
@@ -40,7 +40,7 @@ public interface MiniMessageTranslationRegistry extends Translator {
     /**
      * Registers a translation.
      *
-     * @param key the translation key
+     * @param key    the translation key
      * @param locale the locale
      * @param format the MiniMessage format string
      * @throws IllegalArgumentException if a translation already exists for this key and locale
@@ -65,7 +65,7 @@ public interface MiniMessageTranslationRegistry extends Translator {
     /**
      * Gets the raw MiniMessage translation string for a key and locale.
      *
-     * @param key the translation key
+     * @param key    the translation key
      * @param locale the locale
      * @return the MiniMessage string, or null if not found
      */

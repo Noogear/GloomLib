@@ -50,8 +50,8 @@ class MiniMessageTranslationRegistryTest {
         @DisplayName("重复注册应抛出异常")
         void duplicateRegistrationShouldThrow() {
             registry.register("test.key", Locale.ENGLISH, "First");
-            assertThrows(IllegalArgumentException.class, 
-                () -> registry.register("test.key", Locale.ENGLISH, "Second"));
+            assertThrows(IllegalArgumentException.class,
+                    () -> registry.register("test.key", Locale.ENGLISH, "Second"));
         }
 
         @Test
@@ -106,7 +106,7 @@ class MiniMessageTranslationRegistryTest {
         @DisplayName("应回退到语言变体")
         void shouldFallbackToLanguageVariant() {
             registry.register("lang.test", Locale.of("zh"), "Language only");
-            
+
             String result = registry.miniMessageTranslation("lang.test", Locale.of("zh", "TW"));
             assertEquals("Language only", result);
         }

@@ -28,16 +28,16 @@ public interface LocaleFallback {
     @Nullable Locale getParent(@NotNull Locale locale);
 
     /**
-     * Sets the root fallback locale.
-     *
-     * @param locale root locale
-     */
-    void setRootLocale(@NotNull Locale locale);
-
-    /**
      * Gets the current root fallback locale.
      *
      * @return root locale
      */
     @NotNull Locale getRootLocale();
+
+    /**
+     * Sets the root fallback locale.
+     *
+     * @param locale root locale
+     */
+    void setRootLocale(@NotNull Locale locale);
 }

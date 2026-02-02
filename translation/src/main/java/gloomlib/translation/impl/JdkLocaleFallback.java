@@ -12,13 +12,14 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class JdkLocaleFallback implements LocaleFallback {
 
-    /** Singleton instance. */
+    /**
+     * Singleton instance.
+     */
     public static final JdkLocaleFallback INSTANCE = new JdkLocaleFallback();
-
-    private final Map<Locale, List<Locale>> chainCache = new ConcurrentHashMap<>();
-    private final Map<Locale, Optional<Locale>> parentCache = new ConcurrentHashMap<>();
     private static final ResourceBundle.Control CONTROL =
             ResourceBundle.Control.getNoFallbackControl(ResourceBundle.Control.FORMAT_DEFAULT);
+    private final Map<Locale, List<Locale>> chainCache = new ConcurrentHashMap<>();
+    private final Map<Locale, Optional<Locale>> parentCache = new ConcurrentHashMap<>();
     private volatile Locale rootLocale = Locale.US;
 
     private JdkLocaleFallback() {
@@ -78,13 +79,13 @@ public final class JdkLocaleFallback implements LocaleFallback {
     }
 
     @Override
-    public void setRootLocale(@NotNull Locale locale) {
-        this.rootLocale = Objects.requireNonNull(locale, "locale");
+    public @NotNull Locale getRootLocale() {
+        return rootLocale;
     }
 
     @Override
-    public @NotNull Locale getRootLocale() {
-        return rootLocale;
+    public void setRootLocale(@NotNull Locale locale) {
+        this.rootLocale = Objects.requireNonNull(locale, "locale");
     }
 
     /**

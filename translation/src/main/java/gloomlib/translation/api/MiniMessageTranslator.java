@@ -41,7 +41,7 @@ public interface MiniMessageTranslator extends Translator, Examinable {
      * within it using the given locale.
      *
      * @param component the component to render
-     * @param locale the locale to use for translation
+     * @param locale    the locale to use for translation
      * @return the rendered component with translations applied
      */
     static @NotNull Component render(final @NotNull Component component, final @NotNull Locale locale) {

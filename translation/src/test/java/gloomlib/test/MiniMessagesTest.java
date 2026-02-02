@@ -13,6 +13,16 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("MiniMessages 工具类测试")
 class MiniMessagesTest {
 
+    @Test
+    @DisplayName("构造函数应抛出 UnsupportedOperationException")
+    void constructorShouldThrowException() {
+        assertThrows(Exception.class, () -> {
+            var constructor = MiniMessages.class.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            constructor.newInstance();
+        });
+    }
+
     @Nested
     @DisplayName("实例获取测试")
     class InstanceTests {
@@ -123,15 +133,5 @@ class MiniMessagesTest {
             String result = MiniMessages.toPlainText(parsed);
             assertEquals("Error: Something went wrong", result);
         }
-    }
-
-    @Test
-    @DisplayName("构造函数应抛出 UnsupportedOperationException")
-    void constructorShouldThrowException() {
-        assertThrows(Exception.class, () -> {
-            var constructor = MiniMessages.class.getDeclaredConstructor();
-            constructor.setAccessible(true);
-            constructor.newInstance();
-        });
     }
 }

@@ -16,16 +16,20 @@ import java.util.Arrays;
  */
 public class LocalizedException extends RuntimeException {
 
-    /** The translation key for error message. */
+    /**
+     * The translation key for error message.
+     */
     private final String node;
-    /** Arguments for message formatting. */
+    /**
+     * Arguments for message formatting.
+     */
     private String[] arguments;
 
     /**
      * Creates a new localized exception.
      *
-     * @param node the translation key
-     * @param cause the cause of this exception, or null
+     * @param node      the translation key
+     * @param cause     the cause of this exception, or null
      * @param arguments the arguments to substitute into the translation
      */
     public LocalizedException(
@@ -43,11 +47,11 @@ public class LocalizedException extends RuntimeException {
     /**
      * Creates a new localized exception without a cause.
      *
-     * @param node the translation key
+     * @param node      the translation key
      * @param arguments the arguments to substitute into the translation
      */
     public LocalizedException(@NotNull String node, @Nullable String... arguments) {
-        this(node, (Exception) null, arguments);
+        this(node, null, arguments);
     }
 
     /**
@@ -71,7 +75,7 @@ public class LocalizedException extends RuntimeException {
     /**
      * Sets an argument at the specified index.
      *
-     * @param index the argument index
+     * @param index    the argument index
      * @param argument the argument value
      * @throws IndexOutOfBoundsException if the index is out of range
      */

@@ -19,13 +19,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Core implementation of translation manager.
@@ -35,8 +31,10 @@ public final class TranslationManagerImpl implements TranslationManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(TranslationManagerImpl.class);
     private static final TagResolver EMPTY_TAGS = TagResolver.empty();
 
-    /** Singleton instance. */
-    public static volatile TranslationManagerImpl instance;
+    /**
+     * Thread-safe singleton instance holder.
+     */
+    private static final AtomicReference<TranslationManagerImpl> INSTANCE = new AtomicReference<>();
 
     private final MiniMessageTranslationRegistry registry;
     private final Path dataFolder;
@@ -51,20 +49,29 @@ public final class TranslationManagerImpl implements TranslationManager {
     /**
      * Creates new translation manager.
      *
-     * @param registryKey the registry key
-     * @param dataFolder the data folder for translation files
+     * @param registryKey   the registry key
+     * @param dataFolder    the data folder for translation files
      * @param defaultLocale the default locale
      */
     public TranslationManagerImpl(@NotNull net.kyori.adventure.key.Key registryKey,
-                           @NotNull Path dataFolder,
-                           @NotNull Locale defaultLocale) {
+                                  @NotNull Path dataFolder,
+                                  @NotNull Locale defaultLocale) {
         this.registry = MiniMessageTranslationRegistry.create(registryKey, MiniMessages.get());
         this.registry.defaultLocale(defaultLocale);
         this.dataFolder = dataFolder;
         this.defaultLocale = defaultLocale;
 
-        instance = this;
+        INSTANCE.set(this);
         MiniMessageTranslator.translator().setSource(this.registry);
+    }
+
+    /**
+     * Gets the current singleton instance.
+     *
+     * @return the current instance, or null if not initialized
+     */
+    public static @Nullable TranslationManagerImpl getInstance() {
+        return INSTANCE.get();
     }
 
     @Override
@@ -175,9 +182,7 @@ public final class TranslationManagerImpl implements TranslationManager {
         sources.clear();
         activeLanguageCodes.clear();
         fileCache.clear();
-        if (instance == this) {
-            instance = null;
-        }
+        INSTANCE.compareAndSet(this, null);
     }
 
     @Override

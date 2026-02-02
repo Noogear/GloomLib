@@ -31,14 +31,14 @@ public final class MiniMessageTranslationRegistryImpl implements Examinable, Min
     private final Key name;
     private final Map<String, Translation> translations = new ConcurrentHashMap<>();
     private final Map<String, Component> componentCache = new ConcurrentHashMap<>();
-    private volatile Locale defaultLocale = Locale.US;
     private final MiniMessage miniMessage;
     private final LocaleFallback fallback;
+    private volatile Locale defaultLocale = Locale.US;
 
     /**
      * Creates new MiniMessage translation registry with default fallback.
      *
-     * @param name the registry key
+     * @param name        the registry key
      * @param miniMessage the MiniMessage instance
      */
     public MiniMessageTranslationRegistryImpl(final Key name, final MiniMessage miniMessage) {
@@ -48,9 +48,9 @@ public final class MiniMessageTranslationRegistryImpl implements Examinable, Min
     /**
      * Creates new MiniMessage translation registry with custom fallback.
      *
-     * @param name the registry key
+     * @param name        the registry key
      * @param miniMessage the MiniMessage instance
-     * @param fallback the locale fallback strategy
+     * @param fallback    the locale fallback strategy
      */
     public MiniMessageTranslationRegistryImpl(
             final Key name,

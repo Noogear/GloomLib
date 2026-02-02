@@ -21,7 +21,7 @@ public final class MapTranslationSource implements TranslationSource {
     /**
      * Creates new map translation source.
      *
-     * @param locale the target locale
+     * @param locale       the target locale
      * @param translations the translation map
      */
     public MapTranslationSource(@NotNull Locale locale, @NotNull Map<String, String> translations) {

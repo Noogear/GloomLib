@@ -82,9 +82,9 @@ class TranslationManagerTest {
         @DisplayName("应加载 YAML 翻译文件")
         void shouldLoadYamlFile() throws Exception {
             Files.writeString(tempDir.resolve("en_US.yml"), """
-                greeting: Hello World
-                farewell: Goodbye
-                """);
+                    greeting: Hello World
+                    farewell: Goodbye
+                    """);
 
             manager.load(List.of("en_US"));
 
@@ -96,9 +96,9 @@ class TranslationManagerTest {
         @DisplayName("应加载 Properties 翻译文件")
         void shouldLoadPropertiesFile() throws Exception {
             Files.writeString(tempDir.resolve("en_US.properties"), """
-                greeting=Hello World
-                farewell=Goodbye
-                """);
+                    greeting=Hello World
+                    farewell=Goodbye
+                    """);
 
             manager.load(List.of("en_US"));
 
@@ -163,12 +163,12 @@ class TranslationManagerTest {
         @BeforeEach
         void loadTranslations() throws Exception {
             Files.writeString(tempDir.resolve("en_US.yml"), """
-                simple: Simple text
-                formatted: <red>Red text</red>
-                with.placeholder: Hello <name>!
-                nested:
-                  key: Nested value
-                """);
+                    simple: Simple text
+                    formatted: <red>Red text</red>
+                    with.placeholder: Hello <name>!
+                    nested:
+                      key: Nested value
+                    """);
             manager.load(List.of("en_US"));
         }
 
@@ -216,9 +216,9 @@ class TranslationManagerTest {
         @BeforeEach
         void loadTranslations() throws Exception {
             Files.writeString(tempDir.resolve("en_US.yml"), """
-                test: Test value
-                formatted: <red>Red</red>
-                """);
+                    test: Test value
+                    formatted: <red>Red</red>
+                    """);
             manager.load(List.of("en_US"));
         }
 
@@ -243,13 +243,13 @@ class TranslationManagerTest {
         @BeforeEach
         void loadTranslations() throws Exception {
             Files.writeString(tempDir.resolve("en_US.yml"), """
-                english.only: English only
-                both: English version
-                """);
+                    english.only: English only
+                    both: English version
+                    """);
             Files.writeString(tempDir.resolve("zh_CN.yml"), """
-                both: 中文版本
-                chinese.only: 仅中文
-                """);
+                    both: 中文版本
+                    chinese.only: 仅中文
+                    """);
             manager.load(List.of("en_US", "zh_CN"));
         }
 
@@ -396,9 +396,9 @@ class TranslationManagerTest {
         @BeforeEach
         void loadTranslations() throws Exception {
             Files.writeString(tempDir.resolve("en_US.yml"), """
-                exists: Existing value
-                with.placeholder: Hello <name>!
-                """);
+                    exists: Existing value
+                    with.placeholder: Hello <name>!
+                    """);
             manager.load(List.of("en_US"));
         }
 

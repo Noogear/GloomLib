@@ -36,11 +36,22 @@ public final class I18NTag implements TagResolver {
      * Creates a new I18N tag resolver.
      *
      * @param translationManager the translation manager to use
-     * @param viewerLocale the locale of the viewer, or null to use default
+     * @param viewerLocale       the locale of the viewer, or null to use default
      */
     public I18NTag(@NotNull TranslationManager translationManager, @Nullable Locale viewerLocale) {
         this.translationManager = translationManager;
         this.viewerLocale = viewerLocale != null ? viewerLocale : translationManager.getDefaultLocale();
+    }
+
+    /**
+     * Creates a tag resolver for use with MiniMessage.
+     *
+     * @param translationManager the translation manager
+     * @param locale             the viewer's locale
+     * @return a tag resolver for the "i18n" tag
+     */
+    public static TagResolver resolver(@NotNull TranslationManager translationManager, @Nullable Locale locale) {
+        return new I18NTag(translationManager, locale);
     }
 
     @Override
@@ -72,17 +83,6 @@ public final class I18NTag implements TagResolver {
     @Override
     public boolean has(@NotNull String name) {
         return "i18n".equals(name);
-    }
-
-    /**
-     * Creates a tag resolver for use with MiniMessage.
-     *
-     * @param translationManager the translation manager
-     * @param locale the viewer's locale
-     * @return a tag resolver for the "i18n" tag
-     */
-    public static TagResolver resolver(@NotNull TranslationManager translationManager, @Nullable Locale locale) {
-        return new I18NTag(translationManager, locale);
     }
 
     /**

@@ -10,19 +10,19 @@ import gloomlib.configuration.annotations.*;
  * - Async operations
  */
 @Header({
-    "Enhanced Configuration Test",
-    "Features: Version Management, Sensitive Data, Async Reload"
+        "Enhanced Configuration Test",
+        "Features: Version Management, Sensitive Data, Async Reload"
 })
 public class EnhancedTestConfig extends ConfigurationFile {
 
     // ============ Version Management ============
-    
+
     @Version(value = 2, autoBackup = true, migrate = true)
     @Comment("Configuration version (do not modify manually)")
     public int version = 2;
 
     // ============ Sensitive Data ============
-    
+
     @Sensitive(mask = "***")
     @Comment("API key (will be hidden from monitoring tools)")
     public String apiKey = "secret-key-12345";
@@ -32,7 +32,7 @@ public class EnhancedTestConfig extends ConfigurationFile {
     public String databasePassword = "password123";
 
     // ============ Regular Configuration ============
-    
+
     @Comment("Server name")
     public String serverName = "MyServer";
 
@@ -44,12 +44,12 @@ public class EnhancedTestConfig extends ConfigurationFile {
     public boolean debugMode = false;
 
     // ============ Nested Configuration ============
-    
+
     @Comment("Database settings")
     public DatabaseConfig database = new DatabaseConfig();
 
     // ============ Validation Methods ============
-    
+
     private static int validateMaxPlayers(int value) {
         if (value < 1) return 1;
         if (value > 100) return 100;
@@ -57,7 +57,7 @@ public class EnhancedTestConfig extends ConfigurationFile {
     }
 
     // ============ Lifecycle Hooks ============
-    
+
     @PostLoad
     public void onConfigLoaded() {
         System.out.println("[EnhancedTestConfig] Configuration loaded (version: " + version + ")");
@@ -67,9 +67,9 @@ public class EnhancedTestConfig extends ConfigurationFile {
     }
 
     // ============ Nested Classes ============
-    
+
     public static class DatabaseConfig extends gloomlib.configuration.ConfigurationPart {
-        
+
         @Comment("Database host")
         public String host = "localhost";
 

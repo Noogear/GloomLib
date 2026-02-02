@@ -33,14 +33,14 @@ class JdkLocaleFallbackTest {
         assertNotNull(chain);
         assertFalse(chain.isEmpty());
         assertTrue(
-            chain.stream().anyMatch(l ->
-                l.getLanguage().equals("zh") && l.getCountry().equals("HK")),
-            "Should contain zh_HK"
+                chain.stream().anyMatch(l ->
+                        l.getLanguage().equals("zh") && l.getCountry().equals("HK")),
+                "Should contain zh_HK"
         );
         assertTrue(
-            chain.stream().anyMatch(l ->
-                l.getLanguage().equals("zh") && l.getCountry().isEmpty()),
-            "Should contain zh"
+                chain.stream().anyMatch(l ->
+                        l.getLanguage().equals("zh") && l.getCountry().isEmpty()),
+                "Should contain zh"
         );
         assertEquals(Locale.US, chain.get(chain.size() - 1), "Last should be root");
     }
@@ -53,14 +53,14 @@ class JdkLocaleFallbackTest {
 
         assertNotNull(chain);
         assertTrue(
-            chain.stream().anyMatch(l ->
-                l.getLanguage().equals("zh") && l.getCountry().equals("CN")),
-            "Should contain zh_CN"
+                chain.stream().anyMatch(l ->
+                        l.getLanguage().equals("zh") && l.getCountry().equals("CN")),
+                "Should contain zh_CN"
         );
         assertTrue(
-            chain.stream().anyMatch(l ->
-                l.getLanguage().equals("zh") && l.getCountry().isEmpty()),
-            "Should contain zh"
+                chain.stream().anyMatch(l ->
+                        l.getLanguage().equals("zh") && l.getCountry().isEmpty()),
+                "Should contain zh"
         );
         assertEquals(Locale.US, chain.get(chain.size() - 1), "Last should be root");
     }

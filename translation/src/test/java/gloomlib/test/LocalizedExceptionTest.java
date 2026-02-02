@@ -133,7 +133,7 @@ class LocalizedExceptionTest {
         @DisplayName("异常应可作为标准异常使用")
         void shouldWorkAsStandardException() {
             LocalizedException ex = new LocalizedException("error.test", "arg");
-            
+
             try {
                 throw ex;
             } catch (RuntimeException e) {
@@ -147,7 +147,7 @@ class LocalizedExceptionTest {
         void exceptionChainShouldPropagate() {
             Exception root = new IllegalArgumentException("invalid input");
             LocalizedException wrapper = new LocalizedException("error.wrapper", root, "context");
-            
+
             assertSame(root, wrapper.getCause());
             assertEquals("error.wrapper", wrapper.node());
         }

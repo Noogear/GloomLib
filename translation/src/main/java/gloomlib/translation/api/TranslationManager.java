@@ -28,14 +28,14 @@ public interface TranslationManager {
      * @return the instance, or null if not initialized
      */
     static @Nullable TranslationManager instance() {
-        return TranslationManagerImpl.instance;
+        return TranslationManagerImpl.getInstance();
     }
 
     /**
      * Creates a new translation manager.
      *
-     * @param registryKey the unique key for the translation registry
-     * @param dataFolder the folder containing translation files
+     * @param registryKey   the unique key for the translation registry
+     * @param dataFolder    the folder containing translation files
      * @param defaultLocale the default locale for fallback
      * @return a new translation manager instance
      */
@@ -85,7 +85,7 @@ public interface TranslationManager {
      * Loads translation files with custom options.
      *
      * @param languageCodes the language codes to load
-     * @param options the file source options
+     * @param options       the file source options
      */
     void load(@NotNull List<String> languageCodes, @NotNull FileSourceOptions options);
 
@@ -111,7 +111,7 @@ public interface TranslationManager {
     /**
      * Gets the raw MiniMessage translation string for a specific locale.
      *
-     * @param key the translation key
+     * @param key    the translation key
      * @param locale the locale
      * @return the raw translation string, or null if not found
      */
@@ -130,7 +130,7 @@ public interface TranslationManager {
     /**
      * Translates a key using the default locale with tag resolvers.
      *
-     * @param key the translation key
+     * @param key  the translation key
      * @param tags the tag resolvers for placeholders
      * @return the translated component
      */
@@ -140,9 +140,9 @@ public interface TranslationManager {
     /**
      * Translates a key using a specific locale with tag resolvers.
      *
-     * @param key the translation key
+     * @param key    the translation key
      * @param locale the locale to use
-     * @param tags the tag resolvers for placeholders
+     * @param tags   the tag resolvers for placeholders
      * @return the translated component
      */
     @NotNull
@@ -161,7 +161,7 @@ public interface TranslationManager {
      * Renders a component with a specific locale.
      *
      * @param component the component to render
-     * @param locale the locale to use for translation
+     * @param locale    the locale to use for translation
      * @return the rendered component
      */
     @NotNull
@@ -170,7 +170,7 @@ public interface TranslationManager {
     /**
      * Gets the raw translation string (legacy method).
      *
-     * @param key the translation key
+     * @param key    the translation key
      * @param locale the locale
      * @return the raw translation, or null if not found
      * @deprecated Use {@link #getRawTranslation(String, Locale)} instead
@@ -233,7 +233,7 @@ public interface TranslationManager {
     /**
      * Gets a translated component with tag resolvers, never returning null.
      *
-     * @param key the translation key
+     * @param key  the translation key
      * @param tags the tag resolvers
      * @return the translated component, or error component if not found
      */
@@ -244,9 +244,9 @@ public interface TranslationManager {
     /**
      * Gets a translated component for a specific locale, never returning null.
      *
-     * @param key the translation key
+     * @param key    the translation key
      * @param locale the locale
-     * @param tags the tag resolvers
+     * @param tags   the tag resolvers
      * @return the translated component, or error component if not found
      */
     default @NotNull Component component(@NotNull String key, @NotNull Locale locale, @NotNull TagResolver... tags) {

@@ -28,9 +28,9 @@ class TranslationSourceTest {
         void shouldParseSimpleYaml() throws Exception {
             Path yamlFile = tempDir.resolve("test.yml");
             Files.writeString(yamlFile, """
-                greeting: Hello World
-                farewell: Goodbye
-                """);
+                    greeting: Hello World
+                    farewell: Goodbye
+                    """);
 
             Map<String, String> map = TranslationParsers.parseYaml(yamlFile, java.nio.charset.StandardCharsets.UTF_8);
 
@@ -44,13 +44,13 @@ class TranslationSourceTest {
         void shouldFlattenNestedYaml() throws Exception {
             Path yamlFile = tempDir.resolve("nested.yml");
             Files.writeString(yamlFile, """
-                messages:
-                  error:
-                    not_found: Item not found
-                    permission: No permission
-                  success:
-                    created: Created successfully
-                """);
+                    messages:
+                      error:
+                        not_found: Item not found
+                        permission: No permission
+                      success:
+                        created: Created successfully
+                    """);
 
             Map<String, String> map = TranslationParsers.parseYaml(yamlFile, java.nio.charset.StandardCharsets.UTF_8);
 
@@ -64,12 +64,12 @@ class TranslationSourceTest {
         void shouldHandleDeeplyNested() throws Exception {
             Path yamlFile = tempDir.resolve("deep.yml");
             Files.writeString(yamlFile, """
-                level1:
-                  level2:
-                    level3:
-                      level4:
-                        value: Deep value
-                """);
+                    level1:
+                      level2:
+                        level3:
+                          level4:
+                            value: Deep value
+                    """);
 
             Map<String, String> map = TranslationParsers.parseYaml(yamlFile, java.nio.charset.StandardCharsets.UTF_8);
 
@@ -92,10 +92,10 @@ class TranslationSourceTest {
         void shouldHandleUnicode() throws Exception {
             Path yamlFile = tempDir.resolve("unicode.yml");
             Files.writeString(yamlFile, """
-                chinese: 你好世界
-                japanese: こんにちは
-                emoji: 🎉🎊
-                """);
+                    chinese: 你好世界
+                    japanese: こんにちは
+                    emoji: 🎉🎊
+                    """);
 
             Map<String, String> map = TranslationParsers.parseYaml(yamlFile, java.nio.charset.StandardCharsets.UTF_8);
 
@@ -114,9 +114,9 @@ class TranslationSourceTest {
         void shouldParseProperties() throws Exception {
             Path propsFile = tempDir.resolve("test.properties");
             Files.writeString(propsFile, """
-                greeting=Hello World
-                farewell=Goodbye
-                """);
+                    greeting=Hello World
+                    farewell=Goodbye
+                    """);
 
             Map<String, String> map = TranslationParsers.parseProperties(propsFile, java.nio.charset.StandardCharsets.UTF_8);
 
@@ -130,9 +130,9 @@ class TranslationSourceTest {
         void shouldHandleDottedKeys() throws Exception {
             Path propsFile = tempDir.resolve("dotted.properties");
             Files.writeString(propsFile, """
-                messages.error.not_found=Item not found
-                messages.success.created=Created successfully
-                """);
+                    messages.error.not_found=Item not found
+                    messages.success.created=Created successfully
+                    """);
 
             Map<String, String> map = TranslationParsers.parseProperties(propsFile, java.nio.charset.StandardCharsets.UTF_8);
 
@@ -156,9 +156,9 @@ class TranslationSourceTest {
         void shouldHandleUtf8() throws Exception {
             Path propsFile = tempDir.resolve("unicode.properties");
             Files.writeString(propsFile, """
-                chinese=你好世界
-                japanese=こんにちは
-                """);
+                    chinese=你好世界
+                    japanese=こんにちは
+                    """);
 
             Map<String, String> map = TranslationParsers.parseProperties(propsFile, java.nio.charset.StandardCharsets.UTF_8);
 

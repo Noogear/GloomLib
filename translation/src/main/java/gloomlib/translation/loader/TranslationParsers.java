@@ -28,7 +28,7 @@ public final class TranslationParsers {
     /**
      * Parses a YAML file.
      *
-     * @param path the file path
+     * @param path    the file path
      * @param charset the encoding
      * @return flattened key-value map
      * @throws IOException if reading fails
@@ -64,7 +64,7 @@ public final class TranslationParsers {
     /**
      * Parses a properties file.
      *
-     * @param path the file path
+     * @param path    the file path
      * @param charset the encoding
      * @return key-value map
      * @throws IOException if reading fails
@@ -103,7 +103,7 @@ public final class TranslationParsers {
     /**
      * Parses a translation file by extension.
      *
-     * @param path the file path
+     * @param path    the file path
      * @param charset the encoding
      * @return key-value map
      * @throws IOException if reading fails

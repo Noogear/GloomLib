@@ -57,22 +57,22 @@ class TranslationLoadingBenchmarkTest {
     void benchmarkLoading() {
         // Benchmark
         long startTime = System.nanoTime();
-        
+
         for (int i = 0; i < 100; i++) {
             manager = new TranslationManagerImpl(
-                Key.key("test", "bench"),
-                tempDir,
-                Locale.US
+                    Key.key("test", "bench"),
+                    tempDir,
+                    Locale.US
             );
             manager.load(List.of("en_US", "zh_CN"));
             manager.close();
         }
-        
+
         long endTime = System.nanoTime();
-        
+
         double totalMs = (endTime - startTime) / 1_000_000.0;
         double avgMs = totalMs / 100.0;
-        
+
         System.out.println("=== Translation Loading Benchmark (100 iterations) ===");
         System.out.println("Total time: " + String.format("%.2f", totalMs) + " ms");
         System.out.println("Avg per load: " + String.format("%.2f", avgMs) + " ms");

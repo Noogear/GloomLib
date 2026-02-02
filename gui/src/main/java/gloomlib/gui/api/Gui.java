@@ -78,7 +78,7 @@ public sealed interface Gui extends Observable permits Gui.Normal, Gui.Paged {
     /**
      * Sets a slot element at an index.
      *
-     * @param slot the slot index
+     * @param slot    the slot index
      * @param element the slot element
      */
     void setSlotElement(int slot, @NotNull SlotElement element);

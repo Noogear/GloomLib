@@ -22,8 +22,8 @@ public interface TranslationMigrator {
      * Return {@code null} to keep the entry unchanged.</p>
      *
      * @param locale the locale of the translation file
-     * @param key the translation key
-     * @param value the translation value (MiniMessage format)
+     * @param key    the translation key
+     * @param value  the translation value (MiniMessage format)
      * @return the migration result, or null to keep unchanged
      */
     @Nullable
@@ -34,7 +34,7 @@ public interface TranslationMigrator {
      *
      * <p>Use this to check version numbers or other metadata before migrating.</p>
      *
-     * @param resource the resource file name (e.g., "en_US.yml")
+     * @param resource   the resource file name (e.g., "en_US.yml")
      * @param properties the parsed properties from the file
      * @return true if migration should be performed
      */
@@ -45,7 +45,7 @@ public interface TranslationMigrator {
     /**
      * Represents the result of migrating a translation entry.
      *
-     * @param key the new key, or null to remove the entry
+     * @param key   the new key, or null to remove the entry
      * @param value the new value, or null to remove the entry
      */
     record Migration(@Nullable String key, @Nullable String value) {
@@ -59,7 +59,7 @@ public interface TranslationMigrator {
          * Creates a migration that renames the key.
          *
          * @param newKey the new key name
-         * @param value the value (unchanged or modified)
+         * @param value  the value (unchanged or modified)
          * @return the migration result
          */
         public static @NotNull Migration rename(@NotNull String newKey, @NotNull String value) {
@@ -69,7 +69,7 @@ public interface TranslationMigrator {
         /**
          * Creates a migration that updates the value.
          *
-         * @param key the key (unchanged)
+         * @param key      the key (unchanged)
          * @param newValue the new value
          * @return the migration result
          */
@@ -80,7 +80,7 @@ public interface TranslationMigrator {
         /**
          * Creates a migration that renames the key and updates the value.
          *
-         * @param newKey the new key name
+         * @param newKey   the new key name
          * @param newValue the new value
          * @return the migration result
          */

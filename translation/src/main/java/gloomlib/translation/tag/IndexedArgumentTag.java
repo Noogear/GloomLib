@@ -33,6 +33,28 @@ public final class IndexedArgumentTag implements TagResolver {
         this.arguments = Objects.requireNonNull(arguments, "arguments");
     }
 
+    /**
+     * Creates an indexed argument tag resolver from string arguments.
+     *
+     * @param arguments the string arguments to convert to text components
+     * @return a new tag resolver
+     */
+    public static IndexedArgumentTag ofStrings(@NotNull List<String> arguments) {
+        return new IndexedArgumentTag(arguments.stream()
+                .<ComponentLike>map(Component::text)
+                .toList());
+    }
+
+    /**
+     * Creates an indexed argument tag resolver from components.
+     *
+     * @param arguments the component arguments
+     * @return a new tag resolver
+     */
+    public static IndexedArgumentTag of(@NotNull ComponentLike... arguments) {
+        return new IndexedArgumentTag(List.of(arguments));
+    }
+
     @Override
     public @Nullable Tag resolve(@NotNull String name, @NotNull ArgumentQueue queue, @NotNull Context ctx)
             throws ParsingException {
@@ -55,27 +77,5 @@ public final class IndexedArgumentTag implements TagResolver {
     @Override
     public boolean has(@NotNull String name) {
         return "arg".equals(name);
-    }
-
-    /**
-     * Creates an indexed argument tag resolver from string arguments.
-     *
-     * @param arguments the string arguments to convert to text components
-     * @return a new tag resolver
-     */
-    public static IndexedArgumentTag ofStrings(@NotNull List<String> arguments) {
-        return new IndexedArgumentTag(arguments.stream()
-                .<ComponentLike>map(Component::text)
-                .toList());
-    }
-
-    /**
-     * Creates an indexed argument tag resolver from components.
-     *
-     * @param arguments the component arguments
-     * @return a new tag resolver
-     */
-    public static IndexedArgumentTag of(@NotNull ComponentLike... arguments) {
-        return new IndexedArgumentTag(List.of(arguments));
     }
 }

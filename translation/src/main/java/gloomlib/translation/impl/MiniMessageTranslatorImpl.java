@@ -20,11 +20,14 @@ import java.util.stream.Stream;
  */
 public final class MiniMessageTranslatorImpl implements MiniMessageTranslator {
 
-    private static final Key NAME = Key.key("gloomlib", "translator");
-    /** Singleton instance. */
+    /**
+     * Singleton instance.
+     */
     public static final MiniMessageTranslatorImpl INSTANCE = new MiniMessageTranslatorImpl();
-
-    /** Translatable component renderer for locale-based translation. */
+    private static final Key NAME = Key.key("gloomlib", "translator");
+    /**
+     * Translatable component renderer for locale-based translation.
+     */
     public final TranslatableComponentRenderer<Locale> renderer =
             TranslatableComponentRenderer.usingTranslationSource(this);
 

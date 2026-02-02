@@ -37,8 +37,8 @@ public final class TranslationLoader {
      * Loads a translation source from file.
      *
      * @param dataFolder the folder containing translation files
-     * @param fileName the file name
-     * @param locale the locale
+     * @param fileName   the file name
+     * @param locale     the locale
      * @return the translation source
      * @throws Exception if loading fails
      */
@@ -51,9 +51,9 @@ public final class TranslationLoader {
      * Loads a translation source with options.
      *
      * @param dataFolder the folder containing translation files
-     * @param fileName the file name
-     * @param locale the locale
-     * @param options the loading options
+     * @param fileName   the file name
+     * @param locale     the locale
+     * @param options    the loading options
      * @return the translation source
      * @throws Exception if loading fails
      */
