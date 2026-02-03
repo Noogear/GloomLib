@@ -78,7 +78,6 @@ public class ConfigurationManager {
      * @return the deserialized value
      * @throws SerializationException if deserialization fails
      */
-    @SuppressWarnings("unchecked")
     public static <T> T deserialize(Object raw, TypeToken<T> typeToken) throws SerializationException {
         return deserialize(raw, typeToken, List.of());
     }

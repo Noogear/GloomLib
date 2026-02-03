@@ -55,7 +55,6 @@ public final class SerializationService {
         Class<?> type = val.getClass();
 
         if (adapterRegistry.hasAdapter(type)) {
-            @SuppressWarnings("unchecked")
             ConfigurationManager.TypeAdapter<Object> adapter = (ConfigurationManager.TypeAdapter<Object>) adapterRegistry.getAdapter(type);
             return adapter.serialize(val);
         }

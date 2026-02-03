@@ -129,3 +129,6 @@ dependency-check-report.xml
 
 # Avoid ignoring Gradle wrapper jar file (.jar files are usually ignored)
 !gradle-wrapper.jar
+/docs
+/modules/command/src/jmh
+/modules/command/src/jmh
