@@ -1,4 +1,5 @@
 rootProject.name = 'GloomLib'
 
-include "configuration"
-include "gui"
+file('modules').listFiles()?.findAll { it.isDirectory() }?.each {
+    include "modules:${it.name}"
+}

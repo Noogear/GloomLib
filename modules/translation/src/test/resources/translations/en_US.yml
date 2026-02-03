@@ -1,0 +1,32 @@
+greeting: Hello World
+farewell: Goodbye
+
+messages:
+  error:
+    not_found: Item not found
+    permission: You don't have permission
+    invalid_input: "Invalid input: <arg:0>"
+  success:
+    created: Successfully created
+    deleted: Successfully deleted
+
+formatted:
+  red_text: "<red>This is red</red>"
+  bold_text: "<bold>This is bold</bold>"
+  combined: "<red><bold>Bold Red</bold></red>"
+
+placeholders:
+  single: "Hello <name>!"
+  multiple: "<player> gave <amount> to <receiver>"
+  indexed: "Arg0: <arg:0>, Arg1: <arg:1>"
+
+nested:
+  level1:
+    level2:
+      level3:
+        deep_value: This is deeply nested
+
+special:
+  empty: ""
+  unicode: "🎉 Celebration! 🎊"
+  quotes: "He said \"Hello\""
