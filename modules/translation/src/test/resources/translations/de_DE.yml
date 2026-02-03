@@ -1,0 +1,12 @@
+greeting: Hallo Welt
+farewell: Auf Wiedersehen
+
+messages:
+  error:
+    not_found: Element nicht gefunden
+    permission: Keine Berechtigung
+  success:
+    created: Erfolgreich erstellt
+
+placeholders:
+  single: "Hallo <name>!"
