@@ -19,6 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <li>MethodHandle 在 JIT 编译后可以接近直接方法调用的性能</li>
  * <li>内置缓存机制，避免重复创建 MethodHandle</li>
  * <li>线程安全的缓存实现</li>
+ * <li>参数数量特化：根据参数数量使用直接调用避免 invokeWithArguments 开销</li>
  * </ul>
  */
 public class MethodInvoker {
@@ -30,7 +31,9 @@ public class MethodInvoker {
     private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
 
     private final MethodHandle handle;
+    private final MethodHandle spreadHandle;
     private final Method method;
+    private final int parameterCount;
 
     /**
      * 创建方法调用器。
@@ -41,6 +44,24 @@ public class MethodInvoker {
     public MethodInvoker(Method method) throws IllegalAccessException {
         this.method = method;
         this.handle = getOrCreateHandle(method);
+        this.parameterCount = method.getParameterCount();
+        // 创建 spread handle 用于数组参数调用
+        this.spreadHandle = createSpreadHandle(handle, parameterCount);
+    }
+
+    /**
+     * 创建 spread handle 用于优化数组参数调用。
+     */
+    private static MethodHandle createSpreadHandle(MethodHandle handle, int paramCount) {
+        try {
+            // 将 handle 适配为接受 Object[] 参数的形式
+            // handle 类型: (instance, arg1, arg2, ...) -> result
+            // spread handle 类型: (instance, Object[]) -> result
+            return handle.asSpreader(1, Object[].class, paramCount);
+        } catch (Exception e) {
+            // 如果创建失败，返回 null，后续使用 invokeWithArguments
+            return null;
+        }
     }
 
     /**
@@ -65,7 +86,15 @@ public class MethodInvoker {
     }
 
     /**
-     * 调用方法。
+     * 调用方法（高性能优化版本）。
+     *
+     * <p>
+     * 使用参数数量特化策略，根据参数数量选择最优调用方式：
+     * <ul>
+     * <li>0-8 个参数：使用 switch + 直接 invoke，避免数组分配</li>
+     * <li>9+ 个参数：使用 invokeWithArguments</li>
+     * </ul>
+     * </p>
      *
      * @param instance 实例对象
      * @param args     方法参数
@@ -73,12 +102,30 @@ public class MethodInvoker {
      * @throws Throwable 调用过程中的异常
      */
     public Object invoke(Object instance, Object... args) throws Throwable {
-        // 构建完整的参数列表（实例 + 参数）
-        Object[] fullArgs = new Object[args.length + 1];
-        fullArgs[0] = instance;
-        System.arraycopy(args, 0, fullArgs, 1, args.length);
-
-        return handle.invokeWithArguments(fullArgs);
+        // 参数数量特化：避免 invokeWithArguments 的开销
+        // invokeWithArguments 需要装箱/拆箱和数组操作，直接调用更快
+        return switch (args.length) {
+            case 0 -> handle.invoke(instance);
+            case 1 -> handle.invoke(instance, args[0]);
+            case 2 -> handle.invoke(instance, args[0], args[1]);
+            case 3 -> handle.invoke(instance, args[0], args[1], args[2]);
+            case 4 -> handle.invoke(instance, args[0], args[1], args[2], args[3]);
+            case 5 -> handle.invoke(instance, args[0], args[1], args[2], args[3], args[4]);
+            case 6 -> handle.invoke(instance, args[0], args[1], args[2], args[3], args[4], args[5]);
+            case 7 -> handle.invoke(instance, args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+            case 8 -> handle.invoke(instance, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+            default -> {
+                // 超过 8 个参数，使用 spread handle 或 invokeWithArguments
+                if (spreadHandle != null) {
+                    yield spreadHandle.invoke(instance, args);
+                } else {
+                    Object[] fullArgs = new Object[args.length + 1];
+                    fullArgs[0] = instance;
+                    System.arraycopy(args, 0, fullArgs, 1, args.length);
+                    yield handle.invokeWithArguments(fullArgs);
+                }
+            }
+        };
     }
 
     /**

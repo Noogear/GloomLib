@@ -132,3 +132,7 @@ dependency-check-report.xml
 /docs
 /modules/command/src/jmh
 /modules/command/src/jmh
+*.bat
+*.py
+*.md
+*.sh

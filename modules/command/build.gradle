@@ -43,11 +43,19 @@ tasks.named('test') {
 
 // JMH 配置
 jmh {
-    warmupIterations = 3
-    iterations = 5
-    fork = 1
+    warmupIterations = project.hasProperty('jmh.warmupIterations') ? project.property('jmh.warmupIterations') as int : 5
+    iterations = project.hasProperty('jmh.measurementIterations') ? project.property('jmh.measurementIterations') as int : 10
+    fork = project.hasProperty('jmh.fork') ? project.property('jmh.fork') as int : 1
     threads = 1
+    
+    // 支持通过参数指定要运行的基准测试
+    if (project.hasProperty('jmh.includes')) {
+        includes = [project.property('jmh.includes') as String]
+    }
+    
     resultFormat = 'JSON'
+    resultsFile = project.file("${project.buildDir}/reports/jmh/results.json")
+    humanOutputFile = project.file("${project.buildDir}/reports/jmh/results.txt")
 }
 
 // 启用参数名保留（用于自动参数名获取）

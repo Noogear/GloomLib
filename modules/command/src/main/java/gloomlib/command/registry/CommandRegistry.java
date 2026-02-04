@@ -1,30 +1,22 @@
 package gloomlib.command.registry;
 
 import gloomlib.command.annotation.*;
-import gloomlib.command.annotation.Optional;
-import gloomlib.command.context.AsyncContext;
-import gloomlib.command.context.CommandResult;
-import gloomlib.command.context.GloomCommandContext;
 import gloomlib.command.exception.CommandException;
 import gloomlib.command.processor.MethodInvoker;
 import gloomlib.command.processor.ProcessorPipeline;
-import gloomlib.command.processor.processors.ValidationProcessor;
 import gloomlib.command.processor.processors.CooldownProcessor;
 import gloomlib.command.resolver.ArgumentResolver;
 import gloomlib.command.resolver.ArgumentResolverRegistry;
-import gloomlib.command.suggestion.SuggestionProvider;
-import com.mojang.brigadier.Command;
-import com.mojang.brigadier.builder.ArgumentBuilder;
+import gloomlib.command.util.CommandMessages;
+import gloomlib.command.util.ParameterUtils;
+import gloomlib.command.parser.ArgumentParser;
+import gloomlib.command.executor.CommandExecutor;
+import gloomlib.command.builder.BrigadierTreeBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.lang.reflect.Method;
@@ -33,35 +25,47 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 命令注册器。
+ * 命令注册器（协调者）。
  *
  * <p>
- * 负责扫描命令类、构建 Brigadier 命令树并注册到 Paper 生命周期事件中。
- * 处理注解解析、参数解析、权限检查以及命令的具体执行逻辑。
+ * 负责协调各组件完成命令注册流程，包括：
  * </p>
+ * <ul>
+ * <li>扫描命令类的注解（@Command, @Usage, @SubCommand 等）</li>
+ * <li>预热缓存（MethodInvoker, Cooldown Key, Async 状态）</li>
+ * <li>注册快速路径命令（FastPathExecutor）</li>
+ * <li>构建 Brigadier 命令树（BrigadierTreeBuilder）</li>
+ * <li>协调命令执行（ArgumentParser + CommandExecutor）</li>
+ * </ul>
+ *
+ * <h2>架构组件</h2>
+ * <ul>
+ * <li>{@link ArgumentParser} - 参数解析器，负责从 CommandContext 解析参数</li>
+ * <li>{@link CommandExecutor} - 命令执行器，负责运行命令方法</li>
+ * <li>{@link BrigadierTreeBuilder} - Brigadier 树构建器，负责构建命令树</li>
+ * <li>{@link FastPathExecutor} - 快速路径执行器，绕过 Brigadier 提升性能</li>
+ * </ul>
  */
 public class CommandRegistry {
-
-    private static final String MSG_REQUIRE_ANNOTATION = "Class %s must have @Command annotation";
-    private static final String MSG_UNSUPPORTED_TYPE = "Unsupported parameter type: %s (param: %s, method: %s)";
-    private static final String MSG_RESOLVER_NOT_FOUND = "Argument resolver not found: %s";
-    private static final String MSG_PROVIDER_INIT_ERROR = "Could not instantiate suggestion provider: %s";
-
-    private static final String VALUE_SELF = "self";
 
     private final JavaPlugin plugin;
     private final ArgumentResolverRegistry resolverRegistry;
     private final ProcessorPipeline pipeline;
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
-    private final Map<Class<? extends SuggestionProvider>, SuggestionProvider> suggestionCache = new HashMap<>();
     private final Map<Method, MethodInvoker> methodInvokerCache = new ConcurrentHashMap<>();
 
     // Performance Caches
     private final Map<Method, String> cooldownKeyCache = new ConcurrentHashMap<>();
     private final Map<Method, Boolean> asyncCache = new ConcurrentHashMap<>();
 
-    private final ValidationProcessor validationProcessor = new ValidationProcessor();
     private final CooldownProcessor cooldownProcessor = new CooldownProcessor();
+
+    /** 快速路径执行器 - 用于优化简单命令的执行性能 */
+    private final FastPathExecutor fastPathExecutor;
+
+    // 新组件
+    private final ArgumentParser argumentParser;
+    private final CommandExecutor commandExecutor;
+    private final BrigadierTreeBuilder treeBuilder;
 
     /**
      * 创建命令注册器。
@@ -74,6 +78,21 @@ public class CommandRegistry {
         this.plugin = plugin;
         this.resolverRegistry = resolverRegistry;
         this.pipeline = pipeline;
+        this.fastPathExecutor = new FastPathExecutor(plugin, resolverRegistry, pipeline, cooldownProcessor);
+        
+        // 初始化新组件
+        this.argumentParser = new ArgumentParser(plugin, resolverRegistry);
+        this.commandExecutor = new CommandExecutor(plugin, pipeline, cooldownProcessor);
+        this.treeBuilder = new BrigadierTreeBuilder(resolverRegistry);
+    }
+
+    /**
+     * 获取快速路径执行器。
+     *
+     * @return 快速路径执行器实例
+     */
+    public FastPathExecutor getFastPathExecutor() {
+        return fastPathExecutor;
     }
 
     /**
@@ -90,7 +109,7 @@ public class CommandRegistry {
                 .getAnnotation(gloomlib.command.annotation.Command.class);
 
         if (cmdAnnotation == null) {
-            throw new IllegalArgumentException(String.format(MSG_REQUIRE_ANNOTATION, clazz.getName()));
+            throw new IllegalArgumentException(String.format(CommandMessages.MSG_REQUIRE_ANNOTATION, clazz.getName()));
         }
 
         String commandName = cmdAnnotation.value();
@@ -136,6 +155,15 @@ public class CommandRegistry {
             prepareInvoker(method);
         for (Method method : errorHandlers.values())
             prepareInvoker(method);
+
+        // 注册快速路径（符合条件的命令）
+        for (Method method : usageMethods) {
+            registerFastPathIfEligible(commandName, method, commandInstance, errorHandlers);
+        }
+        for (Method method : subCommandMethods) {
+            SubCommand subCmd = method.getAnnotation(SubCommand.class);
+            registerFastPathIfEligible(commandName + ":" + subCmd.value(), method, commandInstance, errorHandlers);
+        }
 
         // 构建各分支
         for (Method method : usageMethods) {
@@ -199,274 +227,98 @@ public class CommandRegistry {
         asyncCache.put(method, method.isAnnotationPresent(Async.class));
     }
 
+    /**
+     * 为命令方法注册快速路径（如果符合条件）。
+     *
+     * @param commandPath   命令路径
+     * @param method        命令方法
+     * @param instance      命令实例
+     * @param errorHandlers 错误处理器
+     */
+    private void registerFastPathIfEligible(
+            String commandPath,
+            Method method,
+            Object instance,
+            Map<Class<? extends Throwable>, Method> errorHandlers) {
+        
+        if (!FastPathExecutor.isFastPathEligible(method)) {
+            return;
+        }
+
+        Parameter[] parameters = method.getParameters();
+        int startIndex = ParameterUtils.getStartParameterIndex(parameters);
+        int argCount = parameters.length - startIndex;
+
+        // 构建解析器数组
+        ArgumentResolver<?>[] resolvers = new ArgumentResolver<?>[argCount];
+        String[] paramNames = new String[argCount];
+
+        for (int i = startIndex; i < parameters.length; i++) {
+            Parameter param = parameters[i];
+            int idx = i - startIndex;
+            resolvers[idx] = resolverRegistry.getResolver(param.getType());
+            paramNames[idx] = ParameterUtils.getParameterName(param);
+        }
+
+        MethodInvoker invoker = methodInvokerCache.get(method);
+        String cooldownKey = cooldownKeyCache.get(method);
+        Cooldown cooldown = method.getAnnotation(Cooldown.class);
+        boolean isAsync = asyncCache.getOrDefault(method, false);
+
+        FastPathExecutor.FastPathCommand fastCmd = new FastPathExecutor.FastPathCommand(
+                invoker,
+                instance,
+                method,
+                parameters,
+                resolvers,
+                paramNames,
+                startIndex,
+                isAsync,
+                cooldownKey,
+                cooldown,
+                errorHandlers
+        );
+
+        fastPathExecutor.register(commandPath, fastCmd);
+    }
+
     private void buildMethodBranch(
             LiteralArgumentBuilder<CommandSourceStack> builder,
             Method method,
             Object instance,
             Map<Class<? extends Throwable>, Method> errorHandlers) {
-        Parameter[] parameters = method.getParameters();
-        int startIndex = getStartParameterIndex(parameters);
-
-        if (startIndex >= parameters.length) {
-            builder.executes(ctx -> executeMethod(ctx, method, instance, parameters, errorHandlers));
-        } else {
-            buildArgumentChain(builder, method, instance, parameters, startIndex, errorHandlers);
-        }
+        
+        treeBuilder.buildMethodBranch(builder, method, ctx -> 
+            executeMethod(ctx, method, instance, methodInvokerCache.get(method), errorHandlers));
     }
 
-    private void buildArgumentChain(
-            ArgumentBuilder<CommandSourceStack, ?> builder,
-            Method method,
-            Object instance,
-            Parameter[] parameters,
-            int paramIndex,
-            Map<Class<? extends Throwable>, Method> errorHandlers) {
-        if (paramIndex >= parameters.length) {
-            builder.executes(ctx -> executeMethod(ctx, method, instance, parameters, errorHandlers));
-            return;
-        }
 
-        Parameter param = parameters[paramIndex];
-
-        if (param.isAnnotationPresent(Flag.class) || param.isAnnotationPresent(Switch.class)) {
-            buildArgumentChain(builder, method, instance, parameters, paramIndex + 1, errorHandlers);
-            return;
-        }
-
-        String argName = getParameterName(param);
-        ArgumentResolver<?> resolver = resolverRegistry.getResolver(param.getType());
-        if (resolver == null) {
-            throw new IllegalArgumentException(
-                    String.format(MSG_UNSUPPORTED_TYPE, param.getType().getName(), argName, method.getName()));
-        }
-
-        RequiredArgumentBuilder<CommandSourceStack, ?> argumentBuilder = Commands.argument(argName,
-                resolver.createArgumentType(param));
-
-        Suggest suggestAnnotation = param.getAnnotation(Suggest.class);
-        if (suggestAnnotation != null) {
-            SuggestionProvider provider = getSuggestionProvider(suggestAnnotation.value());
-            argumentBuilder.suggests((ctx, suggestionsBuilder) -> provider.suggest(ctx, suggestionsBuilder));
-        } else {
-            argumentBuilder.suggests((ctx, suggestionsBuilder) -> resolver.suggest(ctx, suggestionsBuilder, param));
-        }
-
-        if (param.isAnnotationPresent(Optional.class)) {
-            builder.executes(ctx -> executeMethod(ctx, method, instance, parameters, errorHandlers));
-        }
-
-        buildArgumentChain(argumentBuilder, method, instance, parameters, paramIndex + 1, errorHandlers);
-        builder.then(argumentBuilder);
-    }
 
     private int executeMethod(
             CommandContext<CommandSourceStack> ctx,
             Method method,
             Object instance,
-            Parameter[] parameters,
+            MethodInvoker invoker,
             Map<Class<? extends Throwable>, Method> errorHandlers) {
-
-        // Use cached Async status
-        boolean isAsync = asyncCache.getOrDefault(method, false);
-
-        if (isAsync) {
-            plugin.getServer().getAsyncScheduler().runNow(plugin, task -> {
-                try {
-                    executeMethodInternal(ctx, method, instance, parameters, errorHandlers);
-                } catch (Throwable e) {
-                    e.printStackTrace();
-                }
-            });
-            return Command.SINGLE_SUCCESS;
-        } else {
-            return executeMethodInternal(ctx, method, instance, parameters, errorHandlers);
-        }
-    }
-
-    private int executeMethodInternal(
-            CommandContext<CommandSourceStack> ctx,
-            Method method,
-            Object instance,
-            Parameter[] parameters,
-            Map<Class<? extends Throwable>, Method> errorHandlers) {
-
-        GloomCommandContext context = new GloomCommandContext(ctx);
-
+        
+        // 解析参数
+        Object[] args;
         try {
-            if (!pipeline.runPreProcessors(context)) {
-                return Command.SINGLE_SUCCESS;
-            }
-
-            CommandSender sender = ctx.getSource().getSender();
-
-            PlayerOnly playerOnly = method.getAnnotation(PlayerOnly.class);
-            if (playerOnly != null && !(sender instanceof Player)) {
-                sender.sendMessage(miniMessage.deserialize(playerOnly.message()));
-                return 0;
-            }
-
-            ConsoleOnly consoleOnly = method.getAnnotation(ConsoleOnly.class);
-            if (consoleOnly != null && sender instanceof Player) {
-                sender.sendMessage(miniMessage.deserialize(consoleOnly.message()));
-                return 0;
-            }
-
-            // Optimized Cooldown Check using Cached Key
-            String commandKey = cooldownKeyCache.get(method);
-            if (commandKey != null && sender instanceof Player player) {
-                Cooldown cooldown = method.getAnnotation(Cooldown.class);
-
-                if (!cooldown.bypassPermission().isEmpty() && player.hasPermission(cooldown.bypassPermission())) {
-                    // bypass
-                } else {
-                    long remaining = cooldownProcessor.getRemainingCooldown(commandKey, player.getName());
-                    if (remaining > 0) {
-                        sender.sendMessage(miniMessage.deserialize(cooldown.message())
-                                .replaceText(net.kyori.adventure.text.TextReplacementConfig.builder()
-                                        .match("%time%")
-                                        .replacement(String.format("%.1f", remaining / 1000.0))
-                                        .build()));
-                        return Command.SINGLE_SUCCESS;
-                    }
-                    cooldownProcessor.setCooldown(commandKey, player.getName(), cooldown.value());
-                }
-            }
-
-            Object[] args = resolveArguments(ctx, method, parameters, sender);
-
-            MethodInvoker invoker = methodInvokerCache.get(method);
-
-            Object result = invoker.invoke(instance, args);
-
-            pipeline.runPostProcessors(context, CommandResult.success(result));
-
-            return result instanceof Integer ? (Integer) result : Command.SINGLE_SUCCESS;
-
-        } catch (Throwable t) {
-            Throwable cause = t.getCause() != null ? t.getCause() : t;
-
-            for (Map.Entry<Class<? extends Throwable>, Method> entry : errorHandlers.entrySet()) {
-                if (entry.getKey().isAssignableFrom(cause.getClass())) {
-                    try {
-                        Method handler = entry.getValue();
-                        handler.setAccessible(true);
-                        handler.invoke(instance, new GloomCommandContext(ctx), cause);
-                        return 0;
-                    } catch (Exception handlerEx) {
-                        handlerEx.printStackTrace();
-                    }
-                }
-            }
-
-            CommandSender sender = ctx.getSource().getSender();
-            if (cause instanceof CommandException cmdEx) {
-                sender.sendMessage(cmdEx.getAdventureMessage());
-                sender.sendMessage(
-                        Component.translatable("command.failed", NamedTextColor.RED)
-                                .hoverEvent(Component.text(cause.getMessage(), NamedTextColor.GRAY)));
-                cause.printStackTrace();
-            }
+            args = argumentParser.resolveArguments(ctx, method.getParameters(), ctx.getSource().getSender());
+        } catch (CommandException e) {
+            ctx.getSource().getSender().sendMessage(e.getAdventureMessage());
             return 0;
         }
+        
+        // 执行命令
+        boolean isAsync = asyncCache.getOrDefault(method, false);
+        String cooldownKey = cooldownKeyCache.get(method);
+        
+        return commandExecutor.execute(
+            ctx, method, instance, args, invoker, 
+            isAsync, cooldownKey, errorHandlers);
     }
 
-    private Object[] resolveArguments(
-            CommandContext<CommandSourceStack> ctx,
-            Method method,
-            Parameter[] parameters,
-            CommandSender sender) throws CommandException {
-        Object[] args = new Object[parameters.length];
-
-        for (int i = 0; i < parameters.length; i++) {
-            Parameter param = parameters[i];
-            Class<?> paramType = param.getType();
-            Object resolvedValue = null;
-
-            if (CommandSender.class.isAssignableFrom(paramType)) {
-                resolvedValue = sender;
-            } else if (Player.class.equals(paramType) && i == 0) {
-                resolvedValue = sender;
-            } else if (AsyncContext.class.isAssignableFrom(paramType)) {
-                resolvedValue = new AsyncContext(ctx, plugin);
-            } else if (GloomCommandContext.class.isAssignableFrom(paramType)) {
-                resolvedValue = new GloomCommandContext(ctx);
-            } else if (param.isAnnotationPresent(Switch.class)) {
-                resolvedValue = false;
-            } else if (param.isAnnotationPresent(Flag.class)) {
-                resolvedValue = null;
-            } else {
-                String argName = getParameterName(param);
-                try {
-                    ArgumentResolver<?> resolver = resolverRegistry.getResolver(paramType);
-                    if (resolver != null) {
-                        resolvedValue = resolver.resolve(ctx, argName, param);
-                    } else {
-                        throw new IllegalArgumentException(String.format(MSG_RESOLVER_NOT_FOUND, paramType.getName()));
-                    }
-                } catch (Exception e) {
-                    Default defaultAnnotation = param.getAnnotation(Default.class);
-                    if (defaultAnnotation != null) {
-                        resolvedValue = resolveDefaultValue(defaultAnnotation.value(), paramType, sender);
-                    } else if (param.isAnnotationPresent(Optional.class)) {
-                        resolvedValue = null;
-                    } else {
-                        throw e;
-                    }
-                }
-            }
-
-            if (resolvedValue instanceof Number numberValue) {
-                if (param.isAnnotationPresent(Range.class)) {
-                    Range range = param.getAnnotation(Range.class);
-                    ValidationProcessor.ValidationResult result = validationProcessor.validateRange(numberValue, range,
-                            param);
-                    if (!result.isValid()) {
-                        throw new CommandException(result.getErrorMessage());
-                    }
-                }
-            }
-            args[i] = resolvedValue;
-        }
-        return args;
-    }
-
-    private Object resolveDefaultValue(String defaultValue, Class<?> type, CommandSender sender) {
-        if (VALUE_SELF.equals(defaultValue) && Player.class.isAssignableFrom(type)) {
-            return sender instanceof Player ? sender : null;
-        }
-        if (type == String.class)
-            return defaultValue;
-        if (type == Integer.class || type == int.class)
-            return Integer.parseInt(defaultValue);
-        if (type == Double.class || type == double.class)
-            return Double.parseDouble(defaultValue);
-        if (type == Boolean.class || type == boolean.class)
-            return Boolean.parseBoolean(defaultValue);
-        if (type == Long.class || type == long.class)
-            return Long.parseLong(defaultValue);
-        return null;
-    }
-
-    private int getStartParameterIndex(Parameter[] parameters) {
-        if (parameters.length == 0)
-            return 0;
-        Class<?> firstType = parameters[0].getType();
-        if (CommandSender.class.isAssignableFrom(firstType) ||
-                Player.class.isAssignableFrom(firstType) ||
-                GloomCommandContext.class.isAssignableFrom(firstType) ||
-                AsyncContext.class.isAssignableFrom(firstType)) {
-            return 1;
-        }
-        return 0;
-    }
-
-    private String getParameterName(Parameter param) {
-        Arg arg = param.getAnnotation(Arg.class);
-        if (arg != null && !arg.value().isEmpty()) {
-            return arg.value();
-        }
-        return param.getName();
-    }
 
     private boolean checkPermission(CommandSender sender, Permission permission) {
         return switch (permission.mode()) {
@@ -476,13 +328,4 @@ public class CommandRegistry {
         };
     }
 
-    private SuggestionProvider getSuggestionProvider(Class<? extends SuggestionProvider> providerClass) {
-        return suggestionCache.computeIfAbsent(providerClass, clazz -> {
-            try {
-                return clazz.getDeclaredConstructor().newInstance();
-            } catch (Exception e) {
-                throw new RuntimeException(String.format(MSG_PROVIDER_INIT_ERROR, clazz.getName()), e);
-            }
-        });
-    }
 }

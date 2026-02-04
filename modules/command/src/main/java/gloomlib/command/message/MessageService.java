@@ -1,9 +1,8 @@
 package gloomlib.command.message;
 
+import gloomlib.command.util.MessageUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.format.TextDecoration;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.command.CommandSender;
@@ -31,7 +30,6 @@ import java.util.Map;
  */
 public class MessageService {
 
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final Map<String, String> messages = new HashMap<>();
 
     /** 成功前缀 */
@@ -170,7 +168,7 @@ public class MessageService {
      */
     public Component parse(String template, Object... placeholders) {
         if (placeholders.length == 0) {
-            return miniMessage.deserialize(template);
+            return MessageUtils.MINI_MESSAGE.deserialize(template);
         }
 
         List<TagResolver> resolvers = new ArrayList<>();
@@ -186,7 +184,7 @@ public class MessageService {
             }
         }
 
-        return miniMessage.deserialize(template, resolvers.toArray(TagResolver[]::new));
+        return MessageUtils.MINI_MESSAGE.deserialize(template, resolvers.toArray(TagResolver[]::new));
     }
 
     /**

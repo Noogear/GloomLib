@@ -4,16 +4,21 @@ import gloomlib.command.processor.MethodInvoker;
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.infra.Blackhole;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Method;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 命令方法调用基准测试。
+ * 
+ * <p>对比直接调用、反射调用和 MethodInvoker 优化调用的性能。</p>
+ * 
+ * <p>此测试用于验证 MethodInvoker 相比传统反射的性能提升。</p>
+ */
 @State(Scope.Benchmark)
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
+@Warmup(iterations = 5, time = 1)
+@Measurement(iterations = 10, time = 1)
 @Fork(1)
 public class CommandBenchmark {
 
@@ -30,21 +35,33 @@ public class CommandBenchmark {
         args = new Object[] { "test", 123 };
     }
 
+    /**
+     * 基线：直接方法调用
+     */
     @Benchmark
-    public void directCall(Blackhole bh) {
-        ((TestCommand) instance).execute("test", 123);
+    public int directCall(Blackhole bh) {
+        return ((TestCommand) instance).execute("test", 123);
     }
 
+    /**
+     * 传统反射调用
+     */
     @Benchmark
-    public void reflectionCall(Blackhole bh) throws Exception {
-        method.invoke(instance, args);
+    public Object reflectionCall(Blackhole bh) throws Exception {
+        return method.invoke(instance, args);
     }
 
+    /**
+     * MethodInvoker 优化调用
+     */
     @Benchmark
-    public void methodInvokerCall(Blackhole bh) throws Throwable {
-        invoker.invoke(instance, args);
+    public Object methodInvokerCall(Blackhole bh) throws Throwable {
+        return invoker.invoke(instance, args);
     }
 
+    /**
+     * 测试命令类
+     */
     public static class TestCommand {
         public int execute(String arg1, int arg2) {
             return arg1.length() + arg2;
