@@ -6,10 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 定义命令或子命令所需的权限。
+ * Defines the required permission for a command or subcommand.
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>
@@ -17,13 +17,13 @@ import java.lang.annotation.Target;
  * &#64;Command("gamemode")
  * &#64;Permission("server.gamemode")
  * public class GameModeCommand {
- *     // 所有子命令继承此权限检查
+ *     // All subcommands inherit this permission check
  * }
  *
  * &#64;SubCommand("set")
  * @Permission(value = "server.gamemode.set", mode = PermissionMode.REQUIRE)
  * public void setMode(Player player, @Arg GameMode mode) {
- *     // 需要额外权限
+ *     // Additional permission required
  * }
  * }
  * </pre>
@@ -33,28 +33,28 @@ import java.lang.annotation.Target;
 public @interface Permission {
 
     /**
-     * 权限节点名称。
+     * Permission node name.
      *
-     * @return 权限节点
+     * @return permission node
      */
     String value();
 
     /**
-     * 权限检查模式。
+     * Permission check mode.
      *
-     * @return 检查模式
+     * @return check mode
      */
     PermissionMode mode() default PermissionMode.REQUIRE;
 
     /**
-     * 权限检查模式枚举。
+     * Permission check mode enumeration.
      */
     enum PermissionMode {
-        /** 必须拥有指定权限 */
+        /** Must have the specified permission */
         REQUIRE,
-        /** 必须是 OP */
+        /** Must be an OP */
         OP,
-        /** 任何人都可以使用 */
+        /** Anyone can use */
         ANY
     }
 }

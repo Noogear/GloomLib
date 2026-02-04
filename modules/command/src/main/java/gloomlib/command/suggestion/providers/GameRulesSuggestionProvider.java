@@ -9,10 +9,10 @@ import io.papermc.paper.command.brigadier.CommandSourceStack;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 游戏规则建议提供器。
+ * Game Rules Suggestion Provider.
  *
  * <p>
- * 提供所有 Minecraft 游戏规则的自动补全建议。
+ * Provides auto-completion suggestions for all Minecraft game rules.
  * </p>
  */
 public class GameRulesSuggestionProvider implements SuggestionProvider {
@@ -23,7 +23,7 @@ public class GameRulesSuggestionProvider implements SuggestionProvider {
             SuggestionsBuilder builder) {
         String remaining = builder.getRemaining().toLowerCase();
 
-        // 尝试获取世界
+        // Try getting world
         org.bukkit.World world = null;
         if (context.getSource().getExecutor() instanceof org.bukkit.entity.Entity entity) {
             world = entity.getWorld();

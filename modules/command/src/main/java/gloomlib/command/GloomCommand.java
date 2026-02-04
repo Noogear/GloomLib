@@ -17,19 +17,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * GloomCommand 框架主入口类。
+ * GloomCommand Framework Entry Point.
  *
  * <p>
- * 基于 Paper API 和 Adventure API 的现代化命令框架。
+ * A modern command framework based on Paper API and Adventure API.
  * </p>
  *
- * <h2>快速开始</h2>
+ * <h2>Quick Start</h2>
  * 
  * <pre>{@code
  * public class MyPlugin extends JavaPlugin {
  *     @Override
  *     public void onEnable() {
- *         GloomCommand glooom = GloomCommand.builder(this)
+ *         GloomCommand gloom = GloomCommand.builder(this)
  *                 .build();
  *
  *         gloom.registerService(MyService.class, new MyService());
@@ -38,21 +38,21 @@ import java.util.List;
  * }
  * }</pre>
  *
- * <h2>命令类示例</h2>
+ * <h2>Command Class Example</h2>
  * 
  * <pre>
  * {
  *     &#64;code
  *     &#64;Command("gamemode")
  *     &#64;Permission("server.gamemode")
- *     &#64;Description("更改游戏模式")
+ *     &#64;Description("Change game mode")
  *     public class GameModeCommand {
  *
  *         &#64;Usage
  *         @PlayerOnly
  *         public void setMode(Player player, @Arg GameMode mode) {
  *             player.setGameMode(mode);
- *             player.sendMessage(Component.text("已切换到 " + mode.name()));
+ *             player.sendMessage(Component.text("Switched to " + mode.name()));
  *         }
  *     }
  * }
@@ -74,23 +74,23 @@ public final class GloomCommand {
         this.injector = new DependencyInjector();
         this.pipeline = new ProcessorPipeline();
 
-        // 注册默认处理器
+        // Register default processors
         pipeline.registerPreProcessor(new LoggingProcessor(plugin));
 
         this.commandRegistry = new CommandRegistry(plugin, resolverRegistry, pipeline);
 
-        // 注册内置解析器
+        // Register built-in resolvers
         initializeBuiltInResolvers();
 
-        // 注册 Paper Lifecycle 事件处理器
+        // Register Paper Lifecycle event handlers
         registerLifecycleHandler();
     }
 
     /**
-     * 初始化内置参数解析器。
+     * Initializes built-in argument resolvers.
      */
     private void initializeBuiltInResolvers() {
-        // 基础类型
+        // Basic Types
         resolverRegistry.register(String.class, new StringResolver());
         resolverRegistry.register(Integer.class, new IntegerResolver());
         resolverRegistry.register(Long.class, new LongResolver());
@@ -98,7 +98,7 @@ public final class GloomCommand {
         resolverRegistry.register(Double.class, new DoubleResolver());
         resolverRegistry.register(Boolean.class, new BooleanResolver());
 
-        // Paper API 类型
+        // Paper API Types
         resolverRegistry.register(Player.class, new PlayerResolver());
         resolverRegistry.register(org.bukkit.OfflinePlayer.class, new OfflinePlayerResolver());
         resolverRegistry.register(World.class, new WorldResolver());
@@ -106,16 +106,16 @@ public final class GloomCommand {
         resolverRegistry.register(org.bukkit.Material.class, new MaterialResolver());
         resolverRegistry.register(org.bukkit.Location.class, new LocationResolver());
 
-        // Adventure API 类型
+        // Adventure API Types
         resolverRegistry.register(net.kyori.adventure.text.Component.class, new ComponentResolver());
         resolverRegistry.register(net.kyori.adventure.text.format.TextColor.class, new TextColorResolver());
 
-        // 实用类型
+        // Utility Types
         resolverRegistry.register(java.time.Duration.class, new DurationResolver());
     }
 
     /**
-     * 注册 Paper Lifecycle 事件处理器。
+     * Registers Paper Lifecycle event handler.
      */
     private void registerLifecycleHandler() {
         plugin.getLifecycleManager().registerEventHandler(
@@ -123,7 +123,7 @@ public final class GloomCommand {
                 event -> {
                     initialized = true;
 
-                    // 注册所有待处理的命令
+                    // Register all pending commands
                     for (Object command : pendingCommands) {
                         commandRegistry.registerCommand(command, event.registrar());
                     }
@@ -132,26 +132,28 @@ public final class GloomCommand {
     }
 
     /**
-     * 注册命令实例。
+     * Registers a command instance.
      *
      * <p>
-     * 命令类必须使用 {@code @Command} 注解。
+     * The command class must be annotated with {@code @Command}.
      * </p>
      *
-     * @param commandInstance 命令类实例
-     * @return this（链式调用）
+     * @param commandInstance Command class instance
+     * @return this (chainable)
      */
     public GloomCommand registerCommand(Object commandInstance) {
-        // 注入依赖
+        // Inject dependencies
         injector.injectDependencies(commandInstance);
 
         if (initialized) {
-            // 已初始化，直接注册（通过再次触发事件）
+            // Already initialized, register directly (via re-triggering event or direct
+            // registration if supported,
+            // here we attach to lifecycle again which is safe in Paper)
             plugin.getLifecycleManager().registerEventHandler(
                     LifecycleEvents.COMMANDS,
                     event -> commandRegistry.registerCommand(commandInstance, event.registrar()));
         } else {
-            // 未初始化，添加到待处理列表
+            // Not initialized, add to pending list
             pendingCommands.add(commandInstance);
         }
 
@@ -159,12 +161,12 @@ public final class GloomCommand {
     }
 
     /**
-     * 注册服务（用于依赖注入）。
+     * Registers a service (for dependency injection).
      *
-     * @param type     服务类型
-     * @param instance 服务实例
-     * @param <T>      类型
-     * @return this（链式调用）
+     * @param type     Service type
+     * @param instance Service instance
+     * @param <T>      Type
+     * @return this (chainable)
      */
     public <T> GloomCommand registerService(Class<T> type, T instance) {
         injector.registerSingleton(type, instance);
@@ -172,12 +174,12 @@ public final class GloomCommand {
     }
 
     /**
-     * 注册带限定符的服务。
+     * Registers a service with a qualifier.
      *
-     * @param qualifier 限定符
-     * @param instance  服务实例
-     * @param <T>       类型
-     * @return this（链式调用）
+     * @param qualifier Qualifier
+     * @param instance  Service instance
+     * @param <T>       Type
+     * @return this (chainable)
      */
     public <T> GloomCommand registerService(String qualifier, T instance) {
         injector.registerBean(qualifier, instance);
@@ -185,12 +187,12 @@ public final class GloomCommand {
     }
 
     /**
-     * 注册自定义参数解析器。
+     * Registers a custom argument resolver.
      *
-     * @param type     参数类型
-     * @param resolver 解析器
-     * @param <T>      类型
-     * @return this（链式调用）
+     * @param type     Argument type
+     * @param resolver Resolver
+     * @param <T>      Type
+     * @return this (chainable)
      */
     public <T> GloomCommand registerArgumentResolver(Class<T> type, ArgumentResolver<T> resolver) {
         resolverRegistry.register(type, resolver);
@@ -198,36 +200,36 @@ public final class GloomCommand {
     }
 
     /**
-     * 获取依赖注入器。
+     * Gets the dependency injector.
      *
-     * @return 依赖注入器
+     * @return dependency injector
      */
     public DependencyInjector getInjector() {
         return injector;
     }
 
     /**
-     * 获取参数解析器注册表。
+     * Gets the argument resolver registry.
      *
-     * @return 解析器注册表
+     * @return resolver registry
      */
     public ArgumentResolverRegistry getResolverRegistry() {
         return resolverRegistry;
     }
 
     /**
-     * 获取插件实例。
+     * Gets the plugin instance.
      *
-     * @return 插件实例
+     * @return plugin instance
      */
     public JavaPlugin getPlugin() {
         return plugin;
     }
 
     /**
-     * 创建 Builder。
+     * Creates a Builder.
      *
-     * @param plugin Paper 插件实例
+     * @param plugin Paper plugin instance
      * @return Builder
      */
     public static Builder builder(JavaPlugin plugin) {
@@ -235,7 +237,7 @@ public final class GloomCommand {
     }
 
     /**
-     * GloomCommand Builder。
+     * GloomCommand Builder.
      */
     public static final class Builder {
 
@@ -246,9 +248,9 @@ public final class GloomCommand {
         }
 
         /**
-         * 构建 GloomCommand 实例。
+         * Builds GloomCommand instance.
          *
-         * @return GloomCommand 实例
+         * @return GloomCommand instance
          */
         public GloomCommand build() {
             return new GloomCommand(this);

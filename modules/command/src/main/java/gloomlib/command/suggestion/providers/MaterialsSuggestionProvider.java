@@ -11,7 +11,7 @@ import org.bukkit.Material;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 材料名建议提供器。
+ * Material Name Suggestion Provider.
  */
 public class MaterialsSuggestionProvider implements SuggestionProvider {
 
@@ -19,17 +19,17 @@ public class MaterialsSuggestionProvider implements SuggestionProvider {
     private final boolean blocksOnly;
 
     /**
-     * 创建材料建议提供器（所有材料）。
+     * Creates a material suggestion provider (all materials).
      */
     public MaterialsSuggestionProvider() {
         this(false, false);
     }
 
     /**
-     * 创建材料建议提供器。
+     * Creates a material suggestion provider.
      *
-     * @param itemsOnly  仅显示物品
-     * @param blocksOnly 仅显示方块
+     * @param itemsOnly  Show items only
+     * @param blocksOnly Show blocks only
      */
     public MaterialsSuggestionProvider(boolean itemsOnly, boolean blocksOnly) {
         this.itemsOnly = itemsOnly;
@@ -37,14 +37,14 @@ public class MaterialsSuggestionProvider implements SuggestionProvider {
     }
 
     /**
-     * 仅物品材料提供器。
+     * Items only material provider.
      */
     public static MaterialsSuggestionProvider itemsOnly() {
         return new MaterialsSuggestionProvider(true, false);
     }
 
     /**
-     * 仅方块材料提供器。
+     * Blocks only material provider.
      */
     public static MaterialsSuggestionProvider blocksOnly() {
         return new MaterialsSuggestionProvider(false, true);
@@ -58,7 +58,7 @@ public class MaterialsSuggestionProvider implements SuggestionProvider {
         int count = 0;
 
         for (Material material : Material.values()) {
-            // 过滤
+            // Filter
             if (itemsOnly && !material.isItem())
                 continue;
             if (blocksOnly && !material.isBlock())
@@ -70,7 +70,7 @@ public class MaterialsSuggestionProvider implements SuggestionProvider {
             if (name.startsWith(remaining) || name.contains(remaining)) {
                 builder.suggest(name);
                 if (++count >= 50)
-                    break; // 限制建议数量
+                    break; // Limit number of suggestions
             }
         }
 

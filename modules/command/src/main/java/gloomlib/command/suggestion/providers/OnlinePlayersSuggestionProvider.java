@@ -11,7 +11,7 @@ import org.bukkit.entity.Player;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 在线玩家建议提供器。
+ * Online Players Suggestion Provider.
  */
 public class OnlinePlayersSuggestionProvider implements SuggestionProvider {
 
@@ -23,7 +23,7 @@ public class OnlinePlayersSuggestionProvider implements SuggestionProvider {
 
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getName().toLowerCase().startsWith(remaining)) {
-                builder.suggest(player.getName()); // 移除 Component 工具提示
+                builder.suggest(player.getName()); // Remove Component tooltip
             }
         }
 

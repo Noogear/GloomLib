@@ -9,8 +9,7 @@ import gloomlib.command.resolver.ArgumentResolver;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.command.brigadier.argument.resolvers.selector.PlayerSelectorArgumentResolver;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import gloomlib.command.message.CommandMessages;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
@@ -20,24 +19,24 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 离线玩家参数解析器。
+ * Offline Player Argument Resolver.
  *
  * <p>
- * 支持在线玩家和离线玩家的解析。
+ * Supports resolution of online and offline players.
  * </p>
  */
 public class OfflinePlayerResolver implements ArgumentResolver<OfflinePlayer> {
 
     @Override
     public ArgumentType<?> createArgumentType(Parameter parameter) {
-        // 使用玩家选择器，也支持玩家名
+        // Use player selector, also supports player names
         return ArgumentTypes.player();
     }
 
     @Override
     public OfflinePlayer resolve(CommandContext<CommandSourceStack> context, String name, Parameter parameter) {
         try {
-            // 首先尝试作为在线玩家解析
+            // First try resolving as online player
             PlayerSelectorArgumentResolver selector = context.getArgument(name, PlayerSelectorArgumentResolver.class);
             List<Player> players = selector.resolve(context.getSource());
 
@@ -45,16 +44,15 @@ public class OfflinePlayerResolver implements ArgumentResolver<OfflinePlayer> {
                 return players.get(0);
             }
         } catch (Exception e) {
-            // 忽略，尝试作为离线玩家名解析
+            // Ignore, try resolving as offline player name
         }
 
-        // 尝试作为字符串（玩家名）解析
+        // Try parsing as string (player name)
         try {
             String playerName = context.getArgument(name, String.class);
             return Bukkit.getOfflinePlayer(playerName);
         } catch (Exception e) {
-            throw new CommandException(
-                    Component.text("无法解析玩家: " + name).color(NamedTextColor.RED));
+            throw new CommandException(CommandMessages.PLAYER_UNKNOWN.get());
         }
     }
 
@@ -65,7 +63,7 @@ public class OfflinePlayerResolver implements ArgumentResolver<OfflinePlayer> {
             Parameter parameter) {
         String remaining = builder.getRemaining().toLowerCase();
 
-        // 建议在线玩家
+        // Suggest online players
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getName().toLowerCase().startsWith(remaining)) {
                 builder.suggest(player.getName());

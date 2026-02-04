@@ -10,10 +10,10 @@ import org.bukkit.entity.EntityType;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 实体类型建议提供器。
+ * Entity Type Suggestion Provider.
  *
  * <p>
- * 提供所有可生成实体类型的自动补全建议。
+ * Provides auto-completion suggestions for all spawnable entity types.
  * </p>
  */
 public class EntityTypesSuggestionProvider implements SuggestionProvider {
@@ -25,7 +25,7 @@ public class EntityTypesSuggestionProvider implements SuggestionProvider {
         String remaining = builder.getRemaining().toLowerCase();
 
         for (EntityType type : EntityType.values()) {
-            // 只包含可生成的实体
+            // Only include spawnable entities
             if (!type.isSpawnable()) {
                 continue;
             }

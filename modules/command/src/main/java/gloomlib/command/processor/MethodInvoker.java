@@ -7,27 +7,31 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 命令方法调用器。
+ * Command method invoker.
  *
  * <p>
- * 使用 {@link MethodHandle} 代替反射，提供更高的执行性能。
- * 相比普通反射调用，MethodHandle 可以获得接近直接调用的性能。
+ * Uses {@link MethodHandle} instead of Reflection for higher execution
+ * performance.
+ * Compared to normal reflection, MethodHandle can achieve near-direct call
+ * performance.
  * </p>
  *
- * <h2>性能优化说明</h2>
+ * <h2>Performance Optimizations</h2>
  * <ul>
- * <li>MethodHandle 在 JIT 编译后可以接近直接方法调用的性能</li>
- * <li>内置缓存机制，避免重复创建 MethodHandle</li>
- * <li>线程安全的缓存实现</li>
- * <li>参数数量特化：根据参数数量使用直接调用避免 invokeWithArguments 开销</li>
+ * <li>MethodHandle can approach direct method call performance after JIT
+ * compilation</li>
+ * <li>Built-in caching mechanism to avoid repeated MethodHandle creation</li>
+ * <li>Thread-safe cache implementation</li>
+ * <li>Argument count specialization: uses direct calls based on argument count
+ * to avoid invokeWithArguments overhead</li>
  * </ul>
  */
 public class MethodInvoker {
 
-    /** MethodHandle 缓存 */
+    /** MethodHandle cache */
     private static final Map<Method, MethodHandle> HANDLE_CACHE = new ConcurrentHashMap<>();
 
-    /** MethodHandles.Lookup 实例 */
+    /** MethodHandles.Lookup instance */
     private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
 
     private final MethodHandle handle;
@@ -36,40 +40,40 @@ public class MethodInvoker {
     private final int parameterCount;
 
     /**
-     * 创建方法调用器。
+     * Creates a method invoker.
      *
-     * @param method 目标方法
-     * @throws IllegalAccessException 如果无法访问方法
+     * @param method Target method
+     * @throws IllegalAccessException If method cannot be accessed
      */
     public MethodInvoker(Method method) throws IllegalAccessException {
         this.method = method;
         this.handle = getOrCreateHandle(method);
         this.parameterCount = method.getParameterCount();
-        // 创建 spread handle 用于数组参数调用
+        // Create spread handle for array argument calls
         this.spreadHandle = createSpreadHandle(handle, parameterCount);
     }
 
     /**
-     * 创建 spread handle 用于优化数组参数调用。
+     * Creates a spread handle for optimizing array argument calls.
      */
     private static MethodHandle createSpreadHandle(MethodHandle handle, int paramCount) {
         try {
-            // 将 handle 适配为接受 Object[] 参数的形式
-            // handle 类型: (instance, arg1, arg2, ...) -> result
-            // spread handle 类型: (instance, Object[]) -> result
+            // Adapt handle to accept Object[] arguments
+            // handle type: (instance, arg1, arg2, ...) -> result
+            // spread handle type: (instance, Object[]) -> result
             return handle.asSpreader(1, Object[].class, paramCount);
         } catch (Exception e) {
-            // 如果创建失败，返回 null，后续使用 invokeWithArguments
+            // If creation fails, return null, fallback to invokeWithArguments
             return null;
         }
     }
 
     /**
-     * 获取或创建 MethodHandle。
+     * Gets or creates MethodHandle.
      *
-     * @param method 目标方法
+     * @param method Target method
      * @return MethodHandle
-     * @throws IllegalAccessException 如果无法访问方法
+     * @throws IllegalAccessException If method cannot be accessed
      */
     private static MethodHandle getOrCreateHandle(Method method) throws IllegalAccessException {
         MethodHandle cached = HANDLE_CACHE.get(method);
@@ -77,7 +81,7 @@ public class MethodInvoker {
             return cached;
         }
 
-        // 确保方法可访问
+        // Ensure method is accessible
         method.setAccessible(true);
 
         MethodHandle handle = LOOKUP.unreflect(method);
@@ -86,24 +90,26 @@ public class MethodInvoker {
     }
 
     /**
-     * 调用方法（高性能优化版本）。
+     * Invokes the method (High performance optimized version).
      *
      * <p>
-     * 使用参数数量特化策略，根据参数数量选择最优调用方式：
+     * Uses argument count specialization strategy, choosing optimal call method
+     * based on argument count:
      * <ul>
-     * <li>0-8 个参数：使用 switch + 直接 invoke，避免数组分配</li>
-     * <li>9+ 个参数：使用 invokeWithArguments</li>
+     * <li>0-8 arguments: use switch + direct invoke to avoid array allocation</li>
+     * <li>9+ arguments: use invokeWithArguments</li>
      * </ul>
      * </p>
      *
-     * @param instance 实例对象
-     * @param args     方法参数
-     * @return 方法返回值
-     * @throws Throwable 调用过程中的异常
+     * @param instance Instance object
+     * @param args     Method arguments
+     * @return Method return value
+     * @throws Throwable Exception during invocation
      */
     public Object invoke(Object instance, Object... args) throws Throwable {
-        // 参数数量特化：避免 invokeWithArguments 的开销
-        // invokeWithArguments 需要装箱/拆箱和数组操作，直接调用更快
+        // Argument count specialization: avoid overhead of invokeWithArguments
+        // invokeWithArguments requires boxing/unboxing and array operations, direct
+        // call is faster
         return switch (args.length) {
             case 0 -> handle.invoke(instance);
             case 1 -> handle.invoke(instance, args[0]);
@@ -115,7 +121,7 @@ public class MethodInvoker {
             case 7 -> handle.invoke(instance, args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
             case 8 -> handle.invoke(instance, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
             default -> {
-                // 超过 8 个参数，使用 spread handle 或 invokeWithArguments
+                // More than 8 arguments, use spread handle or invokeWithArguments
                 if (spreadHandle != null) {
                     yield spreadHandle.invoke(instance, args);
                 } else {
@@ -129,27 +135,27 @@ public class MethodInvoker {
     }
 
     /**
-     * 无实例调用（静态方法）。
+     * Static invocation (no instance).
      *
-     * @param args 方法参数
-     * @return 方法返回值
-     * @throws Throwable 调用过程中的异常
+     * @param args Method arguments
+     * @return Method return value
+     * @throws Throwable Exception during invocation
      */
     public Object invokeStatic(Object... args) throws Throwable {
         return handle.invokeWithArguments(args);
     }
 
     /**
-     * 获取原始方法。
+     * Gets the original method.
      *
-     * @return 原始 Method 对象
+     * @return Original Method object
      */
     public Method getMethod() {
         return method;
     }
 
     /**
-     * 获取 MethodHandle。
+     * Gets the MethodHandle.
      *
      * @return MethodHandle
      */
@@ -158,32 +164,32 @@ public class MethodInvoker {
     }
 
     /**
-     * 清除缓存。
+     * Clears the cache.
      */
     public static void clearCache() {
         HANDLE_CACHE.clear();
     }
 
     /**
-     * 获取缓存大小。
+     * Gets cache size.
      *
-     * @return 缓存的 MethodHandle 数量
+     * @return Number of cached MethodHandles
      */
     public static int getCacheSize() {
         return HANDLE_CACHE.size();
     }
 
     /**
-     * 工厂方法：创建方法调用器。
+     * Factory method: Creates a method invoker.
      *
-     * @param method 目标方法
-     * @return 方法调用器
+     * @param method Target method
+     * @return Method invoker
      */
     public static MethodInvoker of(Method method) {
         try {
             return new MethodInvoker(method);
         } catch (IllegalAccessException e) {
-            throw new RuntimeException("无法创建方法调用器: " + method.getName(), e);
+            throw new RuntimeException("Could not create method invoker: " + method.getName(), e);
         }
     }
 }

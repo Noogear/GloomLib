@@ -4,20 +4,21 @@ import gloomlib.command.context.CommandResult;
 import gloomlib.command.context.GloomCommandContext;
 
 /**
- * 命令后处理器接口。
+ * Command Post-Processor Interface.
  *
  * <p>
- * 在命令执行后调用，可用于日志记录、统计、清理等。
+ * Called after command execution, can be used for logging, statistics, cleanup,
+ * etc.
  * </p>
  */
 @FunctionalInterface
 public interface PostProcessor extends CommandProcessor {
 
     /**
-     * 执行后处理。
+     * Executes post-processing.
      *
-     * @param context 命令上下文
-     * @param result  命令执行结果
+     * @param context Command context
+     * @param result  Command execution result
      */
     void postProcess(GloomCommandContext context, CommandResult result);
 }

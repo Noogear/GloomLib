@@ -8,48 +8,48 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 依赖注入器。
+ * Dependency Injector.
  *
  * <p>
- * 管理服务实例的注册和注入。
+ * Manages the registration and injection of service instances.
  * </p>
  */
 public class DependencyInjector {
 
-    /** 按类型存储的单例服务 */
+    /** Singleton services stored by type */
     private final Map<Class<?>, Object> singletons = new ConcurrentHashMap<>();
 
-    /** 按限定符存储的服务（用于同类型多实例） */
+    /** Services stored by qualifier (for multiple instances of the same type) */
     private final Map<String, Object> qualifiedBeans = new ConcurrentHashMap<>();
 
     /**
-     * 注册单例服务。
+     * Registers a singleton service.
      *
-     * @param type     服务类型
-     * @param instance 服务实例
-     * @param <T>      类型
+     * @param type     Service type
+     * @param instance Service instance
+     * @param <T>      Type
      */
     public <T> void registerSingleton(Class<T> type, T instance) {
         singletons.put(type, instance);
     }
 
     /**
-     * 注册带限定符的服务。
+     * Registers a service with a qualifier.
      *
-     * @param qualifier 限定符
-     * @param instance  服务实例
-     * @param <T>       类型
+     * @param qualifier Qualifier
+     * @param instance  Service instance
+     * @param <T>       Type
      */
     public <T> void registerBean(String qualifier, T instance) {
         qualifiedBeans.put(qualifier, instance);
     }
 
     /**
-     * 获取服务实例。
+     * Gets a service instance.
      *
-     * @param type 服务类型
-     * @param <T>  类型
-     * @return 服务实例，或 null
+     * @param type Service type
+     * @param <T>  Type
+     * @return Service instance, or null
      */
     @SuppressWarnings("unchecked")
     public <T> @Nullable T getService(Class<T> type) {
@@ -57,11 +57,11 @@ public class DependencyInjector {
     }
 
     /**
-     * 获取带限定符的服务实例。
+     * Gets a service instance with a qualifier.
      *
-     * @param qualifier 限定符
-     * @param <T>       类型
-     * @return 服务实例，或 null
+     * @param qualifier Qualifier
+     * @param <T>       Type
+     * @return Service instance, or null
      */
     @SuppressWarnings("unchecked")
     public <T> @Nullable T getService(String qualifier) {
@@ -69,14 +69,14 @@ public class DependencyInjector {
     }
 
     /**
-     * 向目标对象注入依赖。
+     * Injects dependencies into the target object.
      *
-     * @param target 目标对象
+     * @param target Target object
      */
     public void injectDependencies(Object target) {
         Class<?> clazz = target.getClass();
 
-        // 遍历所有字段（包括父类）
+        // Iterate through all fields (including superclasses)
         while (clazz != null && clazz != Object.class) {
             for (Field field : clazz.getDeclaredFields()) {
                 if (field.isAnnotationPresent(Inject.class)) {
@@ -88,7 +88,7 @@ public class DependencyInjector {
     }
 
     /**
-     * 注入单个字段。
+     * Injects a single field.
      */
     private void injectField(Object target, Field field) {
         Inject inject = field.getAnnotation(Inject.class);
@@ -97,38 +97,38 @@ public class DependencyInjector {
         Object dependency;
 
         if (!qualifier.isEmpty()) {
-            // 使用限定符查找
+            // Find by qualifier
             dependency = qualifiedBeans.get(qualifier);
         } else {
-            // 按类型查找
+            // Find by type
             dependency = findByType(field.getType());
         }
 
         if (dependency == null) {
             throw new RuntimeException(
-                    "无法注入依赖: " + field.getDeclaringClass().getName() + "." + field.getName() +
-                            " (类型: " + field.getType().getName() + ", 限定符: " + qualifier + ")");
+                    "Cannot inject dependency: " + field.getDeclaringClass().getName() + "." + field.getName() +
+                            " (Type: " + field.getType().getName() + ", Qualifier: " + qualifier + ")");
         }
 
         try {
             field.setAccessible(true);
             field.set(target, dependency);
         } catch (IllegalAccessException e) {
-            throw new RuntimeException("依赖注入失败", e);
+            throw new RuntimeException("Dependency injection failed", e);
         }
     }
 
     /**
-     * 按类型查找服务（支持继承匹配）。
+     * Finds service by type (supports inheritance matching).
      */
     private @Nullable Object findByType(Class<?> type) {
-        // 精确匹配
+        // Exact match
         Object result = singletons.get(type);
         if (result != null) {
             return result;
         }
 
-        // 继承匹配
+        // Inheritance match
         for (Map.Entry<Class<?>, Object> entry : singletons.entrySet()) {
             if (type.isAssignableFrom(entry.getKey())) {
                 return entry.getValue();
@@ -139,7 +139,7 @@ public class DependencyInjector {
     }
 
     /**
-     * 清空所有注册的服务。
+     * Clears all registered services.
      */
     public void clear() {
         singletons.clear();

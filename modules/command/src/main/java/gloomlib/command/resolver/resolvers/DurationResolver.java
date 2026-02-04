@@ -5,8 +5,12 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import gloomlib.command.exception.CommandException;
+import gloomlib.command.message.CommandMessages;
 import gloomlib.command.resolver.ArgumentResolver;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 import java.lang.reflect.Parameter;
 import java.time.Duration;
@@ -46,7 +50,7 @@ public class DurationResolver implements ArgumentResolver<Duration> {
      */
     public static Duration parse(String input) {
         if (input == null || input.isEmpty()) {
-            throw new IllegalArgumentException("时间不能为空");
+            throw new CommandException(CommandMessages.VALIDATION_DURATION_EMPTY.get());
         }
 
         // 尝试纯数字（默认秒）
@@ -56,7 +60,8 @@ public class DurationResolver implements ArgumentResolver<Duration> {
 
         Matcher matcher = DURATION_PATTERN.matcher(input);
         if (!matcher.matches()) {
-            throw new IllegalArgumentException("无效的时间格式: " + input + "（示例: 1d2h30m）");
+            throw new CommandException(CommandMessages.VALIDATION_DURATION_INVALID.get(
+                    Component.text(input, NamedTextColor.YELLOW)));
         }
 
         long days = matcher.group(1) != null ? Long.parseLong(matcher.group(1)) : 0;
@@ -65,7 +70,7 @@ public class DurationResolver implements ArgumentResolver<Duration> {
         long seconds = matcher.group(4) != null ? Long.parseLong(matcher.group(4)) : 0;
 
         if (days == 0 && hours == 0 && minutes == 0 && seconds == 0) {
-            throw new IllegalArgumentException("时间必须大于 0");
+            throw new CommandException(CommandMessages.VALIDATION_DURATION_POSITIVE.get());
         }
 
         return Duration.ofDays(days)
@@ -82,7 +87,7 @@ public class DurationResolver implements ArgumentResolver<Duration> {
      */
     public static String format(Duration duration) {
         if (duration.isZero()) {
-            return "0秒";
+            return "0s";
         }
 
         long totalSeconds = duration.getSeconds();
@@ -93,13 +98,13 @@ public class DurationResolver implements ArgumentResolver<Duration> {
 
         StringBuilder sb = new StringBuilder();
         if (days > 0)
-            sb.append(days).append("天");
+            sb.append(days).append("d");
         if (hours > 0)
-            sb.append(hours).append("小时");
+            sb.append(hours).append("h");
         if (minutes > 0)
-            sb.append(minutes).append("分钟");
+            sb.append(minutes).append("m");
         if (seconds > 0)
-            sb.append(seconds).append("秒");
+            sb.append(seconds).append("s");
 
         return sb.toString();
     }

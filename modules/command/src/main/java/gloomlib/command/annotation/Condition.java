@@ -6,17 +6,17 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 定义命令执行条件。
+ * Defines execution conditions for a command.
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>{@code
  * @SubCommand("reward")
  * @Condition("dailyReward")
  * public void claimReward(Player player) {
- *     // 仅当 dailyReward 条件满足时执行
+ *     // Executed only when dailyReward condition is met
  * }
  * }</pre>
  */
@@ -25,9 +25,9 @@ import java.lang.annotation.Target;
 public @interface Condition {
 
     /**
-     * 条件名称（在 CommandConditionRegistry 中注册）。
+     * Condition name (registered in CommandConditionRegistry).
      *
-     * @return 条件名称
+     * @return condition name
      */
     String value();
 }

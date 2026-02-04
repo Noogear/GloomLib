@@ -3,63 +3,55 @@ package gloomlib.command.processor.processors;
 import gloomlib.command.context.GloomCommandContext;
 import gloomlib.command.processor.PreProcessor;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
 
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 命令冷却处理器。
+ * Command Cooldown Processor.
  *
  * <p>
- * 管理命令冷却时间，防止命令被频繁执行。
+ * Manages command cooldowns to prevent command spamming.
  * </p>
  */
 public class CooldownProcessor implements PreProcessor {
 
-    /** 冷却数据：命令名 -> (玩家名 -> 上次执行时间) */
-    private final Map<String, Map<String, Long>> cooldowns = new ConcurrentHashMap<>();
-
-    private final MiniMessage miniMessage = MiniMessage.miniMessage();
-
-    /** 默认冷却时间（毫秒） */
-    private long defaultCooldown = 0;
-
-    /** 默认冷却消息 */
-    private String defaultMessage = "<red>请等待 <yellow>{remaining}</yellow> 后再使用此命令！</red>";
+    /** Cooldown data: commandName -> (playerUuid -> lastExecutionTime) */
+    private final Map<String, Map<UUID, Long>> cooldowns = new ConcurrentHashMap<>();
 
     /**
-     * 设置冷却时间。
+     * Sets cooldown time.
      *
-     * @param commandName 命令名
-     * @param playerName  玩家名
-     * @param durationMs  冷却时长（毫秒）
+     * @param commandName Command name
+     * @param playerUuid  Player UUID
+     * @param durationMs  Cooldown duration (milliseconds)
      */
-    public void setCooldown(String commandName, String playerName, long durationMs) {
+    public void setCooldown(String commandName, UUID playerUuid, long durationMs) {
         cooldowns.computeIfAbsent(commandName, k -> new ConcurrentHashMap<>())
-                .put(playerName, System.currentTimeMillis() + durationMs);
+                .put(playerUuid, System.currentTimeMillis() + durationMs);
     }
 
     /**
-     * 检查是否处于冷却中。
+     * Checks if cooldown is active.
      *
-     * @param commandName 命令名
-     * @param playerName  玩家名
-     * @return 剩余冷却时间（毫秒），0 表示不在冷却中
+     * @param commandName Command name
+     * @param playerUuid  Player UUID
+     * @return Remaining cooldown time (milliseconds), 0 if not in cooldown
      */
-    public long getRemainingCooldown(String commandName, String playerName) {
-        Map<String, Long> commandCooldowns = cooldowns.get(commandName);
+    public long getRemainingCooldown(String commandName, UUID playerUuid) {
+        Map<UUID, Long> commandCooldowns = cooldowns.get(commandName);
         if (commandCooldowns == null)
             return 0;
 
-        Long expireTime = commandCooldowns.get(playerName);
+        Long expireTime = commandCooldowns.get(playerUuid);
         if (expireTime == null)
             return 0;
 
         long remaining = expireTime - System.currentTimeMillis();
         if (remaining <= 0) {
-            commandCooldowns.remove(playerName);
+            commandCooldowns.remove(playerUuid);
             return 0;
         }
 
@@ -67,20 +59,20 @@ public class CooldownProcessor implements PreProcessor {
     }
 
     /**
-     * 清除玩家的冷却。
+     * Clears cooldown for a player.
      *
-     * @param commandName 命令名
-     * @param playerName  玩家名
+     * @param commandName Command name
+     * @param playerUuid  Player UUID
      */
-    public void clearCooldown(String commandName, String playerName) {
-        Map<String, Long> commandCooldowns = cooldowns.get(commandName);
+    public void clearCooldown(String commandName, UUID playerUuid) {
+        Map<UUID, Long> commandCooldowns = cooldowns.get(commandName);
         if (commandCooldowns != null) {
-            commandCooldowns.remove(playerName);
+            commandCooldowns.remove(playerUuid);
         }
     }
 
     /**
-     * 清除所有冷却。
+     * Clears all cooldowns.
      */
     public void clearAllCooldowns() {
         cooldowns.clear();
@@ -88,36 +80,36 @@ public class CooldownProcessor implements PreProcessor {
 
     @Override
     public Result preProcess(GloomCommandContext context) {
-        // 注意：实际的冷却检查需要与 CommandRegistry 集成
-        // 这里提供基础的冷却管理功能
+        // Note: Actual cooldown check needs integration with CommandRegistry
+        // This provides basic cooldown management functionality
         return Result.CONTINUE;
     }
 
     @Override
     public int getPriority() {
-        return 100; // 在权限检查之后执行
+        return 100; // Execute after permission check
     }
 
     /**
-     * 格式化剩余时间。
+     * Formats remaining time.
      *
-     * @param remainingMs 剩余毫秒
-     * @return 格式化的时间字符串
+     * @param remainingMs Remaining milliseconds
+     * @return Formatted time string
      */
     public static String formatRemainingTime(long remainingMs) {
         if (remainingMs <= 0)
-            return "0秒";
+            return "0s";
 
         long seconds = TimeUnit.MILLISECONDS.toSeconds(remainingMs);
         long minutes = TimeUnit.MILLISECONDS.toMinutes(remainingMs);
         long hours = TimeUnit.MILLISECONDS.toHours(remainingMs);
 
         if (hours > 0) {
-            return hours + "小时" + (minutes % 60) + "分钟";
+            return hours + "h " + (minutes % 60) + "m";
         } else if (minutes > 0) {
-            return minutes + "分钟" + (seconds % 60) + "秒";
+            return minutes + "m " + (seconds % 60) + "s";
         } else {
-            return seconds + "秒";
+            return seconds + "s";
         }
     }
 }

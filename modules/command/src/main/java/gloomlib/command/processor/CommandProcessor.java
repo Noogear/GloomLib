@@ -3,19 +3,19 @@ package gloomlib.command.processor;
 import gloomlib.command.context.GloomCommandContext;
 
 /**
- * 命令处理器接口。
+ * Command Processor Interface.
  *
  * <p>
- * 处理器可以在命令执行前后进行处理。
+ * Processors can perform operations before or after command execution.
  * </p>
  */
 public interface CommandProcessor {
 
     /**
-     * 获取处理器优先级。
-     * 数值越小优先级越高。
+     * Gets processor priority.
+     * Lower value means higher priority.
      *
-     * @return 优先级
+     * @return Priority
      */
     default int getPriority() {
         return 0;

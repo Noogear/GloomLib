@@ -11,7 +11,7 @@ import org.bukkit.World;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 世界名建议提供器。
+ * World Name Suggestion Provider.
  */
 public class WorldsSuggestionProvider implements SuggestionProvider {
 
@@ -23,7 +23,7 @@ public class WorldsSuggestionProvider implements SuggestionProvider {
 
         for (World world : Bukkit.getWorlds()) {
             if (world.getName().toLowerCase().startsWith(remaining)) {
-                builder.suggest(world.getName()); // 移除 Component 工具提示
+                builder.suggest(world.getName()); // Remove Component tooltip
             }
         }
 

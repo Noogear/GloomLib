@@ -6,10 +6,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 命令条件注册表。
+ * Command Condition Registry.
  *
  * <p>
- * 管理已注册的条件实例。
+ * Manages registered condition instances.
  * </p>
  */
 public class CommandConditionRegistry {
@@ -17,39 +17,39 @@ public class CommandConditionRegistry {
     private final Map<String, CommandCondition> conditions = new ConcurrentHashMap<>();
 
     /**
-     * 注册条件。
+     * Registers a condition.
      *
-     * @param name      条件名称
-     * @param condition 条件实例
+     * @param name      Condition name
+     * @param condition Condition instance
      */
     public void register(String name, CommandCondition condition) {
         conditions.put(name, condition);
     }
 
     /**
-     * 获取条件。
+     * Gets a condition.
      *
-     * @param name 条件名称
-     * @return 条件实例，或 null
+     * @param name Condition name
+     * @return Condition instance, or null
      */
     public @Nullable CommandCondition getCondition(String name) {
         return conditions.get(name);
     }
 
     /**
-     * 检查条件是否已注册。
+     * Checks if a condition is registered.
      *
-     * @param name 条件名称
-     * @return 是否已注册
+     * @param name Condition name
+     * @return True if registered
      */
     public boolean hasCondition(String name) {
         return conditions.containsKey(name);
     }
 
     /**
-     * 获取所有条件。
+     * Gets all conditions.
      *
-     * @return 条件映射
+     * @return Condition map
      */
     public Map<String, CommandCondition> getAllConditions() {
         return Map.copyOf(conditions);

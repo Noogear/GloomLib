@@ -4,8 +4,11 @@ import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import gloomlib.command.exception.CommandException;
+import gloomlib.command.message.CommandMessages;
 import gloomlib.command.resolver.ArgumentResolver;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
+import net.kyori.adventure.text.Component;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 
 import org.bukkit.Material;
@@ -34,7 +37,7 @@ public class MaterialResolver implements ArgumentResolver<Material> {
         Material material = Material.matchMaterial(key.getKey());
 
         if (material == null) {
-            throw new IllegalArgumentException("无效的材料: " + key.getKey());
+            throw new CommandException(CommandMessages.ARG_MATERIAL_INVALID.get(Component.text(key.getKey())));
         }
 
         return material;

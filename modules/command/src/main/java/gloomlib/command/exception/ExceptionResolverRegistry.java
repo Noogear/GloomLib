@@ -1,6 +1,7 @@
 package gloomlib.command.exception;
 
 import gloomlib.command.context.GloomCommandContext;
+import gloomlib.command.message.CommandMessages;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.jetbrains.annotations.Nullable;
@@ -9,10 +10,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 异常解析器注册表。
+ * Exception Resolver Registry.
  *
  * <p>
- * 管理全局异常处理器。
+ * Manages global exception handlers.
  * </p>
  */
 public class ExceptionResolverRegistry {
@@ -20,32 +21,32 @@ public class ExceptionResolverRegistry {
     private final Map<Class<? extends Throwable>, ExceptionResolver<?>> resolvers = new ConcurrentHashMap<>();
 
     /**
-     * 注册异常解析器。
+     * Registers an exception resolver.
      *
-     * @param exceptionType 异常类型
-     * @param resolver      解析器
-     * @param <T>           异常类型
+     * @param exceptionType Exception type
+     * @param resolver      Resolver
+     * @param <T>           Exception type
      */
     public <T extends Throwable> void register(Class<T> exceptionType, ExceptionResolver<T> resolver) {
         resolvers.put(exceptionType, resolver);
     }
 
     /**
-     * 解析异常。
+     * Resolves an exception.
      *
-     * @param context   命令上下文
-     * @param exception 异常
-     * @return 是否已处理
+     * @param context   Command context
+     * @param exception Exception
+     * @return True if handled
      */
     @SuppressWarnings("unchecked")
     public boolean resolve(GloomCommandContext context, Throwable exception) {
         Class<? extends Throwable> exceptionClass = exception.getClass();
 
-        // 精确匹配
+        // Exact match
         ExceptionResolver<?> resolver = resolvers.get(exceptionClass);
 
         if (resolver == null) {
-            // 继承匹配
+            // Inheritance match
             for (Map.Entry<Class<? extends Throwable>, ExceptionResolver<?>> entry : resolvers.entrySet()) {
                 if (entry.getKey().isAssignableFrom(exceptionClass)) {
                     resolver = entry.getValue();
@@ -63,11 +64,11 @@ public class ExceptionResolverRegistry {
     }
 
     /**
-     * 获取异常解析器。
+     * Gets an exception resolver.
      *
-     * @param exceptionType 异常类型
-     * @param <T>           异常类型
-     * @return 解析器，或 null
+     * @param exceptionType Exception type
+     * @param <T>           Exception type
+     * @return Resolver, or null
      */
     @SuppressWarnings("unchecked")
     public <T extends Throwable> @Nullable ExceptionResolver<T> getResolver(Class<T> exceptionType) {
@@ -75,25 +76,26 @@ public class ExceptionResolverRegistry {
     }
 
     /**
-     * 注册默认解析器。
+     * Registers default resolvers.
      */
     public void registerDefaults() {
-        // CommandException 解析器
+        // CommandException Resolver
         register(CommandException.class, (ctx, ex) -> {
             ctx.getSender().sendMessage(ex.getAdventureMessage());
         });
 
-        // IllegalArgumentException 解析器
+        // IllegalArgumentException Resolver
         register(IllegalArgumentException.class, (ctx, ex) -> {
             ctx.getSender().sendMessage(
-                    Component.text("参数错误: ", NamedTextColor.RED)
-                            .append(Component.text(ex.getMessage(), NamedTextColor.YELLOW)));
+                    CommandMessages.COMMAND_UNKNOWN_ARG.get()
+                            .hoverEvent(Component.text(ex.getMessage(), NamedTextColor.GRAY)));
         });
 
-        // 通用异常解析器
+        // General Exception Resolver
         register(Exception.class, (ctx, ex) -> {
             ctx.getSender().sendMessage(
-                    Component.text("命令执行出错: " + ex.getMessage(), NamedTextColor.RED));
+                    CommandMessages.COMMAND_FAILED.get()
+                            .hoverEvent(Component.text(ex.getMessage(), NamedTextColor.GRAY)));
             ex.printStackTrace();
         });
     }

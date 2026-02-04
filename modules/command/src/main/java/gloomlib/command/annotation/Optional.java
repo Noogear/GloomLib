@@ -6,20 +6,20 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 标记参数为可选参数。
+ * Marks an argument as optional.
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>{@code
  * public void execute(Player sender, @Arg @Optional Player target) {
- *     // target 参数是可选的
+ *     // target argument is optional
  * }
  * }</pre>
  */
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Optional {
-    // 标记注解，无需属性
+    // Marker annotation, no attributes required
 }

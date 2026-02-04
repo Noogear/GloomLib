@@ -1,6 +1,7 @@
 package gloomlib.command.help;
 
 import gloomlib.command.annotation.*;
+import gloomlib.command.message.CommandMessages;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -14,10 +15,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 命令帮助生成器。
+ * Command Help Generator.
  *
  * <p>
- * 自动生成精美的命令帮助信息（基于 Adventure API）。
+ * Automatically generates beautiful command help information (based on
+ * Adventure API).
  * </p>
  */
 public class CommandHelp {
@@ -27,22 +29,22 @@ public class CommandHelp {
     private int itemsPerPage = 8;
 
     /**
-     * 创建命令帮助。
+     * Creates command help.
      *
-     * @param commandName 命令名
+     * @param commandName Command name
      */
     public CommandHelp(String commandName) {
         this.commandName = commandName;
     }
 
     /**
-     * 从命令类扫描帮助条目。
+     * Scans command class for help entries.
      *
-     * @param commandClass 命令类
-     * @return this（链式调用）
+     * @param commandClass Command class
+     * @return this (fluent API)
      */
     public CommandHelp scanClass(Class<?> commandClass) {
-        // 扫描 @Usage 方法
+        // Scan @Usage methods
         for (Method method : commandClass.getDeclaredMethods()) {
             if (method.isAnnotationPresent(Usage.class)) {
                 addEntry(commandName, method);
@@ -55,7 +57,7 @@ public class CommandHelp {
     }
 
     /**
-     * 添加帮助条目。
+     * Adds a help entry.
      */
     private void addEntry(String usage, Method method) {
         Description desc = method.getAnnotation(Description.class);
@@ -63,9 +65,9 @@ public class CommandHelp {
 
         StringBuilder usageBuilder = new StringBuilder("/").append(usage);
 
-        // 构建参数用法
+        // Build parameter usage
         for (Parameter param : method.getParameters()) {
-            // 跳过 sender 参数
+            // Skip sender parameter
             if (CommandSender.class.isAssignableFrom(param.getType()))
                 continue;
             if (param.getType().getName().contains("CommandContext"))
@@ -90,11 +92,11 @@ public class CommandHelp {
     }
 
     /**
-     * 手动添加帮助条目。
+     * Manually adds a help entry.
      *
-     * @param usage       用法
-     * @param description 描述
-     * @return this（链式调用）
+     * @param usage       Usage
+     * @param description Description
+     * @return this (fluent API)
      */
     public CommandHelp addEntry(String usage, String description) {
         entries.add(new HelpEntry(usage, description, null));
@@ -102,12 +104,12 @@ public class CommandHelp {
     }
 
     /**
-     * 手动添加帮助条目（带权限）。
+     * Manually adds a help entry (with permission).
      *
-     * @param usage       用法
-     * @param description 描述
-     * @param permission  所需权限
-     * @return this（链式调用）
+     * @param usage       Usage
+     * @param description Description
+     * @param permission  Required permission
+     * @return this (fluent API)
      */
     public CommandHelp addEntry(String usage, String description, String permission) {
         entries.add(new HelpEntry(usage, description, permission));
@@ -115,10 +117,10 @@ public class CommandHelp {
     }
 
     /**
-     * 设置每页显示条目数。
+     * Sets items per page.
      *
-     * @param items 条目数
-     * @return this（链式调用）
+     * @param items Items count
+     * @return this (fluent API)
      */
     public CommandHelp setItemsPerPage(int items) {
         this.itemsPerPage = items;
@@ -126,35 +128,35 @@ public class CommandHelp {
     }
 
     /**
-     * 显示帮助页面。
+     * Displays help page.
      *
-     * @param sender 接收者
-     * @param page   页码（从 1 开始）
+     * @param sender Receiver
+     * @param page   Page number (1-based)
      */
     public void display(CommandSender sender, int page) {
-        // 过滤有权限查看的条目
+        // Filter entries visible to sender
         List<HelpEntry> visibleEntries = entries.stream()
                 .filter(entry -> entry.permission == null || sender.hasPermission(entry.permission))
                 .toList();
 
         if (visibleEntries.isEmpty()) {
-            sender.sendMessage(Component.text("没有可用的命令。", NamedTextColor.GRAY));
+            sender.sendMessage(CommandMessages.HELP_NO_COMMANDS.get());
             return;
         }
 
         int totalPages = (int) Math.ceil((double) visibleEntries.size() / itemsPerPage);
         page = Math.max(1, Math.min(page, totalPages));
 
-        // 标题
+        // Header
         Component header = Component.text()
                 .append(Component.text("═".repeat(20), NamedTextColor.GOLD))
-                .append(Component.text(" " + commandName.toUpperCase() + " 帮助 ", NamedTextColor.YELLOW,
+                .append(Component.text(" " + commandName.toUpperCase() + " HELP ", NamedTextColor.YELLOW,
                         TextDecoration.BOLD))
                 .append(Component.text("═".repeat(20), NamedTextColor.GOLD))
                 .build();
         sender.sendMessage(header);
 
-        // 条目
+        // Entries
         int start = (page - 1) * itemsPerPage;
         int end = Math.min(start + itemsPerPage, visibleEntries.size());
 
@@ -163,49 +165,51 @@ public class CommandHelp {
 
             Component usageComponent = Component.text(entry.usage, NamedTextColor.AQUA)
                     .clickEvent(ClickEvent.suggestCommand(entry.usage))
-                    .hoverEvent(HoverEvent.showText(Component.text("点击填入命令", NamedTextColor.GRAY)));
+                    .hoverEvent(HoverEvent.showText(CommandMessages.HELP_CLICK_HINT.get()));
 
             Component descComponent = Component.text(" - " + entry.description, NamedTextColor.GRAY);
 
             sender.sendMessage(usageComponent.append(descComponent));
         }
 
-        // 页脚
+        // Footer
         if (totalPages > 1) {
             Component footer = Component.text()
                     .append(Component.text("═".repeat(15), NamedTextColor.GOLD))
-                    .append(Component.text(" 第 " + page + "/" + totalPages + " 页 ", NamedTextColor.YELLOW))
+                    .append(Component.text(" ")
+                            .append(CommandMessages.HELP_PAGE.get(Component.text(page), Component.text(totalPages)))
+                            .append(Component.text(" ")))
                     .append(Component.text("═".repeat(15), NamedTextColor.GOLD))
                     .build();
             sender.sendMessage(footer);
 
-            // 翻页提示
+            // Pagination hint
             Component pageHint = Component.text()
                     .append(page > 1
-                            ? Component.text("[上一页]", NamedTextColor.GREEN)
+                            ? CommandMessages.HELP_PREV.get().color(NamedTextColor.GREEN)
                                     .clickEvent(ClickEvent.runCommand("/" + commandName + " help " + (page - 1)))
-                            : Component.text("[上一页]", NamedTextColor.DARK_GRAY))
+                            : CommandMessages.HELP_PREV.get().color(NamedTextColor.DARK_GRAY))
                     .append(Component.text(" | ", NamedTextColor.GRAY))
                     .append(page < totalPages
-                            ? Component.text("[下一页]", NamedTextColor.GREEN)
+                            ? CommandMessages.HELP_NEXT.get().color(NamedTextColor.GREEN)
                                     .clickEvent(ClickEvent.runCommand("/" + commandName + " help " + (page + 1)))
-                            : Component.text("[下一页]", NamedTextColor.DARK_GRAY))
+                            : CommandMessages.HELP_NEXT.get().color(NamedTextColor.DARK_GRAY))
                     .build();
             sender.sendMessage(pageHint);
         }
     }
 
     /**
-     * 显示帮助（第一页）。
+     * Displays help (first page).
      *
-     * @param sender 接收者
+     * @param sender Receiver
      */
     public void display(CommandSender sender) {
         display(sender, 1);
     }
 
     /**
-     * 帮助条目。
+     * Help entry.
      */
     private record HelpEntry(String usage, String description, String permission) {
     }

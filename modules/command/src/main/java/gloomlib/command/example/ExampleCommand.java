@@ -11,20 +11,20 @@ import org.bukkit.entity.Player;
 import java.time.Duration;
 
 /**
- * 示例命令类。
+ * Example Command Class.
  *
  * <p>
- * 展示 GloomCommand 框架的各种功能。
+ * Demonstrates various features of the GloomCommand framework.
  * </p>
  *
- * <h2>功能演示</h2>
+ * <h2>Feature Demo</h2>
  * <ul>
- * <li>基础命令定义</li>
- * <li>子命令</li>
- * <li>参数注解</li>
- * <li>权限控制</li>
- * <li>玩家限制</li>
- * <li>冷却系统</li>
+ * <li>Basic command definition</li>
+ * <li>Subcommands</li>
+ * <li>Argument annotations</li>
+ * <li>Permission control</li>
+ * <li>Player restrictions</li>
+ * <li>Cooldown system</li>
  * </ul>
  */
 @Command("example")
@@ -33,37 +33,39 @@ import java.time.Duration;
 public class ExampleCommand {
 
     /**
-     * 默认执行（无参数）。
+     * Default execution (no arguments).
      */
     @Usage
     public void showHelp(GloomCommandContext ctx) {
-        ctx.getSender().sendMessage(Component.text("=== GloomCommand 示例 ===", NamedTextColor.GOLD));
-        ctx.getSender().sendMessage(Component.text("/example help - 显示帮助", NamedTextColor.YELLOW));
-        ctx.getSender().sendMessage(Component.text("/example greet <player> - 打招呼", NamedTextColor.YELLOW));
-        ctx.getSender().sendMessage(Component.text("/example gamemode <mode> - 切换游戏模式", NamedTextColor.YELLOW));
-        ctx.getSender().sendMessage(Component.text("/example teleport <world> - 传送到世界", NamedTextColor.YELLOW));
+        ctx.getSender().sendMessage(Component.text("=== GloomCommand Example ===", NamedTextColor.GOLD));
+        ctx.getSender().sendMessage(Component.text("/example help - Show help", NamedTextColor.YELLOW));
+        ctx.getSender().sendMessage(Component.text("/example greet <player> - Greet player", NamedTextColor.YELLOW));
+        ctx.getSender()
+                .sendMessage(Component.text("/example gamemode <mode> - Change gamemode", NamedTextColor.YELLOW));
+        ctx.getSender()
+                .sendMessage(Component.text("/example teleport <world> - Teleport to world", NamedTextColor.YELLOW));
     }
 
     /**
-     * 打招呼子命令。
+     * Greet subcommand.
      */
     @SubCommand("greet")
-    @Description("向玩家打招呼")
+    @Description("Greet a player")
     public void greet(
             GloomCommandContext ctx,
             @Arg("player") Player target,
-            @Arg("message") @Optional @Default("你好！") String message) {
+            @Arg("message") @Optional @Default("Hello!") String message) {
         target.sendMessage(
-                Component.text("[" + ctx.getSender().getName() + " 说] ", NamedTextColor.AQUA)
+                Component.text("[" + ctx.getSender().getName() + " says] ", NamedTextColor.AQUA)
                         .append(Component.text(message, NamedTextColor.WHITE)));
-        ctx.reply(Component.text("已向 " + target.getName() + " 发送消息！", NamedTextColor.GREEN));
+        ctx.reply(Component.text("Message sent to " + target.getName() + "!", NamedTextColor.GREEN));
     }
 
     /**
-     * 切换游戏模式。
+     * Change gamemode.
      */
     @SubCommand("gamemode")
-    @Description("切换游戏模式")
+    @Description("Change game mode")
     @PlayerOnly
     @Permission("gloomlib.command.example.gamemode")
     public void setGameMode(
@@ -71,15 +73,15 @@ public class ExampleCommand {
             @Arg("mode") GameMode mode) {
         player.setGameMode(mode);
         player.sendMessage(
-                Component.text("游戏模式已切换为: ", NamedTextColor.GREEN)
+                Component.text("Game mode changed to: ", NamedTextColor.GREEN)
                         .append(Component.text(mode.name(), NamedTextColor.YELLOW)));
     }
 
     /**
-     * 传送到指定世界。
+     * Teleport to specified world.
      */
     @SubCommand("teleport")
-    @Description("传送到指定世界")
+    @Description("Teleport to specified world")
     @PlayerOnly
     @Cooldown(value = 30, message = "<red>传送冷却中！请等待 <remaining> 后再试。")
     public void teleportToWorld(
@@ -87,37 +89,37 @@ public class ExampleCommand {
             @Arg("world") World world) {
         player.teleport(world.getSpawnLocation());
         player.sendMessage(
-                Component.text("已传送到世界: ", NamedTextColor.GREEN)
+                Component.text("Teleported to world: ", NamedTextColor.GREEN)
                         .append(Component.text(world.getName(), NamedTextColor.AQUA)));
     }
 
     /**
-     * 设置临时封禁。
+     * Temporary ban.
      */
     @SubCommand("tempban")
-    @Description("临时封禁玩家")
+    @Description("Temporarily ban a player")
     @Permission("gloomlib.command.example.ban")
     public void tempBan(
             GloomCommandContext ctx,
             @Arg("player") Player target,
             @Arg("duration") Duration duration,
-            @Arg("reason") @Optional @Greedy @Default("违规行为") String reason) {
-        // 示例：仅发送消息，不实际封禁
+            @Arg("reason") @Optional @Greedy @Default("Violation") String reason) {
+        // Example: Only sends message, does not actually ban
         ctx.reply(Component.text()
-                .append(Component.text("已临时封禁 ", NamedTextColor.RED))
+                .append(Component.text("Temporarily banned ", NamedTextColor.RED))
                 .append(Component.text(target.getName(), NamedTextColor.YELLOW))
-                .append(Component.text("，时长: ", NamedTextColor.RED))
+                .append(Component.text(", duration: ", NamedTextColor.RED))
                 .append(Component.text(formatDuration(duration), NamedTextColor.YELLOW))
-                .append(Component.text("，原因: ", NamedTextColor.RED))
+                .append(Component.text(", reason: ", NamedTextColor.RED))
                 .append(Component.text(reason, NamedTextColor.WHITE))
                 .build());
     }
 
     /**
-     * 带范围约束的数值参数。
+     * Numeric argument with range constraint.
      */
     @SubCommand("heal")
-    @Description("恢复生命值")
+    @Description("Heal health")
     @PlayerOnly
     @SuppressWarnings("deprecation")
     public void heal(
@@ -126,12 +128,12 @@ public class ExampleCommand {
         double newHealth = Math.min(player.getHealth() + amount, player.getMaxHealth());
         player.setHealth(newHealth);
         player.sendMessage(
-                Component.text("已恢复 ", NamedTextColor.GREEN)
-                        .append(Component.text(amount + " 点生命值", NamedTextColor.RED)));
+                Component.text("Healed ", NamedTextColor.GREEN)
+                        .append(Component.text(amount + " health points", NamedTextColor.RED)));
     }
 
     /**
-     * 格式化时长。
+     * Formats duration.
      */
     private String formatDuration(Duration duration) {
         long seconds = duration.getSeconds();
@@ -142,13 +144,13 @@ public class ExampleCommand {
 
         StringBuilder sb = new StringBuilder();
         if (days > 0)
-            sb.append(days).append("天");
+            sb.append(days).append("d");
         if (hours > 0)
-            sb.append(hours).append("小时");
+            sb.append(hours).append("h");
         if (minutes > 0)
-            sb.append(minutes).append("分钟");
+            sb.append(minutes).append("m");
         if (secs > 0)
-            sb.append(secs).append("秒");
+            sb.append(secs).append("s");
         return sb.toString();
     }
 }

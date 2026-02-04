@@ -5,8 +5,11 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import gloomlib.command.exception.CommandException;
+import gloomlib.command.message.CommandMessages;
 import gloomlib.command.resolver.ArgumentResolver;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 
@@ -16,22 +19,22 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 文本颜色参数解析器。
+ * Text Color Argument Resolver.
  *
  * <p>
- * 支持 Adventure API 的 {@link TextColor} 类型，
- * 包括命名颜色和十六进制颜色。
+ * Supports Adventure API {@link TextColor} type,
+ * including named colors and hexadecimal colors.
  * </p>
  *
- * <h2>支持的格式</h2>
+ * <h2>Supported Formats</h2>
  * <ul>
- * <li>命名颜色：{@code red}, {@code green}, {@code blue}, ...</li>
- * <li>十六进制：{@code #FF0000}, {@code #00FF00}, ...</li>
+ * <li>Named colors: {@code red}, {@code green}, {@code blue}, ...</li>
+ * <li>Hexadecimal: {@code #FF0000}, {@code #00FF00}, ...</li>
  * </ul>
  */
 public class TextColorResolver implements ArgumentResolver<TextColor> {
 
-    /** 命名颜色映射表 */
+    /** Named color map */
     private static final Map<String, NamedTextColor> NAMED_COLORS = new HashMap<>();
 
     static {
@@ -62,13 +65,13 @@ public class TextColorResolver implements ArgumentResolver<TextColor> {
     public TextColor resolve(CommandContext<CommandSourceStack> context, String name, Parameter parameter) {
         String input = context.getArgument(name, String.class).toLowerCase();
 
-        // 尝试命名颜色
+        // Try named color
         NamedTextColor namedColor = NAMED_COLORS.get(input);
         if (namedColor != null) {
             return namedColor;
         }
 
-        // 尝试十六进制颜色
+        // Try hex color
         if (input.startsWith("#") && input.length() == 7) {
             TextColor hexColor = TextColor.fromHexString(input);
             if (hexColor != null) {
@@ -76,7 +79,7 @@ public class TextColorResolver implements ArgumentResolver<TextColor> {
             }
         }
 
-        // 尝试不带 # 的十六进制
+        // Try hex color without #
         if (input.length() == 6) {
             TextColor hexColor = TextColor.fromHexString("#" + input);
             if (hexColor != null) {
@@ -84,8 +87,7 @@ public class TextColorResolver implements ArgumentResolver<TextColor> {
             }
         }
 
-        throw new IllegalArgumentException("无效的颜色值: " + input +
-                "。支持的格式: 命名颜色 (如 red, blue) 或十六进制 (如 #FF0000)");
+        throw new CommandException(CommandMessages.ARG_COLOR_INVALID.get(Component.text(input)));
     }
 
     @Override
@@ -95,14 +97,14 @@ public class TextColorResolver implements ArgumentResolver<TextColor> {
             Parameter parameter) {
         String remaining = builder.getRemaining().toLowerCase();
 
-        // 提供命名颜色建议
+        // Provide named color suggestions
         for (String colorName : NAMED_COLORS.keySet()) {
             if (colorName.startsWith(remaining)) {
                 builder.suggest(colorName);
             }
         }
 
-        // 如果输入以 # 开头，提示十六进制格式
+        // If input starts with #, suggest hex format
         if (remaining.startsWith("#") && remaining.length() < 7) {
             builder.suggest("#FF0000");
             builder.suggest("#00FF00");

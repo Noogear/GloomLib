@@ -12,25 +12,27 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * 异步命令执行上下文。
+ * Asynchronous command execution context.
  *
  * <p>
- * 为 {@code @Async} 标记的命令方法提供异步执行支持。
- * 自动处理线程切换，确保 Bukkit API 调用在主线程执行。
+ * Provides asynchronous execution support for command methods annotated with
+ * {@code @Async}.
+ * Automatically handles thread switching, ensuring Bukkit API calls are
+ * executed on the main thread.
  * </p>
  *
- * <h2>用法示例</h2>
+ * <h2>Usage Example</h2>
  * 
  * <pre>
  * {@code
  * &#64;SubCommand("stats")
  * @Async
  * public void showStats(AsyncContext ctx, Player player) {
- *     // 在异步线程中查询数据库
+ *     // Query database in async thread
  *     Map<String, Object> stats = ctx.runAsync(() -> database.queryStats(player));
  * 
- *     // 自动切回主线程发送消息
- *     ctx.reply(Component.text("查询完成！"));
+ *     // Automatically switch back to main thread to send message
+ *     ctx.reply(Component.text("Query complete!"));
  * }
  * }
  * </pre>
@@ -40,10 +42,10 @@ public class AsyncContext extends GloomCommandContext {
     private final JavaPlugin plugin;
 
     /**
-     * 创建异步命令上下文。
+     * Creates an asynchronous command context.
      *
-     * @param brigadierContext Brigadier 原生上下文
-     * @param plugin           插件实例（用于调度任务）
+     * @param brigadierContext Brigadier context
+     * @param plugin           Plugin instance (for task scheduling)
      */
     public AsyncContext(CommandContext<CommandSourceStack> brigadierContext, JavaPlugin plugin) {
         super(brigadierContext);
@@ -51,19 +53,19 @@ public class AsyncContext extends GloomCommandContext {
     }
 
     /**
-     * 获取插件实例。
+     * Gets the plugin instance.
      *
-     * @return 插件实例
+     * @return Plugin instance
      */
     public JavaPlugin getPlugin() {
         return plugin;
     }
 
     /**
-     * 在异步线程中执行任务。
+     * Executes a task in an asynchronous thread.
      *
-     * @param task 异步任务
-     * @param <T>  返回类型
+     * @param task Asynchronous task
+     * @param <T>  Return type
      * @return CompletableFuture
      */
     public <T> CompletableFuture<T> runAsync(Supplier<T> task) {
@@ -71,9 +73,9 @@ public class AsyncContext extends GloomCommandContext {
     }
 
     /**
-     * 在异步线程中执行任务（无返回值）。
+     * Executes a task in an asynchronous thread (no return value).
      *
-     * @param task 异步任务
+     * @param task Asynchronous task
      * @return CompletableFuture
      */
     public CompletableFuture<Void> runAsync(Runnable task) {
@@ -81,44 +83,46 @@ public class AsyncContext extends GloomCommandContext {
     }
 
     /**
-     * 在指定实体的调度器上执行任务（Folia 兼容）。
+     * Executes a task on the specified entity's scheduler (Folia compatible).
      *
-     * @param entity 目标实体
-     * @param task   任务
+     * @param entity Target entity
+     * @param task   Task
      */
     public void runOn(org.bukkit.entity.Entity entity, Runnable task) {
         entity.getScheduler().run(plugin, t -> task.run(), null);
     }
 
     /**
-     * 在指定位置的区块调度器上执行任务（Folia 兼容）。
+     * Executes a task on the region scheduler at the specified location (Folia
+     * compatible).
      *
-     * @param location 目标位置
-     * @param task     任务
+     * @param location Target location
+     * @param task     Task
      */
     public void runOn(org.bukkit.Location location, Runnable task) {
         plugin.getServer().getRegionScheduler().execute(plugin, location, task);
     }
 
     /**
-     * 在主线程中执行任务。
+     * Executes a task on the main thread.
      * <p>
-     * 在 Folia 环境下，使用 GlobalRegionScheduler。
-     * 如果操作特定实体或区块，请优先使用 {@link #runOn(org.bukkit.entity.Entity, Runnable)}
-     * 或 {@link #runOn(org.bukkit.Location, Runnable)}。
+     * In a Folia environment, this uses the GlobalRegionScheduler.
+     * If operating on a specific entity or chunk, prefer using
+     * {@link #runOn(org.bukkit.entity.Entity, Runnable)}
+     * or {@link #runOn(org.bukkit.Location, Runnable)}.
      * </p>
      *
-     * @param task 主线程任务
+     * @param task Main thread task
      */
     public void runSync(Runnable task) {
         plugin.getServer().getGlobalRegionScheduler().execute(plugin, task);
     }
 
     /**
-     * 在主线程中执行任务（带返回值）。
+     * Executes a task on the main thread (with return value).
      *
-     * @param task 主线程任务
-     * @param <T>  返回类型
+     * @param task Main thread task
+     * @param <T>  Return type
      * @return CompletableFuture
      */
     public <T> CompletableFuture<T> runSync(Supplier<T> task) {
@@ -134,9 +138,9 @@ public class AsyncContext extends GloomCommandContext {
     }
 
     /**
-     * 发送消息（自动切换到主线程）。
+     * Sends a message (automatically switches to main thread).
      *
-     * @param message Adventure 组件消息
+     * @param message Adventure component message
      */
     @Override
     public void sendMessage(Component message) {
@@ -147,9 +151,9 @@ public class AsyncContext extends GloomCommandContext {
     }
 
     /**
-     * 回复消息。
+     * Replies with a message.
      *
-     * @param message Adventure 组件消息
+     * @param message Adventure component message
      */
     @Override
     public void reply(Component message) {
@@ -157,18 +161,18 @@ public class AsyncContext extends GloomCommandContext {
     }
 
     /**
-     * 检查当前是否在主线程（Global Region）。
+     * Checks if currently on the main thread (Global Region).
      *
-     * @return 是否在 Global Region 线程
+     * @return True if on Global Region thread
      */
     public boolean isMainThread() {
         return plugin.getServer().isGlobalTickThread();
     }
 
     /**
-     * 如果执行者是玩家，在主线程执行消费者操作。
+     * Executes consumer action if the sender is a player, on the main thread.
      *
-     * @param consumer 玩家消费者
+     * @param consumer Player consumer
      */
     @Override
     public void ifPlayer(Consumer<Player> consumer) {
@@ -183,11 +187,11 @@ public class AsyncContext extends GloomCommandContext {
     }
 
     /**
-     * 创建普通上下文的异步版本。
+     * Creates an asynchronous version of a regular context.
      *
-     * @param context 普通上下文
-     * @param plugin  插件实例
-     * @return 异步上下文
+     * @param context Regular context
+     * @param plugin  Plugin instance
+     * @return Asynchronous context
      */
     public static AsyncContext from(GloomCommandContext context, JavaPlugin plugin) {
         return new AsyncContext(context.getBrigadierContext(), plugin);

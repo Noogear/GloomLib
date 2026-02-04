@@ -3,22 +3,22 @@ package gloomlib.command.exception;
 import gloomlib.command.context.GloomCommandContext;
 
 /**
- * 异常解析器接口。
+ * Exception Resolver Interface.
  *
  * <p>
- * 用于处理命令执行过程中的特定异常。
+ * Used to handle specific exceptions during command execution.
  * </p>
  *
- * @param <T> 异常类型
+ * @param <T> Exception type
  */
 @FunctionalInterface
 public interface ExceptionResolver<T extends Throwable> {
 
     /**
-     * 解析异常。
+     * Resolves an exception.
      *
-     * @param context   命令上下文
-     * @param exception 异常
+     * @param context   Command context
+     * @param exception Exception
      */
     void resolve(GloomCommandContext context, T exception);
 }

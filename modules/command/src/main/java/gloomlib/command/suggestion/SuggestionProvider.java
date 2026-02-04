@@ -8,14 +8,14 @@ import io.papermc.paper.command.brigadier.CommandSourceStack;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 命令参数的 Tab 补全建议提供器接口。
+ * Command Argument Tab Suggestion Provider Interface.
  *
  * <p>
- * 实现此接口以提供自定义的 Tab 补全建议。
+ * Implement this interface to provide custom Tab completion suggestions.
  * </p>
  *
  * <p>
- * 用法示例：
+ * Usage Example:
  * </p>
  * 
  * <pre>{@code
@@ -24,7 +24,7 @@ import java.util.concurrent.CompletableFuture;
  *     public CompletableFuture<Suggestions> suggest(
  *             CommandContext<CommandSourceStack> context,
  *             SuggestionsBuilder builder) {
- *         WarpManager warpManager = // 获取管理器
+ *         WarpManager warpManager = // Get manager
  *                 warpManager.getWarps().forEach(warp -> builder.suggest(warp.getName()));
  *         return builder.buildFuture();
  *     }
@@ -35,11 +35,11 @@ import java.util.concurrent.CompletableFuture;
 public interface SuggestionProvider {
 
     /**
-     * 提供 Tab 补全建议。
+     * Provides Tab completion suggestions.
      *
-     * @param context Paper Brigadier 命令上下文
-     * @param builder 建议构建器
-     * @return 异步建议列表
+     * @param context Paper Brigadier command context
+     * @param builder Suggestions builder
+     * @return Async suggestions list
      */
     CompletableFuture<Suggestions> suggest(
             CommandContext<CommandSourceStack> context,

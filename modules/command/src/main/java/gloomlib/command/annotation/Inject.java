@@ -6,10 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 依赖注入注解，用于注入服务和依赖。
+ * Dependency injection annotation for injecting services and dependencies.
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>
@@ -38,10 +38,10 @@ import java.lang.annotation.Target;
 public @interface Inject {
 
     /**
-     * 限定符，用于区分同类型的多个实例。
-     * 如果为空，则按类型匹配。
+     * Qualifier to distinguish multiple instances of the same type.
+     * If empty, matches by type.
      *
-     * @return 限定符名称
+     * @return qualifier name
      */
     String value() default "";
 }

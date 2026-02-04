@@ -5,8 +5,14 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import gloomlib.command.exception.CommandException;
+import gloomlib.command.message.CommandMessages;
+import gloomlib.command.exception.CommandException;
+import gloomlib.command.message.CommandMessages;
 import gloomlib.command.resolver.ArgumentResolver;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.Component;
 import org.bukkit.GameMode;
 
 import java.lang.reflect.Parameter;
@@ -42,7 +48,7 @@ public class GameModeResolver implements ArgumentResolver<GameMode> {
                         yield mode;
                     }
                 }
-                throw new IllegalArgumentException("无效的游戏模式: " + input);
+                throw new CommandException(CommandMessages.ARG_GAMEMODE_INVALID.get(Component.text(input)));
             }
         };
     }

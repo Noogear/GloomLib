@@ -7,7 +7,7 @@ import gloomlib.command.exception.CommandException;
 import gloomlib.command.processor.processors.ValidationProcessor;
 import gloomlib.command.resolver.ArgumentResolver;
 import gloomlib.command.resolver.ArgumentResolverRegistry;
-import gloomlib.command.util.CommandMessages;
+
 import gloomlib.command.util.ParameterUtils;
 import gloomlib.command.util.TypeConverterUtil;
 import com.mojang.brigadier.context.CommandContext;
@@ -19,18 +19,19 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.lang.reflect.Parameter;
 
 /**
- * 命令参数解析器。
+ * Command Argument Parser.
  *
  * <p>
- * 负责从 Brigadier CommandContext 中解析参数，支持：
+ * Responsible for parsing arguments from Brigadier CommandContext, supporting:
  * </p>
  * <ul>
- * <li>特殊参数注入（CommandSender, Player, GloomCommandContext, AsyncContext）</li>
- * <li>自定义参数解析器</li>
- * <li>默认值处理</li>
- * <li>可选参数</li>
- * <li>开关和标志</li>
- * <li>范围验证</li>
+ * <li>Special parameter injection (CommandSender, Player, GloomCommandContext,
+ * AsyncContext)</li>
+ * <li>Custom argument resolvers</li>
+ * <li>Default value handling</li>
+ * <li>Optional parameters</li>
+ * <li>Switches and Flags</li>
+ * <li>Range validation</li>
  * </ul>
  */
 public class ArgumentParser {
@@ -46,48 +47,48 @@ public class ArgumentParser {
     }
 
     /**
-     * 解析方法的所有参数。
+     * Resolves all parameters for a method.
      *
      * @param ctx        Brigadier CommandContext
-     * @param parameters 方法参数数组
-     * @param sender     命令发送者
-     * @return 解析后的参数值数组
-     * @throws CommandException 解析失败或验证失败时抛出
+     * @param parameters Method parameter array
+     * @param sender     Command sender
+     * @return Resolved argument values array
+     * @throws CommandException If parsing or validation fails
      */
     public Object[] resolveArguments(
             CommandContext<CommandSourceStack> ctx,
             Parameter[] parameters,
             CommandSender sender) throws CommandException {
-        
+
         Object[] args = new Object[parameters.length];
 
         for (int i = 0; i < parameters.length; i++) {
             Parameter param = parameters[i];
             args[i] = resolveParameter(ctx, param, sender, i);
         }
-        
+
         return args;
     }
 
     /**
-     * 解析单个参数。
+     * Resolves a single parameter.
      *
      * @param ctx    Brigadier CommandContext
-     * @param param  参数定义
-     * @param sender 命令发送者
-     * @param index  参数索引
-     * @return 解析后的参数值
-     * @throws CommandException 解析失败或验证失败时抛出
+     * @param param  Parameter definition
+     * @param sender Command sender
+     * @param index  Parameter index
+     * @return Resolved argument value
+     * @throws CommandException If parsing or validation fails
      */
     private Object resolveParameter(
             CommandContext<CommandSourceStack> ctx,
             Parameter param,
             CommandSender sender,
             int index) throws CommandException {
-        
+
         Class<?> paramType = param.getType();
-        
-        // 1. 特殊参数 - 自动注入
+
+        // 1. Special Parameters - Auto Injection
         if (CommandSender.class.isAssignableFrom(paramType)) {
             return sender;
         }
@@ -100,90 +101,89 @@ public class ArgumentParser {
         if (GloomCommandContext.class.isAssignableFrom(paramType)) {
             return new GloomCommandContext(ctx);
         }
-        
-        // 2. 开关参数 - 默认为 false
+
+        // 2. Switch Parameters - Default to false
         if (param.isAnnotationPresent(Switch.class)) {
             return false;
         }
-        
-        // 3. 标志参数 - 默认为 null
+
+        // 3. Flag Parameters - Default to null
         if (param.isAnnotationPresent(Flag.class)) {
             return null;
         }
-        
-        // 4. 自定义参数解析
+
+        // 4. Custom Parameter Resolution
         return resolveCustomParameter(ctx, param, sender);
     }
 
     /**
-     * 解析自定义参数（使用 ArgumentResolver）。
+     * Resolves custom parameter (using ArgumentResolver).
      *
      * @param ctx    Brigadier CommandContext
-     * @param param  参数定义
-     * @param sender 命令发送者
-     * @return 解析后的参数值
-     * @throws CommandException 解析失败或验证失败时抛出
+     * @param param  Parameter definition
+     * @param sender Command sender
+     * @return Resolved argument value
+     * @throws CommandException If parsing or validation fails
      */
     private Object resolveCustomParameter(
             CommandContext<CommandSourceStack> ctx,
             Parameter param,
             CommandSender sender) throws CommandException {
-        
+
         Class<?> paramType = param.getType();
         String argName = ParameterUtils.getParameterName(param);
-        
+
         try {
             ArgumentResolver<?> resolver = resolverRegistry.getResolver(paramType);
             if (resolver == null) {
                 throw new IllegalArgumentException(
-                    String.format(CommandMessages.MSG_RESOLVER_NOT_FOUND, paramType.getName()));
+                        String.format("Argument resolver not found: %s", paramType.getName()));
             }
-            
+
             Object resolvedValue = resolver.resolve(ctx, argName, param);
-            
-            // 数值范围验证
+
+            // Numeric range validation
             if (resolvedValue instanceof Number numberValue) {
                 validateRange(numberValue, param);
             }
-            
+
             return resolvedValue;
-            
+
         } catch (Exception e) {
-            // 尝试使用默认值
+            // Try default value
             return resolveWithDefault(e, param, sender);
         }
     }
 
     /**
-     * 当解析失败时，尝试使用默认值。
+     * Attempts to resolve with default value when parsing fails.
      *
-     * @param originalException 原始异常
-     * @param param             参数定义
-     * @param sender            命令发送者
-     * @return 默认值，或在无默认值时重新抛出异常
-     * @throws CommandException 无默认值且参数非可选时抛出
+     * @param originalException Original exception
+     * @param param             Parameter definition
+     * @param sender            Command sender
+     * @return Default value, or rethrows exception if no default
+     * @throws CommandException If no default value and parameter is not optional
      */
     private Object resolveWithDefault(
             Exception originalException,
             Parameter param,
             CommandSender sender) throws CommandException {
-        
-        // 检查是否有 @Default 注解
+
+        // Check for @Default annotation
         Default defaultAnnotation = param.getAnnotation(Default.class);
         if (defaultAnnotation != null) {
             return TypeConverterUtil.convertDefault(
-                defaultAnnotation.value(), 
-                param.getType(), 
-                sender
-            ).orElse(null);
+                    defaultAnnotation.value(),
+                    param.getType(),
+                    sender).orElse(null);
         }
-        
-        // 检查是否有 @Optional 注解
+
+        // Check for @Optional annotation
         if (param.isAnnotationPresent(Optional.class)) {
             return null;
         }
-        
-        // 无默认值且非可选，重新抛出异常
+
+        // No default value and not optional, rethrow exception
         if (originalException instanceof CommandException cmdEx) {
             throw cmdEx;
         }
@@ -191,21 +191,20 @@ public class ArgumentParser {
     }
 
     /**
-     * 验证数值范围。
+     * Validates numeric range.
      *
-     * @param value 数值
-     * @param param 参数定义
-     * @throws CommandException 验证失败时抛出
+     * @param value Numeric value
+     * @param param Parameter definition
+     * @throws CommandException If validation fails
      */
     private void validateRange(Number value, Parameter param) throws CommandException {
         if (!param.isAnnotationPresent(Range.class)) {
             return;
         }
-        
+
         Range range = param.getAnnotation(Range.class);
-        ValidationProcessor.ValidationResult result = 
-            validationProcessor.validateRange(value, range, param);
-        
+        ValidationProcessor.ValidationResult result = validationProcessor.validateRange(value, range, param);
+
         if (!result.isValid()) {
             throw new CommandException(result.getErrorMessage());
         }

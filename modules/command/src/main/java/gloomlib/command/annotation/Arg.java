@@ -6,19 +6,19 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 定义命令参数。
+ * Defines a command argument.
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>{@code
  * public void execute(Player sender, @Arg("mode") GameMode mode) {
- *     // 参数名为 "mode"
+ *     // Argument name is "mode"
  * }
  *
  * public void execute(Player sender, @Arg Player target) {
- *     // 参数名使用变量名 "target"
+ *     // Argument name uses parameter name "target"
  * }
  * }</pre>
  */
@@ -27,10 +27,10 @@ import java.lang.annotation.Target;
 public @interface Arg {
 
     /**
-     * 参数名称。
-     * 如果为空，将使用方法参数的变量名。
+     * The argument name.
+     * If empty, the method parameter variable name will be used.
      *
-     * @return 参数名称
+     * @return argument name
      */
     String value() default "";
 }

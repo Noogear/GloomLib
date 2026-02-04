@@ -6,22 +6,31 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 参数解析器注册表。
+ * Argument Resolver Registry.
  *
  * <p>
- * 管理所有参数类型的解析器，支持自动类型匹配。
+ * Manages resolvers for all argument types, supporting automatic type matching.
  * </p>
  */
 public class ArgumentResolverRegistry {
 
     private final Map<Class<?>, ArgumentResolver<?>> resolvers = new ConcurrentHashMap<>();
+    private static final Map<Class<?>, Class<?>> PRIMITIVE_WRAPPERS = Map.of(
+            int.class, Integer.class,
+            long.class, Long.class,
+            double.class, Double.class,
+            float.class, Float.class,
+            boolean.class, Boolean.class,
+            byte.class, Byte.class,
+            short.class, Short.class,
+            char.class, Character.class);
 
     /**
-     * 注册参数解析器。
+     * Registers an argument resolver.
      *
-     * @param type     参数类型
-     * @param resolver 解析器
-     * @param <T>      类型
+     * @param type     Argument type
+     * @param resolver Resolver
+     * @param <T>      Type
      */
     public <T> void register(Class<T> type, ArgumentResolver<T> resolver) {
         resolvers.put(type, resolver);
@@ -30,15 +39,15 @@ public class ArgumentResolverRegistry {
     private final Map<Class<?>, ArgumentResolver<?>> resolverCache = new ConcurrentHashMap<>();
 
     /**
-     * 获取指定类型的解析器。
+     * Gets or finds a resolver for the specified type.
      *
-     * @param type 参数类型
-     * @param <T>  类型
-     * @return 解析器，或 null
+     * @param type Argument type
+     * @param <T>  Type
+     * @return Resolver, or null
      */
     @SuppressWarnings("unchecked")
     public <T> @Nullable ArgumentResolver<T> getResolver(Class<T> type) {
-        // 尝试从缓存获取
+        // Try getting from cache
         ArgumentResolver<?> cached = resolverCache.get(type);
         if (cached != null) {
             return (ArgumentResolver<T>) cached;
@@ -52,17 +61,17 @@ public class ArgumentResolverRegistry {
     }
 
     /**
-     * 查找解析器（无缓存）。
+     * Finds a resolver (no cache).
      */
     @SuppressWarnings("unchecked")
     private <T> ArgumentResolver<T> findResolver(Class<T> type) {
-        // 1. 精确匹配
+        // 1. Exact match
         ArgumentResolver<?> resolver = resolvers.get(type);
         if (resolver != null) {
             return (ArgumentResolver<T>) resolver;
         }
 
-        // 2. 处理基本类型包装类
+        // 2. Handle primitive wrapper types
         Class<?> primitiveWrapper = getPrimitiveWrapper(type);
         if (primitiveWrapper != null) {
             resolver = resolvers.get(primitiveWrapper);
@@ -71,14 +80,14 @@ public class ArgumentResolverRegistry {
             }
         }
 
-        // 3. 继承匹配（查找父类/接口的解析器）
+        // 3. Inheritance match (find parent class/interface resolver)
         for (Map.Entry<Class<?>, ArgumentResolver<?>> entry : resolvers.entrySet()) {
             if (entry.getKey().isAssignableFrom(type)) {
                 return (ArgumentResolver<T>) entry.getValue();
             }
         }
 
-        // 4. 枚举类型通用处理
+        // 4. Generic Enum handling
         if (type.isEnum()) {
             return (ArgumentResolver<T>) createEnumResolver(type);
         }
@@ -87,58 +96,42 @@ public class ArgumentResolverRegistry {
     }
 
     /**
-     * 清除缓存。
+     * Clears the cache.
      */
     public void clearCache() {
         resolverCache.clear();
     }
 
     /**
-     * 检查是否支持指定类型。
+     * Checks if the type is supported.
      *
-     * @param type 参数类型
-     * @return 是否支持
+     * @param type Argument type
+     * @return true if supported
      */
     public boolean hasResolver(Class<?> type) {
         return getResolver(type) != null;
     }
 
     /**
-     * 获取所有已注册的解析器。
+     * Gets all registered resolvers.
      *
-     * @return 解析器映射
+     * @return Resolver map
      */
     public Map<Class<?>, ArgumentResolver<?>> getAllResolvers() {
         return Map.copyOf(resolvers);
     }
 
     /**
-     * 获取基本类型的包装类。
+     * Gets the wrapper class for a primitive type.
      */
     private @Nullable Class<?> getPrimitiveWrapper(Class<?> type) {
-        if (type == int.class)
-            return Integer.class;
-        if (type == long.class)
-            return Long.class;
-        if (type == double.class)
-            return Double.class;
-        if (type == float.class)
-            return Float.class;
-        if (type == boolean.class)
-            return Boolean.class;
-        if (type == byte.class)
-            return Byte.class;
-        if (type == short.class)
-            return Short.class;
-        if (type == char.class)
-            return Character.class;
-        return null;
+        return PRIMITIVE_WRAPPERS.get(type);
     }
 
     /**
-     * 为枚举类型创建通用解析器。
+     * Creates a generic resolver for Enum types.
      */
-    @SuppressWarnings({ "unchecked", "rawtypes" })
+    @SuppressWarnings("unchecked")
     private <E extends Enum<E>> ArgumentResolver<?> createEnumResolver(Class<?> enumType) {
         return new EnumArgumentResolver<>((Class<E>) enumType);
     }

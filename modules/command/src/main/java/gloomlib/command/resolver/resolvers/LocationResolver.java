@@ -9,34 +9,35 @@ import gloomlib.command.resolver.ArgumentResolver;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.command.brigadier.argument.resolvers.FinePositionResolver;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import gloomlib.command.message.CommandMessages;
 import org.bukkit.Location;
 
 import java.lang.reflect.Parameter;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 位置参数解析器（使用 Paper API）。
+ * Location Argument Resolver (using Paper API).
  *
  * <p>
- * 使用 Paper 提供的 {@link ArgumentTypes#finePosition()} 参数类型，
- * 支持 Minecraft 原生的坐标语法（如 {@code ~ ~ ~}, {@code ^1 ^0 ^1}）。
+ * Uses Paper provided {@link ArgumentTypes#finePosition()} argument type,
+ * supporting Minecraft native coordinate syntax (e.g. {@code ~ ~ ~},
+ * {@code ^1 ^0 ^1}).
  * </p>
  *
- * <h2>支持的格式</h2>
+ * <h2>Supported Formats</h2>
  * <ul>
- * <li>{@code 100 64 200} — 绝对坐标</li>
- * <li>{@code ~ ~ ~} — 相对坐标（相对于执行者位置）</li>
- * <li>{@code ~10 ~5 ~-10} — 带偏移的相对坐标</li>
- * <li>{@code ^ ^ ^5} — 局部坐标（相对于执行者朝向）</li>
+ * <li>{@code 100 64 200} — Absolute coordinates</li>
+ * <li>{@code ~ ~ ~} — Relative coordinates (relative to sender's position)</li>
+ * <li>{@code ~10 ~5 ~-10} — Relative coordinates with offset</li>
+ * <li>{@code ^ ^ ^5} — Local coordinates (relative to sender's facing
+ * direction)</li>
  * </ul>
  */
 public class LocationResolver implements ArgumentResolver<Location> {
 
     @Override
     public ArgumentType<?> createArgumentType(Parameter parameter) {
-        // 使用 Paper 提供的精确位置参数类型
+        // Use Paper provided fine position argument type
         return ArgumentTypes.finePosition();
     }
 
@@ -46,8 +47,7 @@ public class LocationResolver implements ArgumentResolver<Location> {
             FinePositionResolver resolver = context.getArgument(name, FinePositionResolver.class);
             return resolver.resolve(context.getSource()).toLocation(context.getSource().getLocation().getWorld());
         } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
-            throw new CommandException(
-                    Component.text("无效的坐标格式！").color(NamedTextColor.RED));
+            throw new CommandException(CommandMessages.POS_MISSING.get());
         }
     }
 
@@ -58,14 +58,14 @@ public class LocationResolver implements ArgumentResolver<Location> {
             Parameter parameter) {
         String remaining = builder.getRemaining();
 
-        // 提供常用坐标建议
+        // Provide common coordinate suggestions
         if (remaining.isEmpty()) {
             builder.suggest("~ ~ ~");
             builder.suggest("^ ^ ^");
         } else if (remaining.startsWith("~") || remaining.startsWith("^")) {
-            // 已经输入了相对坐标标记，不提供额外建议
+            // Already entered relative coordinate marker, no extra suggestions
         } else {
-            // 提供相对坐标建议
+            // Provide relative coordinate suggestions
             builder.suggest("~ ~ ~");
         }
 

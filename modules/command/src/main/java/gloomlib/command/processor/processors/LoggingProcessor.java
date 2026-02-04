@@ -9,10 +9,10 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.util.logging.Logger;
 
 /**
- * 日志记录处理器。
+ * Logging Processor.
  *
  * <p>
- * 记录命令执行日志。
+ * Logs command execution details.
  * </p>
  */
 public class LoggingProcessor implements PreProcessor {
@@ -20,18 +20,18 @@ public class LoggingProcessor implements PreProcessor {
     private final Logger logger;
 
     /**
-     * 创建日志处理器。
+     * Creates a logging processor.
      *
-     * @param plugin 插件实例
+     * @param plugin Plugin instance
      */
     public LoggingProcessor(JavaPlugin plugin) {
         this.logger = plugin.getLogger();
     }
 
     /**
-     * 创建日志处理器（使用自定义 Logger）。
+     * Creates a logging processor (using custom Logger).
      *
-     * @param logger Logger 实例
+     * @param logger Logger instance
      */
     public LoggingProcessor(Logger logger) {
         this.logger = logger;
@@ -40,13 +40,13 @@ public class LoggingProcessor implements PreProcessor {
     @Override
     public Result preProcess(GloomCommandContext context) {
         logger.info(String.format(
-                "[命令] %s 执行了命令",
+                "[Command] %s executed command",
                 context.getSender().getName()));
         return Result.CONTINUE;
     }
 
     @Override
     public int getPriority() {
-        return -1000; // 最高优先级，最先执行
+        return -1000; // Highest priority, executes first
     }
 }

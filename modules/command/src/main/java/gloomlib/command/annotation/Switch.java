@@ -6,27 +6,28 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 定义命令开关参数（--switch）。
+ * Defines a command switch parameter (--switch).
  *
  * <p>
- * 开关参数是布尔类型，只需指定名称即表示为 true，不存在则为 false。
+ * Switch parameters are boolean types, providing the name implicitly means
+ * true, omission means false.
  * </p>
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>
  * {@code
  * &#64;SubCommand("delete")
  * public void delete(CommandSender sender,
- *                    @Arg String name,
- *                    &#64;Switch("confirm") boolean confirm) {
+ *         @Arg String name,
+ *         &#64;Switch("confirm") boolean confirm) {
  *     if (!confirm) {
- *         sender.sendMessage("请添加 --confirm 以确认删除");
+ *         sender.sendMessage("Please add --confirm to confirm deletion");
  *         return;
  *     }
- *     // 执行删除
+ *     // Execute deletion
  * }
  * }
  * </pre>
@@ -36,17 +37,17 @@ import java.lang.annotation.Target;
 public @interface Switch {
 
     /**
-     * 开关名称（格式：--name）。
+     * Switch name (format: --name).
      *
-     * @return 开关名称
+     * @return switch name
      */
     String value();
 
     /**
-     * 短开关名称（格式：-n）。
-     * 如果为空，则只能使用长格式。
+     * Short switch name (format: -n).
+     * If empty, only long format can be used.
      *
-     * @return 短开关名称
+     * @return short switch name
      */
     String shorthand() default "";
 }

@@ -6,15 +6,15 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 命令描述信息，用于帮助命令显示。
+ * Command description information, used to help display commands.
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>{@code
  * @Command("gamemode")
- * @Description("更改游戏模式")
+ * @Description("Change game mode")
  * public class GameModeCommand {
  *     // ...
  * }
@@ -25,9 +25,9 @@ import java.lang.annotation.Target;
 public @interface Description {
 
     /**
-     * 命令描述文本。
+     * Command description text.
      *
-     * @return 描述文本
+     * @return description text
      */
     String value();
 }

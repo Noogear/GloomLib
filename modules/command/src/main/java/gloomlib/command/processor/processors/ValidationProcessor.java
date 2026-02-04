@@ -2,6 +2,7 @@ package gloomlib.command.processor.processors;
 
 import gloomlib.command.annotation.Range;
 import gloomlib.command.context.GloomCommandContext;
+import gloomlib.command.message.CommandMessages;
 import gloomlib.command.processor.PreProcessor;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -9,14 +10,14 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import java.lang.reflect.Parameter;
 
 /**
- * 参数验证处理器。
+ * Parameter Validation Processor.
  *
  * <p>
- * 对命令参数进行验证，支持：
+ * Validates command parameters, supports:
  * <ul>
- * <li>范围验证 ({@code @Range})</li>
- * <li>非空验证</li>
- * <li>自定义验证规则</li>
+ * <li>Range validation ({@code @Range})</li>
+ * <li>Not-null validation</li>
+ * <li>Custom validation rules</li>
  * </ul>
  * </p>
  */
@@ -24,22 +25,23 @@ public class ValidationProcessor implements PreProcessor {
 
     @Override
     public Result preProcess(GloomCommandContext context) {
-        // 默认实现：验证在参数解析阶段已完成
+        // Default implementation: Validation is completed during parameter parsing
+        // phase
         return Result.CONTINUE;
     }
 
     @Override
     public int getPriority() {
-        return 50; // 在权限检查之后，冷却检查之前
+        return 50; // After permission check, before cooldown check
     }
 
     /**
-     * 验证数值范围。
+     * Validates numeric range.
      *
-     * @param value     要验证的值
-     * @param range     范围注解
-     * @param parameter 参数信息
-     * @return 验证结果
+     * @param value     Value to validate
+     * @param range     Range annotation
+     * @param parameter Parameter info
+     * @return Validation result
      */
     public ValidationResult validateRange(Number value, Range range, Parameter parameter) {
         if (value == null) {
@@ -51,37 +53,31 @@ public class ValidationProcessor implements PreProcessor {
         double max = range.max();
 
         if (val < min) {
-            String key = (value instanceof Integer || value instanceof Long) ? "argument.integer.low"
-                    : "argument.double.low";
-            return ValidationResult.failure(Component.translatable(key, NamedTextColor.RED,
-                    Component.text(min), Component.text(value.toString())));
+            CommandMessages msg = (value instanceof Integer || value instanceof Long) ? CommandMessages.INTEGER_TOO_LOW
+                    : CommandMessages.DOUBLE_TOO_LOW;
+            return ValidationResult.failure(msg.get(Component.text(min), Component.text(value.toString())));
         }
 
         if (val > max) {
-            String key = (value instanceof Integer || value instanceof Long) ? "argument.integer.big"
-                    : "argument.double.big";
-            return ValidationResult.failure(Component.translatable(key, NamedTextColor.RED,
-                    Component.text(max), Component.text(value.toString())));
+            CommandMessages msg = (value instanceof Integer || value instanceof Long) ? CommandMessages.INTEGER_TOO_HIGH
+                    : CommandMessages.DOUBLE_TOO_HIGH;
+            return ValidationResult.failure(msg.get(Component.text(max), Component.text(value.toString())));
         }
 
         return ValidationResult.success();
     }
 
     /**
-     * 验证字符串非空。
+     * Validates string is not empty.
      *
-     * @param value     要验证的值
-     * @param parameter 参数信息
-     * @return 验证结果
+     * @param value     Value to validate
+     * @param parameter Parameter info
+     * @return Validation result
      */
     public ValidationResult validateNotEmpty(String value, Parameter parameter) {
         if (value == null || value.isEmpty()) {
             return ValidationResult.failure(
-                    Component.text()
-                            .append(Component.text("Argument "))
-                            .append(Component.text(parameter.getName(), NamedTextColor.YELLOW))
-                            .append(Component.text(" cannot be empty!", NamedTextColor.RED))
-                            .build());
+                    CommandMessages.VALIDATION_EMPTY.get(Component.text(parameter.getName(), NamedTextColor.YELLOW)));
         }
         return ValidationResult.success();
     }
@@ -96,11 +92,7 @@ public class ValidationProcessor implements PreProcessor {
     public ValidationResult validateNotNull(Object value, Parameter parameter) {
         if (value == null) {
             return ValidationResult.failure(
-                    Component.text()
-                            .append(Component.text("Argument "))
-                            .append(Component.text(parameter.getName(), NamedTextColor.YELLOW))
-                            .append(Component.text(" cannot be null!", NamedTextColor.RED))
-                            .build());
+                    CommandMessages.VALIDATION_NULL.get(Component.text(parameter.getName(), NamedTextColor.YELLOW)));
         }
         return ValidationResult.success();
     }
@@ -122,31 +114,23 @@ public class ValidationProcessor implements PreProcessor {
         int length = value.length();
         if (length < minLength) {
             return ValidationResult.failure(
-                    Component.text()
-                            .append(Component.text("Argument "))
-                            .append(Component.text(parameter.getName(), NamedTextColor.YELLOW))
-                            .append(Component.text(" length must be at least "))
-                            .append(Component.text(String.valueOf(minLength), NamedTextColor.GREEN))
-                            .append(Component.text(" characters"))
-                            .build());
+                    CommandMessages.VALIDATION_LENGTH_MIN.get(
+                            Component.text(parameter.getName(), NamedTextColor.YELLOW),
+                            Component.text(minLength)));
         }
 
         if (length > maxLength) {
             return ValidationResult.failure(
-                    Component.text()
-                            .append(Component.text("Argument "))
-                            .append(Component.text(parameter.getName(), NamedTextColor.YELLOW))
-                            .append(Component.text(" length cannot exceed "))
-                            .append(Component.text(String.valueOf(maxLength), NamedTextColor.GREEN))
-                            .append(Component.text(" characters"))
-                            .build());
+                    CommandMessages.VALIDATION_LENGTH_MAX.get(
+                            Component.text(parameter.getName(), NamedTextColor.YELLOW),
+                            Component.text(maxLength)));
         }
 
         return ValidationResult.success();
     }
 
     /**
-     * 验证结果。
+     * Validation Result.
      */
     public static class ValidationResult {
 
@@ -159,37 +143,37 @@ public class ValidationProcessor implements PreProcessor {
         }
 
         /**
-         * 创建成功结果。
+         * Creates success result.
          *
-         * @return 成功的验证结果
+         * @return Successful validation result
          */
         public static ValidationResult success() {
             return new ValidationResult(true, null);
         }
 
         /**
-         * 创建失败结果。
+         * Creates failure result.
          *
-         * @param errorMessage 错误消息
-         * @return 失败的验证结果
+         * @param errorMessage Error message
+         * @return Failed validation result
          */
         public static ValidationResult failure(Component errorMessage) {
             return new ValidationResult(false, errorMessage);
         }
 
         /**
-         * 是否验证通过。
+         * Check if validation passed.
          *
-         * @return 是否通过
+         * @return True if passed
          */
         public boolean isValid() {
             return valid;
         }
 
         /**
-         * 获取错误消息。
+         * Gets error message.
          *
-         * @return 错误消息组件
+         * @return Error message component
          */
         public Component getErrorMessage() {
             return errorMessage;

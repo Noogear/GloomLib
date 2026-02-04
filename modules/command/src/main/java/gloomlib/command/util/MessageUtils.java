@@ -6,15 +6,15 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 /**
- * 消息处理工具类。
+ * Message utility class.
  *
  * <p>
- * 提供统一的 MiniMessage 实例和消息格式化方法。
+ * Provides unified MiniMessage instance and message formatting methods.
  * </p>
  */
 public final class MessageUtils {
 
-    /** 全局 MiniMessage 实例（线程安全） */
+    /** Global MiniMessage instance (Thread-safe) */
     public static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
 
     private MessageUtils() {
@@ -22,61 +22,61 @@ public final class MessageUtils {
     }
 
     /**
-     * 反序列化 MiniMessage 格式的字符串。
+     * Deserializes a MiniMessage formatted string.
      *
-     * @param message 消息模板
-     * @return Component 对象
+     * @param message Message template
+     * @return Component object
      */
     public static Component deserialize(String message) {
         return MINI_MESSAGE.deserialize(message);
     }
 
     /**
-     * 反序列化带占位符的消息。
+     * Deserializes a message with placeholders.
      *
-     * @param message   消息模板
-     * @param resolvers 占位符解析器
-     * @return Component 对象
+     * @param message   Message template
+     * @param resolvers Placeholder resolvers
+     * @return Component object
      */
     public static Component deserialize(String message, TagResolver... resolvers) {
         return MINI_MESSAGE.deserialize(message, resolvers);
     }
 
     /**
-     * 创建错误消息。
+     * Creates an error message.
      *
-     * @param message 错误信息
-     * @return 红色的错误消息 Component
+     * @param message Error info
+     * @return Red error message Component
      */
     public static Component createErrorMessage(String message) {
         return Component.text(message, NamedTextColor.RED);
     }
 
     /**
-     * 创建成功消息。
+     * Creates a success message.
      *
-     * @param message 成功信息
-     * @return 绿色的成功消息 Component
+     * @param message Success info
+     * @return Green success message Component
      */
     public static Component createSuccessMessage(String message) {
         return Component.text(message, NamedTextColor.GREEN);
     }
 
     /**
-     * 创建警告消息。
+     * Creates a warning message.
      *
-     * @param message 警告信息
-     * @return 黄色的警告消息 Component
+     * @param message Warning info
+     * @return Yellow warning message Component
      */
     public static Component createWarningMessage(String message) {
         return Component.text(message, NamedTextColor.YELLOW);
     }
 
     /**
-     * 创建信息消息。
+     * Creates an info message.
      *
-     * @param message 信息内容
-     * @return 浅蓝色的信息消息 Component
+     * @param message Info content
+     * @return Aqua info message Component
      */
     public static Component createInfoMessage(String message) {
         return Component.text(message, NamedTextColor.AQUA);

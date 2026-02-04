@@ -18,17 +18,17 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
- * 命令构建器（流式 API）。
+ * Command Builder (Fluent API).
  *
  * <p>
- * 用于以编程方式创建命令，无需使用注解。
+ * Allows programmatic creation of commands without using annotations.
  * </p>
  *
- * <h2>用法示例</h2>
+ * <h2>Usage Example</h2>
  * 
  * <pre>{@code
  * CommandBuilder.create("hello")
- *         .description("打招呼命令")
+ *         .description("Hello command")
  *         .permission("server.hello")
  *         .executes(ctx -> {
  *             ctx.getSender().sendMessage(Component.text("Hello!"));
@@ -57,19 +57,19 @@ public class CommandBuilder {
     }
 
     /**
-     * 创建命令构建器。
+     * Creates a command builder.
      *
-     * @param name 命令名
-     * @return 构建器
+     * @param name Command name
+     * @return Builder
      */
     public static CommandBuilder create(String name) {
         return new CommandBuilder(name);
     }
 
     /**
-     * 设置描述。
+     * Sets the description.
      *
-     * @param description 命令描述
+     * @param description Command description
      * @return this
      */
     public CommandBuilder description(String description) {
@@ -78,9 +78,9 @@ public class CommandBuilder {
     }
 
     /**
-     * 添加别名。
+     * Adds aliases.
      *
-     * @param aliases 别名
+     * @param aliases Command aliases
      * @return this
      */
     public CommandBuilder aliases(String... aliases) {
@@ -89,9 +89,9 @@ public class CommandBuilder {
     }
 
     /**
-     * 设置权限。
+     * Sets the permission.
      *
-     * @param permission 权限节点
+     * @param permission Permission node
      * @return this
      */
     public CommandBuilder permission(String permission) {
@@ -100,9 +100,9 @@ public class CommandBuilder {
     }
 
     /**
-     * 设置自定义执行条件。
+     * Sets custom execution requirement.
      *
-     * @param requirement 条件谓词
+     * @param requirement Requirement predicate
      * @return this
      */
     public CommandBuilder requires(Predicate<CommandSender> requirement) {
@@ -111,7 +111,7 @@ public class CommandBuilder {
     }
 
     /**
-     * 限制仅玩家可用。
+     * Restricts to players only.
      *
      * @return this
      */
@@ -121,7 +121,7 @@ public class CommandBuilder {
     }
 
     /**
-     * 限制仅 OP 可用。
+     * Restricts to OPs only.
      *
      * @return this
      */
@@ -131,9 +131,9 @@ public class CommandBuilder {
     }
 
     /**
-     * 设置执行器。
+     * Sets execution logic.
      *
-     * @param executor 执行器
+     * @param executor Command executor
      * @return this
      */
     public CommandBuilder executes(Consumer<GloomCommandContext> executor) {
@@ -142,12 +142,12 @@ public class CommandBuilder {
     }
 
     /**
-     * 添加必需参数。
+     * Adds a required argument.
      *
-     * @param name         参数名
-     * @param argumentType Brigadier 参数类型
-     * @param <T>          参数类型
-     * @return 参数构建器
+     * @param name         Argument name
+     * @param argumentType Brigadier argument type
+     * @param <T>          Argument type
+     * @return Argument builder
      */
     public <T> ArgumentBuilder<T> argument(String name, ArgumentType<T> argumentType) {
         ArgumentBuilder<T> argBuilder = new ArgumentBuilder<>(this, name, argumentType);
@@ -156,10 +156,10 @@ public class CommandBuilder {
     }
 
     /**
-     * 添加子命令。
+     * Adds a subcommand.
      *
-     * @param name 子命令名
-     * @return 子命令构建器
+     * @param name Subcommand name
+     * @return Subcommand builder
      */
     public SubCommandBuilder subCommand(String name) {
         SubCommandBuilder subBuilder = new SubCommandBuilder(this, name);
@@ -168,14 +168,14 @@ public class CommandBuilder {
     }
 
     /**
-     * 构建 Brigadier 命令节点。
+     * Builds Brigadier command node.
      *
-     * @return Brigadier 命令节点
+     * @return Brigadier command node
      */
     public LiteralArgumentBuilder<CommandSourceStack> build() {
         LiteralArgumentBuilder<CommandSourceStack> builder = Commands.literal(name);
 
-        // 设置权限/条件
+        // Set permission/requirement
         if (permission != null) {
             final String perm = permission;
             builder.requires(source -> source.getSender().hasPermission(perm) && requirement.test(source.getSender()));
@@ -183,7 +183,7 @@ public class CommandBuilder {
             builder.requires(source -> requirement.test(source.getSender()));
         }
 
-        // 设置执行器
+        // Set executor
         if (executor != null) {
             builder.executes(ctx -> {
                 executor.accept(new GloomCommandContext(ctx));
@@ -191,12 +191,12 @@ public class CommandBuilder {
             });
         }
 
-        // 添加参数
+        // Add arguments
         if (!arguments.isEmpty()) {
             buildArgumentChain(builder, 0);
         }
 
-        // 添加子命令
+        // Add subcommands
         for (SubCommandBuilder subCommand : subCommands) {
             builder.then(subCommand.build());
         }
@@ -205,16 +205,16 @@ public class CommandBuilder {
     }
 
     /**
-     * 构建并注册到 Paper。
+     * Builds and registers to Paper.
      *
-     * @param commands Paper Commands 注册器
+     * @param commands Paper Commands registrar
      */
     public void register(Commands commands) {
         commands.register(build().build(), description, aliases);
     }
 
     /**
-     * 递归构建参数链。
+     * Recursively builds argument chain.
      */
     @SuppressWarnings({ "rawtypes", "unchecked" })
     private void buildArgumentChain(
@@ -227,7 +227,7 @@ public class CommandBuilder {
         ArgumentBuilder<?> arg = arguments.get(index);
         RequiredArgumentBuilder<CommandSourceStack, ?> argNode = arg.buildNode();
 
-        // 如果是最后一个参数，添加执行器
+        // If it's the last argument, add executor
         if (index == arguments.size() - 1 && arg.executor != null) {
             argNode.executes(ctx -> {
                 arg.executor.accept(new GloomCommandContext(ctx));
@@ -235,7 +235,7 @@ public class CommandBuilder {
             });
         }
 
-        // 递归添加下一个参数
+        // Recursively add next argument
         if (index < arguments.size() - 1) {
             buildArgumentChain(argNode, index + 1);
         }
@@ -244,30 +244,30 @@ public class CommandBuilder {
     }
 
     /**
-     * 获取命令名。
+     * Gets command name.
      */
     public String getName() {
         return name;
     }
 
     /**
-     * 获取描述。
+     * Gets description.
      */
     public String getDescription() {
         return description;
     }
 
     /**
-     * 获取别名。
+     * Gets aliases.
      */
     public List<String> getAliases() {
         return aliases;
     }
 
     /**
-     * 参数构建器。
+     * Argument Builder.
      *
-     * @param <T> 参数类型
+     * @param <T> Argument type
      */
     public static class ArgumentBuilder<T> {
 
@@ -284,9 +284,9 @@ public class CommandBuilder {
         }
 
         /**
-         * 设置建议提供器。
+         * Sets suggestion provider.
          *
-         * @param provider 建议提供器
+         * @param provider Suggestion provider
          * @return this
          */
         public ArgumentBuilder<T> suggests(SuggestionProvider provider) {
@@ -295,9 +295,9 @@ public class CommandBuilder {
         }
 
         /**
-         * 设置执行器。
+         * Sets executor.
          *
-         * @param executor 执行器
+         * @param executor Executor
          * @return this
          */
         public ArgumentBuilder<T> executes(Consumer<GloomCommandContext> executor) {
@@ -306,28 +306,28 @@ public class CommandBuilder {
         }
 
         /**
-         * 添加下一个参数。
+         * Adds next argument.
          *
-         * @param name         参数名
-         * @param argumentType Brigadier 参数类型
-         * @param <U>          参数类型
-         * @return 参数构建器
+         * @param name         Argument name
+         * @param argumentType Brigadier argument type
+         * @param <U>          Argument type
+         * @return Argument builder
          */
         public <U> ArgumentBuilder<U> argument(String name, ArgumentType<U> argumentType) {
             return parent.argument(name, argumentType);
         }
 
         /**
-         * 返回父构建器。
+         * Returns parent builder.
          *
-         * @return 父构建器
+         * @return Parent builder
          */
         public CommandBuilder end() {
             return parent;
         }
 
         /**
-         * 构建 Brigadier 参数节点。
+         * Builds Brigadier argument node.
          */
         RequiredArgumentBuilder<CommandSourceStack, T> buildNode() {
             RequiredArgumentBuilder<CommandSourceStack, T> node = Commands.argument(name, argumentType);
@@ -341,7 +341,7 @@ public class CommandBuilder {
     }
 
     /**
-     * 子命令构建器。
+     * Subcommand Builder.
      */
     public static class SubCommandBuilder {
 
@@ -360,7 +360,7 @@ public class CommandBuilder {
         }
 
         /**
-         * 添加别名。
+         * Adds aliases.
          */
         public SubCommandBuilder aliases(String... aliases) {
             this.aliases.addAll(Arrays.asList(aliases));
@@ -368,7 +368,7 @@ public class CommandBuilder {
         }
 
         /**
-         * 设置权限。
+         * Sets permission.
          */
         public SubCommandBuilder permission(String permission) {
             this.permission = permission;
@@ -376,7 +376,7 @@ public class CommandBuilder {
         }
 
         /**
-         * 设置执行条件。
+         * Sets execution requirement.
          */
         public SubCommandBuilder requires(Predicate<CommandSender> requirement) {
             this.requirement = requirement;
@@ -384,7 +384,7 @@ public class CommandBuilder {
         }
 
         /**
-         * 限制仅玩家可用。
+         * Restricts to players only.
          */
         public SubCommandBuilder playerOnly() {
             this.requirement = sender -> sender instanceof Player;
@@ -392,7 +392,7 @@ public class CommandBuilder {
         }
 
         /**
-         * 设置执行器。
+         * Sets executor.
          */
         public SubCommandBuilder executes(Consumer<GloomCommandContext> executor) {
             this.executor = executor;
@@ -400,7 +400,7 @@ public class CommandBuilder {
         }
 
         /**
-         * 添加参数。
+         * Adds argument.
          */
         public <T> ArgumentBuilder<T> argument(String name, ArgumentType<T> argumentType) {
             ArgumentBuilder<T> argBuilder = new ArgumentBuilder<>(parent, name, argumentType);
@@ -409,7 +409,7 @@ public class CommandBuilder {
         }
 
         /**
-         * 添加子命令。
+         * Adds subcommand.
          */
         public SubCommandBuilder subCommand(String name) {
             SubCommandBuilder subBuilder = new SubCommandBuilder(parent, name);
@@ -418,19 +418,19 @@ public class CommandBuilder {
         }
 
         /**
-         * 返回父构建器。
+         * Returns parent builder.
          */
         public CommandBuilder end() {
             return parent;
         }
 
         /**
-         * 构建 Brigadier 子命令节点。
+         * Builds Brigadier subcommand node.
          */
         LiteralArgumentBuilder<CommandSourceStack> build() {
             LiteralArgumentBuilder<CommandSourceStack> builder = Commands.literal(name);
 
-            // 设置权限/条件
+            // Set permission/requirement
             if (permission != null) {
                 final String perm = permission;
                 builder.requires(
@@ -439,7 +439,7 @@ public class CommandBuilder {
                 builder.requires(source -> requirement.test(source.getSender()));
             }
 
-            // 设置执行器
+            // Set executor
             if (executor != null) {
                 builder.executes(ctx -> {
                     executor.accept(new GloomCommandContext(ctx));
@@ -447,7 +447,7 @@ public class CommandBuilder {
                 });
             }
 
-            // 添加子命令
+            // Add subcommands
             for (SubCommandBuilder subCommand : subCommands) {
                 builder.then(subCommand.build());
             }

@@ -7,10 +7,10 @@ import java.lang.annotation.Target;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 定义命令冷却时间。
+ * Defines command cooldown time.
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>
@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit;
  * &#64;SubCommand("teleport")
  * @Cooldown(value = 30, unit = TimeUnit.SECONDS, bypassPermission = "server.tp.bypass")
  * public void teleport(Player player, @Arg Player target) {
- *     // 30秒冷却，拥有 server.tp.bypass 权限可绕过
+ *     // 30 seconds cooldown, bypassable with permission server.tp.bypass
  * }
  * }
  * </pre>
@@ -28,32 +28,32 @@ import java.util.concurrent.TimeUnit;
 public @interface Cooldown {
 
     /**
-     * 冷却时长。
+     * Cooldown duration.
      *
-     * @return 冷却时长
+     * @return cooldown duration
      */
     long value();
 
     /**
-     * 时间单位。
+     * Time unit.
      *
-     * @return 时间单位，默认为秒
+     * @return time unit, default is SECONDS
      */
     TimeUnit unit() default TimeUnit.SECONDS;
 
     /**
-     * 绕过冷却所需的权限。
-     * 如果为空，则无法绕过。
+     * Permission required to bypass cooldown.
+     * If empty, cannot be bypassed.
      *
-     * @return 绕过权限节点
+     * @return bypass permission node
      */
     String bypassPermission() default "";
 
     /**
-     * 冷却中时显示的消息。
-     * 支持占位符：{remaining} - 剩余时间
+     * Message shown when in cooldown.
+     * Supports placeholder: {remaining} - remaining time
      *
-     * @return 冷却消息
+     * @return cooldown message
      */
-    String message() default "<red>请等待 <yellow>{remaining}</yellow> 后再使用此命令！</red>";
+    String message() default "";
 }

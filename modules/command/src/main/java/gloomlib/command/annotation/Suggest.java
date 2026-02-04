@@ -7,18 +7,18 @@ import java.lang.annotation.Target;
 import gloomlib.command.suggestion.SuggestionProvider;
 
 /**
- * 指定参数的 Tab 补全建议提供器。
+ * Specifies the Tab completion suggestion provider for an argument.
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>
  * {@code
  * &#64;SubCommand("warp")
  * public void warp(Player player,
- *                  @Arg @Suggest(WarpSuggestionProvider.class) String warpName) {
- *     // 使用自定义建议提供器
+ *         @Arg @Suggest(WarpSuggestionProvider.class) String warpName) {
+ *     // Use custom suggestion provider
  * }
  * }
  * </pre>
@@ -28,9 +28,9 @@ import gloomlib.command.suggestion.SuggestionProvider;
 public @interface Suggest {
 
     /**
-     * 建议提供器类。
+     * Suggestion provider class.
      *
-     * @return 建议提供器类
+     * @return suggestion provider class
      */
     Class<? extends SuggestionProvider> value();
 }

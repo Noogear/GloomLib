@@ -5,6 +5,7 @@ import gloomlib.command.context.CommandResult;
 import gloomlib.command.context.GloomCommandContext;
 import gloomlib.command.exception.CommandException;
 import gloomlib.command.processor.MethodInvoker;
+import gloomlib.command.message.CommandMessages;
 import gloomlib.command.processor.ProcessorPipeline;
 import gloomlib.command.processor.processors.CooldownProcessor;
 import gloomlib.command.util.MessageUtils;
@@ -18,22 +19,21 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.lang.reflect.Method;
-import java.lang.reflect.Parameter;
 import java.util.Map;
 
 /**
- * 命令执行器。
+ * Command Executor.
  *
  * <p>
- * 负责实际执行命令方法，处理：
+ * Responsible for actually executing command methods, handling:
  * </p>
  * <ul>
- * <li>异步执行（@Async 注解）</li>
- * <li>处理器管道（PreProcessor 和 PostProcessor）</li>
- * <li>权限检查（@PlayerOnly, @ConsoleOnly）</li>
- * <li>冷却限制（@Cooldown 注解）</li>
- * <li>错误处理（@OnError 注解）</li>
- * <li>方法调用（使用 MethodInvoker）</li>
+ * <li>Async execution (@Async annotation)</li>
+ * <li>Processor Pipeline (PreProcessor and PostProcessor)</li>
+ * <li>Permission checks (@PlayerOnly, @ConsoleOnly)</li>
+ * <li>Cooldown limits (@Cooldown annotation)</li>
+ * <li>Error handling (@OnError annotation)</li>
+ * <li>Method invocation (using MethodInvoker)</li>
  * </ul>
  */
 public class CommandExecutor {
@@ -52,17 +52,17 @@ public class CommandExecutor {
     }
 
     /**
-     * 执行命令方法。
+     * Executes a command method.
      *
      * @param ctx           Brigadier CommandContext
-     * @param method        命令方法
-     * @param instance      命令类实例
-     * @param args          解析后的参数数组
-     * @param invoker       方法调用器
-     * @param isAsync       是否异步执行
-     * @param cooldownKey   冷却键（如果有）
-     * @param errorHandlers 错误处理器映射
-     * @return Brigadier 命令返回值
+     * @param method        Command method
+     * @param instance      Command class instance
+     * @param args          Parsed argument array
+     * @param invoker       Method invoker
+     * @param isAsync       Whether to execute asynchronously
+     * @param cooldownKey   Cooldown key (if any)
+     * @param errorHandlers Error handler map
+     * @return Brigadier command return value
      */
     public int execute(
             CommandContext<CommandSourceStack> ctx,
@@ -73,8 +73,8 @@ public class CommandExecutor {
             boolean isAsync,
             String cooldownKey,
             Map<Class<? extends Throwable>, Method> errorHandlers) {
-        
-        // 异步执行
+
+        // Async execution
         if (isAsync) {
             plugin.getServer().getAsyncScheduler().runNow(plugin, task -> {
                 try {
@@ -85,22 +85,22 @@ public class CommandExecutor {
             });
             return Command.SINGLE_SUCCESS;
         }
-        
-        // 同步执行
+
+        // Sync execution
         return executeInternal(ctx, method, instance, args, invoker, cooldownKey, errorHandlers);
     }
 
     /**
-     * 内部执行逻辑。
+     * Internal execution logic.
      *
      * @param ctx           Brigadier CommandContext
-     * @param method        命令方法
-     * @param instance      命令类实例
-     * @param args          解析后的参数数组
-     * @param invoker       方法调用器
-     * @param cooldownKey   冷却键（如果有）
-     * @param errorHandlers 错误处理器映射
-     * @return Brigadier 命令返回值
+     * @param method        Command method
+     * @param instance      Command class instance
+     * @param args          Parsed argument array
+     * @param invoker       Method invoker
+     * @param cooldownKey   Cooldown key (if any)
+     * @param errorHandlers Error handler map
+     * @return Brigadier command return value
      */
     private int executeInternal(
             CommandContext<CommandSourceStack> ctx,
@@ -110,123 +110,133 @@ public class CommandExecutor {
             MethodInvoker invoker,
             String cooldownKey,
             Map<Class<? extends Throwable>, Method> errorHandlers) {
-        
+
         GloomCommandContext context = new GloomCommandContext(ctx);
-        
+
         try {
-            // 1. 运行预处理器
+            // 1. Run PreProcessors
             if (!pipeline.runPreProcessors(context)) {
                 return Command.SINGLE_SUCCESS;
             }
-            
+
             CommandSender sender = ctx.getSource().getSender();
-            
-            // 2. 检查执行权限（@PlayerOnly / @ConsoleOnly）
+
+            // 2. Check Execution Permission (@PlayerOnly / @ConsoleOnly)
             if (!checkSenderType(method, sender)) {
                 return 0;
             }
-            
-            // 3. 检查冷却
+
+            // 3. Check Cooldown
             if (!checkCooldown(method, sender, cooldownKey)) {
                 return Command.SINGLE_SUCCESS;
             }
-            
-            // 4. 执行方法
+
+            // 4. Execute Method
             Object result = invoker.invoke(instance, args);
-            
-            // 5. 运行后处理器
+
+            // 5. Run PostProcessors
             pipeline.runPostProcessors(context, CommandResult.success(result));
-            
+
             return result instanceof Integer ? (Integer) result : Command.SINGLE_SUCCESS;
-            
+
         } catch (Throwable t) {
             return handleError(t, ctx, instance, errorHandlers);
         }
     }
 
     /**
-     * 检查发送者类型（@PlayerOnly / @ConsoleOnly）。
+     * Checks checks sender type (@PlayerOnly / @ConsoleOnly).
      *
-     * @param method 命令方法
-     * @param sender 命令发送者
-     * @return true 如果检查通过
+     * @param method Command method
+     * @param sender Command sender
+     * @return true if check passes
      */
     private boolean checkSenderType(Method method, CommandSender sender) {
-        // @PlayerOnly 检查
+        // @PlayerOnly check
         PlayerOnly playerOnly = method.getAnnotation(PlayerOnly.class);
         if (playerOnly != null && !(sender instanceof Player)) {
             sender.sendMessage(MessageUtils.deserialize(playerOnly.message()));
             return false;
         }
-        
-        // @ConsoleOnly 检查
+
+        // @ConsoleOnly check
         ConsoleOnly consoleOnly = method.getAnnotation(ConsoleOnly.class);
         if (consoleOnly != null && sender instanceof Player) {
             sender.sendMessage(MessageUtils.deserialize(consoleOnly.message()));
             return false;
         }
-        
+
         return true;
     }
 
     /**
-     * 检查命令冷却。
+     * Checks command cooldown.
      *
-     * @param method      命令方法
-     * @param sender      命令发送者
-     * @param cooldownKey 冷却键
-     * @return true 如果检查通过（无冷却或冷却已结束）
+     * @param method      Command method
+     * @param sender      Command sender
+     * @param cooldownKey Cooldown key
+     * @return true if check passes (no cooldown or cooldown expired)
      */
     private boolean checkCooldown(Method method, CommandSender sender, String cooldownKey) {
         if (cooldownKey == null || !(sender instanceof Player player)) {
             return true;
         }
-        
+
         Cooldown cooldown = method.getAnnotation(Cooldown.class);
         if (cooldown == null) {
             return true;
         }
-        
-        // 检查绕过权限
-        if (!cooldown.bypassPermission().isEmpty() && 
-            player.hasPermission(cooldown.bypassPermission())) {
+
+        // Check bypass permission
+        if (!cooldown.bypassPermission().isEmpty() &&
+                player.hasPermission(cooldown.bypassPermission())) {
             return true;
         }
-        
-        // 检查剩余冷却时间
-        long remaining = cooldownProcessor.getRemainingCooldown(cooldownKey, player.getName());
+
+        // Check remaining cooldown
+        // Check remaining cooldown
+        long remaining = cooldownProcessor.getRemainingCooldown(cooldownKey, player.getUniqueId());
         if (remaining > 0) {
-            sender.sendMessage(MessageUtils.deserialize(cooldown.message())
-                    .replaceText(net.kyori.adventure.text.TextReplacementConfig.builder()
-                            .match("%time%")
-                            .replacement(String.format("%.1f", remaining / 1000.0))
-                            .build()));
+            String timeStr = CooldownProcessor.formatRemainingTime(remaining);
+            if (cooldown.message().isEmpty()) {
+                sender.sendMessage(CommandMessages.COOLDOWN_WAIT.get(Component.text(timeStr, NamedTextColor.YELLOW)));
+            } else {
+                sender.sendMessage(MessageUtils.deserialize(cooldown.message())
+                        .replaceText(net.kyori.adventure.text.TextReplacementConfig.builder()
+                                .match("%time%") // Simple placeholder
+                                .replacement(timeStr)
+                                .build())
+                        .replaceText(net.kyori.adventure.text.TextReplacementConfig.builder()
+                                .match("\\{remaining\\}") // MiniMessage style placeholder
+                                .replacement(timeStr)
+                                .build()));
+            }
             return false;
         }
-        
-        // 设置新冷却
-        cooldownProcessor.setCooldown(cooldownKey, player.getName(), cooldown.value());
+
+        // Set new cooldown
+        cooldownProcessor.setCooldown(cooldownKey, player.getUniqueId(), cooldown.value());
         return true;
     }
 
     /**
-     * 处理命令执行错误。
+     * Handles command execution errors.
      *
-     * @param throwable     异常
+     * @param throwable     Exception
      * @param ctx           Brigadier CommandContext
-     * @param instance      命令类实例
-     * @param errorHandlers 错误处理器映射
-     * @return Brigadier 命令返回值（0 表示失败）
+     * @param instance      Command class instance
+     * @param errorHandlers Error handler map
+     * @return Brigadier command return value (0 means failure)
      */
     private int handleError(
             Throwable throwable,
             CommandContext<CommandSourceStack> ctx,
             Object instance,
             Map<Class<? extends Throwable>, Method> errorHandlers) {
-        
+
         Throwable cause = throwable.getCause() != null ? throwable.getCause() : throwable;
-        
-        // 尝试使用自定义错误处理器
+
+        // Try custom error handlers
         for (Map.Entry<Class<? extends Throwable>, Method> entry : errorHandlers.entrySet()) {
             if (entry.getKey().isAssignableFrom(cause.getClass())) {
                 try {
@@ -239,18 +249,18 @@ public class CommandExecutor {
                 }
             }
         }
-        
-        // 默认错误处理
+
+        // Default error handling
         CommandSender sender = ctx.getSource().getSender();
         if (cause instanceof CommandException cmdEx) {
             sender.sendMessage(cmdEx.getAdventureMessage());
         } else {
             sender.sendMessage(
-                Component.translatable("command.failed", NamedTextColor.RED)
-                    .hoverEvent(Component.text(cause.getMessage(), NamedTextColor.GRAY)));
+                    CommandMessages.COMMAND_FAILED.get()
+                            .hoverEvent(Component.text(cause.getMessage(), NamedTextColor.GRAY)));
             cause.printStackTrace();
         }
-        
+
         return 0;
     }
 }

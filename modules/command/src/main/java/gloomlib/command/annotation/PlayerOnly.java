@@ -6,22 +6,24 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 限制命令仅限玩家使用。
+ * Restricts the command to be usable only by players.
  *
  * <p>
- * 如果控制台或其他非玩家实体尝试执行，将显示错误消息。
+ * If console or other non-player entity tries to execute, an error message will
+ * be shown.
  * </p>
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>
  * {@code
  * &#64;Usage
- * @PlayerOnly(message = "<red>此命令仅限玩家使用！</red>")
+ * @PlayerOnly(message = "<red>This command is for players only!</red>")
  * public void execute(Player player) {
- *     // 第一个参数类型为 Player，表示仅玩家可执行
+ *     // The first parameter type is Player, implicitly meaning only players can
+ *     // execute
  * }
  * }
  * </pre>
@@ -31,10 +33,10 @@ import java.lang.annotation.Target;
 public @interface PlayerOnly {
 
     /**
-     * 非玩家执行时显示的错误消息。
-     * 支持 MiniMessage 格式。
+     * Error message shown when executed by non-players.
+     * Supports MiniMessage format.
      *
-     * @return 错误消息
+     * @return error message
      */
     String message() default "<red><translate:permissions.requires.player>";
 }

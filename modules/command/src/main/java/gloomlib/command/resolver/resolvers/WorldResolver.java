@@ -14,17 +14,17 @@ import java.lang.reflect.Parameter;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 世界参数解析器（使用 Paper API）。
+ * World Argument Resolver (using Paper API).
  *
  * <p>
- * 使用 Paper 提供的 {@link ArgumentTypes#world()} 参数类型。
+ * Uses Paper provided {@link ArgumentTypes#world()} argument type.
  * </p>
  */
 public class WorldResolver implements ArgumentResolver<World> {
 
     @Override
     public ArgumentType<?> createArgumentType(Parameter parameter) {
-        // 使用 Paper 提供的世界参数类型
+        // Use Paper provided world argument type
         return ArgumentTypes.world();
     }
 
@@ -42,7 +42,7 @@ public class WorldResolver implements ArgumentResolver<World> {
 
         for (World world : Bukkit.getWorlds()) {
             if (world.getName().toLowerCase().startsWith(remaining)) {
-                builder.suggest(world.getName()); // 移除 Component 工具提示
+                builder.suggest(world.getName()); // Remove Component tooltip
             }
         }
 

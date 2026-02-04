@@ -10,43 +10,48 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * 命令处理器管道。
+ * Command Processor Pipeline.
  *
  * <p>
- * 管理并执行命令的预处理和后处理逻辑。
- * 处理器按优先级排序执行。
+ * Manages and executes command pre-processing and post-processing logic.
+ * Processors are executed in priority order.
  * </p>
  */
 public class ProcessorPipeline {
+
+    private static final Comparator<PreProcessor> PRE_PROCESSOR_COMPARATOR = Comparator
+            .comparingInt(PreProcessor::getPriority);
+    private static final Comparator<PostProcessor> POST_PROCESSOR_COMPARATOR = Comparator
+            .comparingInt(PostProcessor::getPriority);
 
     private final List<PreProcessor> preProcessors = new ArrayList<>();
     private final List<PostProcessor> postProcessors = new ArrayList<>();
 
     /**
-     * 注册预处理器。
+     * Registers a pre-processor.
      *
-     * @param processor 预处理器
+     * @param processor Pre-processor
      */
     public void registerPreProcessor(PreProcessor processor) {
         preProcessors.add(processor);
-        preProcessors.sort(Comparator.comparingInt(PreProcessor::getPriority));
+        preProcessors.sort(PRE_PROCESSOR_COMPARATOR);
     }
 
     /**
-     * 注册后处理器。
+     * Registers a post-processor.
      *
-     * @param processor 后处理器
+     * @param processor Post-processor
      */
     public void registerPostProcessor(PostProcessor processor) {
         postProcessors.add(processor);
-        postProcessors.sort(Comparator.comparingInt(PostProcessor::getPriority));
+        postProcessors.sort(POST_PROCESSOR_COMPARATOR);
     }
 
     /**
-     * 执行预处理管道。
+     * Executes the pre-processing pipeline.
      *
-     * @param context 命令上下文
-     * @return 是否继续执行
+     * @param context Command context
+     * @return Whether to continue execution
      */
     public boolean runPreProcessors(GloomCommandContext context) {
         for (PreProcessor processor : preProcessors) {
@@ -59,11 +64,11 @@ public class ProcessorPipeline {
                     return false;
                 }
             } catch (CommandException e) {
-                // 处理器抛出命令异常，发送消息并停止
+                // Processor throws CommandException, send message and stop
                 context.sendMessage(e.getAdventureMessage());
                 return false;
             } catch (Exception e) {
-                // 处理器内部错误，打印堆栈并停止
+                // Processor internal error, print stack trace and stop
                 e.printStackTrace();
                 return false;
             }
@@ -72,10 +77,10 @@ public class ProcessorPipeline {
     }
 
     /**
-     * 执行后处理管道。
+     * Executes the post-processing pipeline.
      *
-     * @param context 命令上下文
-     * @param result  命令执行结果
+     * @param context Command context
+     * @param result  Command execution result
      */
     public void runPostProcessors(GloomCommandContext context, CommandResult result) {
         for (PostProcessor processor : postProcessors) {
@@ -88,18 +93,18 @@ public class ProcessorPipeline {
     }
 
     /**
-     * 获取所有预处理器（只读）。
+     * Gets all pre-processors (read-only).
      *
-     * @return 预处理器列表
+     * @return List of pre-processors
      */
     public List<PreProcessor> getPreProcessors() {
         return Collections.unmodifiableList(preProcessors);
     }
 
     /**
-     * 获取所有后处理器（只读）。
+     * Gets all post-processors (read-only).
      *
-     * @return 后处理器列表
+     * @return List of post-processors
      */
     public List<PostProcessor> getPostProcessors() {
         return Collections.unmodifiableList(postProcessors);

@@ -6,14 +6,15 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 定义方法级异常处理器。
+ * Defines a method-level exception handler.
  *
  * <p>
- * 当命令执行过程中抛出指定类型的异常时，将调用此方法进行处理。
+ * This method will be invoked when a specified type of exception is thrown
+ * during command execution.
  * </p>
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>
@@ -24,12 +25,12 @@ import java.lang.annotation.Target;
  *
  *         &#64;OnError(RankNotFoundException.class)
  *         public void handleRankNotFound(CommandContext context, RankNotFoundException e) {
- *             context.getSender().sendMessage(Component.text("等级 " + e.getRankName() + " 不存在！"));
+ *             context.getSender().sendMessage(Component.text("Rank " + e.getRankName() + " does not exist!"));
  *         }
  *
  *         @OnError({ IllegalArgumentException.class, NumberFormatException.class })
  *         public void handleInvalidArgument(CommandContext context, Exception e) {
- *             context.getSender().sendMessage(Component.text("参数无效：" + e.getMessage()));
+ *             context.getSender().sendMessage(Component.text("Invalid argument: " + e.getMessage()));
  *         }
  *     }
  * }
@@ -40,9 +41,9 @@ import java.lang.annotation.Target;
 public @interface OnError {
 
     /**
-     * 要处理的异常类型。
+     * Exception types to handle.
      *
-     * @return 异常类型数组
+     * @return exception type array
      */
     Class<? extends Throwable>[] value();
 }

@@ -10,14 +10,15 @@ import java.lang.reflect.Parameter;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 命令参数解析器接口。
+ * Command Argument Resolver Interface.
  *
  * <p>
- * 实现此接口以支持自定义参数类型的解析和建议。
+ * Implement this interface to support parsing and suggestions for custom
+ * argument types.
  * </p>
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>
@@ -47,37 +48,37 @@ import java.util.concurrent.CompletableFuture;
  * }
  * </pre>
  *
- * @param <T> 参数类型
+ * @param <T> Argument type
  */
 public interface ArgumentResolver<T> {
 
     /**
-     * 创建 Brigadier 参数类型。
-     * 返回 Paper API 兼容的 ArgumentType。
+     * Creates a Brigadier argument type.
+     * Returns a Paper API compatible ArgumentType.
      *
-     * @param parameter 方法参数反射对象
-     * @return Brigadier 参数类型
+     * @param parameter Method parameter reflection object
+     * @return Brigadier argument type
      */
     ArgumentType<?> createArgumentType(Parameter parameter);
 
     /**
-     * 从 Brigadier 上下文解析参数值。
+     * Resolves argument value from Brigadier context.
      *
-     * @param context   Paper Brigadier 命令上下文
-     * @param name      参数名
-     * @param parameter 方法参数反射对象
-     * @return 解析后的参数值
+     * @param context   Paper Brigadier command context
+     * @param name      Argument name
+     * @param parameter Method parameter reflection object
+     * @return Resolved argument value
      */
     T resolve(CommandContext<CommandSourceStack> context, String name, Parameter parameter);
 
     /**
-     * 提供 Tab 补全建议。
-     * 默认返回空建议（Paper 可能会提供内置建议）。
+     * Provides Tab completion suggestions.
+     * Defaults to empty suggestions (Paper may provide built-in suggestions).
      *
-     * @param context   Paper Brigadier 命令上下文
-     * @param builder   建议构建器
-     * @param parameter 方法参数反射对象
-     * @return 异步建议列表
+     * @param context   Paper Brigadier command context
+     * @param builder   Suggestions builder
+     * @param parameter Method parameter reflection object
+     * @return Async suggestions list
      */
     default CompletableFuture<Suggestions> suggest(
             CommandContext<CommandSourceStack> context,
@@ -87,10 +88,10 @@ public interface ArgumentResolver<T> {
     }
 
     /**
-     * 获取此解析器支持的类型。
-     * 用于自动注册。
+     * Gets the type supported by this resolver.
+     * Used for auto-registration.
      *
-     * @return 支持的类型
+     * @return Supported type
      */
     Class<T> getType();
 }

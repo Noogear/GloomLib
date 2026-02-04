@@ -3,14 +3,14 @@ package gloomlib.command.context;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 命令执行结果。
+ * Command Execution Result.
  */
 public class CommandResult {
 
-    /** 成功结果 */
+    /** Success result */
     public static final CommandResult SUCCESS = new CommandResult(true, null, null);
 
-    /** 失败结果（无错误信息） */
+    /** Failure result (no error message) */
     public static final CommandResult FAILURE = new CommandResult(false, null, null);
 
     private final boolean success;
@@ -24,83 +24,83 @@ public class CommandResult {
     }
 
     /**
-     * 创建成功结果。
+     * Creates a success result.
      *
-     * @return 成功结果
+     * @return Success result
      */
     public static CommandResult success() {
         return SUCCESS;
     }
 
     /**
-     * 创建带返回值的成功结果。
+     * Creates a success result with a return value.
      *
-     * @param returnValue 返回值
-     * @return 成功结果
+     * @param returnValue Return value
+     * @return Success result
      */
     public static CommandResult success(@Nullable Object returnValue) {
         return new CommandResult(true, returnValue, null);
     }
 
     /**
-     * 创建失败结果。
+     * Creates a failure result.
      *
-     * @return 失败结果
+     * @return Failure result
      */
     public static CommandResult failure() {
         return FAILURE;
     }
 
     /**
-     * 创建带异常的失败结果。
+     * Creates a failure result with an exception.
      *
-     * @param exception 异常
-     * @return 失败结果
+     * @param exception Exception
+     * @return Failure result
      */
     public static CommandResult failure(Throwable exception) {
         return new CommandResult(false, null, exception);
     }
 
     /**
-     * 检查命令是否执行成功。
+     * Checks if command executed successfully.
      *
-     * @return 是否成功
+     * @return True if success
      */
     public boolean isSuccess() {
         return success;
     }
 
     /**
-     * 检查命令是否执行失败。
+     * Checks if command execution failed.
      *
-     * @return 是否失败
+     * @return True if failed
      */
     public boolean isFailure() {
         return !success;
     }
 
     /**
-     * 获取返回值。
+     * Gets return value.
      *
-     * @return 返回值，或 null
+     * @return Return value, or null
      */
     public @Nullable Object getReturnValue() {
         return returnValue;
     }
 
     /**
-     * 获取异常。
+     * Gets exception.
      *
-     * @return 异常，或 null
+     * @return Exception, or null
      */
     public @Nullable Throwable getException() {
         return exception;
     }
 
     /**
-     * 检查是否有异常。
+     * Checks if there is an exception.
      *
-     * @return 是否有异常
+     * @return True if exception exists
      */
     public boolean hasException() {
         return exception != null;

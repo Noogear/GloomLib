@@ -4,10 +4,10 @@ import net.kyori.adventure.text.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 命令执行异常基类。
+ * Command Exception Base Class.
  *
  * <p>
- * 所有命令框架抛出的异常都应继承此类。
+ * All exceptions thrown by the command framework should extend this class.
  * </p>
  */
 public class CommandException extends RuntimeException {
@@ -15,9 +15,9 @@ public class CommandException extends RuntimeException {
     private final @Nullable Component adventureMessage;
 
     /**
-     * 创建命令异常。
+     * Creates a command exception.
      *
-     * @param message 错误消息
+     * @param message Error message
      */
     public CommandException(String message) {
         super(message);
@@ -25,9 +25,9 @@ public class CommandException extends RuntimeException {
     }
 
     /**
-     * 创建命令异常（Adventure Component 消息）。
+     * Creates a command exception (Adventure Component message).
      *
-     * @param message Adventure 组件消息
+     * @param message Adventure component message
      */
     public CommandException(Component message) {
         super(componentToString(message));
@@ -35,10 +35,10 @@ public class CommandException extends RuntimeException {
     }
 
     /**
-     * 创建命令异常（带原因）。
+     * Creates a command exception (with cause).
      *
-     * @param message 错误消息
-     * @param cause   原因
+     * @param message Error message
+     * @param cause   Cause
      */
     public CommandException(String message, Throwable cause) {
         super(message, cause);
@@ -46,10 +46,10 @@ public class CommandException extends RuntimeException {
     }
 
     /**
-     * 创建命令异常（Adventure 消息 + 原因）。
+     * Creates a command exception (Adventure message + cause).
      *
-     * @param message Adventure 组件消息
-     * @param cause   原因
+     * @param message Adventure component message
+     * @param cause   Cause
      */
     public CommandException(Component message, Throwable cause) {
         super(componentToString(message), cause);
@@ -57,32 +57,32 @@ public class CommandException extends RuntimeException {
     }
 
     /**
-     * 获取 Adventure 组件消息。
-     * 如果异常是用字符串创建的，则返回纯文本组件。
+     * Gets the Adventure component message.
+     * If the exception was created with a string, returns a plain text component.
      *
-     * @return Adventure 组件消息
+     * @return Adventure component message
      */
     public Component getAdventureMessage() {
         if (adventureMessage != null) {
             return adventureMessage;
         }
-        return Component.text(getMessage() != null ? getMessage() : "未知错误");
+        return Component.text(getMessage() != null ? getMessage() : "Unknown Error");
     }
 
     /**
-     * 检查是否有 Adventure 消息。
+     * Checks if there is an Adventure message.
      *
-     * @return 是否有 Adventure 消息
+     * @return True if Adventure message exists
      */
     public boolean hasAdventureMessage() {
         return adventureMessage != null;
     }
 
     /**
-     * 简单的 Component 转字符串（用于 super 构造）。
+     * Simple Component to String converter (for super constructor).
      */
     private static String componentToString(Component component) {
-        // 简化实现，使用 Adventure 的纯文本序列化
+        // Simplified implementation, using Adventure's plain text serializer
         return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
                 .plainText()
                 .serialize(component);

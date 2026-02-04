@@ -6,10 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 定义子命令。
+ * Defines a subcommand.
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>{@code
@@ -25,16 +25,16 @@ import java.lang.annotation.Target;
 public @interface SubCommand {
 
     /**
-     * 子命令名称。
+     * Subcommand name.
      *
-     * @return 子命令名称
+     * @return subcommand name
      */
     String value();
 
     /**
-     * 子命令别名列表。
+     * List of subcommand aliases.
      *
-     * @return 别名数组
+     * @return alias array
      */
     String[] aliases() default {};
 }

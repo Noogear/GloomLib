@@ -6,10 +6,11 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 标记方法为命令的主要执行入口（无子命令）。
+ * Marks a method as the main execution entry point of a command (no
+ * subcommand).
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>{@code
@@ -22,5 +23,5 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Usage {
-    // 标记注解，无需属性
+    // Marker annotation, no attributes required
 }

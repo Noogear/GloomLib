@@ -6,26 +6,27 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 定义可选参数的默认值。
+ * Defines the default value for an optional argument.
  *
  * <p>
- * 支持的特殊值：
+ * Supported special values:
  * </p>
  * <ul>
- * <li>{@code "self"} - 当前执行者（仅限玩家参数）</li>
- * <li>{@code "console"} - 控制台</li>
- * <li>字面量值 - 如 {@code "0"}, {@code "true"}</li>
- * <li>配置表达式 - 如 {@code "${config.default.value}"}</li>
+ * <li>{@code "self"} - The current executor (Player arguments only)</li>
+ * <li>{@code "console"} - The console</li>
+ * <li>Literal values - such as {@code "0"}, {@code "true"}</li>
+ * <li>Configuration expressions - such as
+ * {@code "${config.default.value}"}</li>
  * </ul>
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>{@code
  * public void execute(Player sender,
  *         @Arg @Optional @Default("self") Player target) {
- *     // 如果未指定 target，默认为执行者自己
+ *     // If target is not specified, defaults to the executor themselves
  * }
  * }</pre>
  */
@@ -34,9 +35,9 @@ import java.lang.annotation.Target;
 public @interface Default {
 
     /**
-     * 默认值表达式。
+     * Default value expression.
      *
-     * @return 默认值
+     * @return default value
      */
     String value();
 }

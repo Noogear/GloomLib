@@ -5,7 +5,11 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import gloomlib.command.exception.CommandException;
+import gloomlib.command.message.CommandMessages;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 import java.lang.reflect.Parameter;
 import java.util.Arrays;
@@ -54,8 +58,10 @@ public class EnumArgumentResolver<E extends Enum<E>> implements ArgumentResolver
             }
         }
 
-        throw new IllegalArgumentException("无效的 " + enumClass.getSimpleName() + " 值: " + input +
-                "。可用值: " + Arrays.toString(constants));
+        throw new CommandException(
+                CommandMessages.VALIDATION_ENUM_INVALID.get(Component.text(input, NamedTextColor.YELLOW),
+                        Component.text(Arrays.toString(constants), NamedTextColor.AQUA)));
+
     }
 
     @Override

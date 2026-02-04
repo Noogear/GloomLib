@@ -6,23 +6,24 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 定义命令标志参数（--flag value）。
+ * Defines a command flag argument (--flag value).
  *
  * <p>
- * 标志参数可以出现在命令参数的任意位置，格式为 {@code --name value} 或 {@code -n value}。
+ * Flag arguments can appear anywhere in the command arguments, in the format
+ * {@code --name value} or {@code -n value}.
  * </p>
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>
  * {@code
  * &#64;SubCommand("give")
  * public void give(CommandSender sender,
- *                  &#64;Arg Player target,
- *                  &#64;Arg int amount,
- *                  @Flag(value = "reason", shorthand = "r") String reason) {
+ *         &#64;Arg Player target,
+ *         &#64;Arg int amount,
+ *         @Flag(value = "reason", shorthand = "r") String reason) {
  *     // /give <target> <amount> --reason "Some reason"
  *     // /give <target> <amount> -r "Some reason"
  * }
@@ -34,17 +35,17 @@ import java.lang.annotation.Target;
 public @interface Flag {
 
     /**
-     * 标志名称（长格式：--name）。
+     * Flag name (long format: --name).
      *
-     * @return 标志名称
+     * @return flag name
      */
     String value();
 
     /**
-     * 短标志名称（短格式：-n）。
-     * 如果为空，则只能使用长格式。
+     * Short flag name (short format: -n).
+     * If empty, only long format can be used.
      *
-     * @return 短标志名称
+     * @return short flag name
      */
     String shorthand() default "";
 }

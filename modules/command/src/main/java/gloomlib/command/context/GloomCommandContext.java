@@ -9,10 +9,11 @@ import org.bukkit.entity.Player;
 import java.util.function.Consumer;
 
 /**
- * 命令执行上下文，封装 Paper Brigadier 原生上下文。
+ * Command execution context, encapsulates Paper Brigadier native context.
  *
  * <p>
- * 提供便捷的方法访问命令执行者、参数和发送消息。
+ * Provides convenient methods to access command sender, arguments, and send
+ * messages.
  * </p>
  */
 public class GloomCommandContext {
@@ -21,9 +22,9 @@ public class GloomCommandContext {
     private final CommandSender sender;
 
     /**
-     * 创建命令上下文。
+     * Creates a command context.
      *
-     * @param brigadierContext Paper Brigadier 原生上下文
+     * @param brigadierContext Paper Brigadier native context
      */
     public GloomCommandContext(CommandContext<CommandSourceStack> brigadierContext) {
         this.brigadierContext = brigadierContext;
@@ -31,16 +32,16 @@ public class GloomCommandContext {
     }
 
     /**
-     * 获取 Paper Brigadier 原生上下文。
+     * Gets Paper Brigadier native context.
      *
-     * @return Brigadier 命令上下文
+     * @return Brigadier command context
      */
     public CommandContext<CommandSourceStack> getBrigadierContext() {
         return brigadierContext;
     }
 
     /**
-     * 获取命令源 Stack。
+     * Gets command source stack.
      *
      * @return Paper CommandSourceStack
      */
@@ -49,76 +50,76 @@ public class GloomCommandContext {
     }
 
     /**
-     * 获取命令执行者。
+     * Gets command sender.
      *
-     * @return 命令发送者
+     * @return Command sender
      */
     public CommandSender getSender() {
         return sender;
     }
 
     /**
-     * 获取执行者作为玩家。
-     * 如果执行者不是玩家，返回 null。
+     * Gets sender as Player.
+     * Returns null if sender is not a player.
      *
-     * @return 玩家，或 null
+     * @return Player, or null
      */
     public Player getPlayer() {
         return sender instanceof Player player ? player : null;
     }
 
     /**
-     * 检查执行者是否为玩家。
+     * Checks if sender is a player.
      *
-     * @return 是否为玩家
+     * @return True if player
      */
     public boolean isPlayer() {
         return sender instanceof Player;
     }
 
     /**
-     * 获取参数值。
+     * Gets argument value.
      *
-     * @param name  参数名
-     * @param clazz 参数类型
-     * @param <T>   类型
-     * @return 参数值
+     * @param name  Argument name
+     * @param clazz Argument type class
+     * @param <T>   Type
+     * @return Argument value
      */
     public <T> T getArgument(String name, Class<T> clazz) {
         return brigadierContext.getArgument(name, clazz);
     }
 
     /**
-     * 发送消息给执行者（Adventure Component）。
+     * Sends a message to the sender (Adventure Component).
      *
-     * @param message Adventure 组件消息
+     * @param message Adventure component message
      */
     public void sendMessage(Component message) {
         sender.sendMessage(message);
     }
 
     /**
-     * 发送纯文本消息给执行者。
+     * Sends a plain text message to the sender.
      *
-     * @param message 纯文本消息
+     * @param message Plain text message
      */
     public void sendMessage(String message) {
         sender.sendMessage(Component.text(message));
     }
 
     /**
-     * 向执行者回复消息（sendMessage 的语义化别名）。
+     * Replies with a message (semantic alias for sendMessage).
      *
-     * @param message Adventure 组件消息
+     * @param message Adventure component message
      */
     public void reply(Component message) {
         sendMessage(message);
     }
 
     /**
-     * 如果执行者是玩家，执行消费者操作。
+     * Executes consumer action if sender is a player.
      *
-     * @param consumer 玩家消费者
+     * @param consumer Player consumer
      */
     public void ifPlayer(Consumer<Player> consumer) {
         if (sender instanceof Player player) {
@@ -127,10 +128,10 @@ public class GloomCommandContext {
     }
 
     /**
-     * 检查执行者是否拥有权限。
+     * Checks if sender has permission.
      *
-     * @param permission 权限节点
-     * @return 是否拥有权限
+     * @param permission Permission node
+     * @return True if has permission
      */
     public boolean hasPermission(String permission) {
         return sender.hasPermission(permission);

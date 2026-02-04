@@ -5,51 +5,51 @@ import net.kyori.adventure.text.Component;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * 命令条件接口。
+ * Command Condition Interface.
  *
  * <p>
- * 用于定义命令执行的前提条件。
+ * Defines prerequisites for command execution.
  * </p>
  */
 @FunctionalInterface
 public interface CommandCondition {
 
     /**
-     * 检查条件是否满足。
+     * Checks if the condition is met.
      *
-     * @param context 命令上下文
-     * @return 条件检查结果
+     * @param context Command context
+     * @return Condition check result
      */
     ConditionResult check(GloomCommandContext context);
 
     /**
-     * 条件检查结果。
+     * Condition check result.
      */
     record ConditionResult(boolean passed, @Nullable Component failureMessage) {
 
-        /** 条件通过 */
+        /** Condition passed */
         public static final ConditionResult PASS = new ConditionResult(true, null);
 
         /**
-         * 创建通过结果。
+         * Creates a passed result.
          */
         public static ConditionResult pass() {
             return PASS;
         }
 
         /**
-         * 创建失败结果。
+         * Creates a failed result.
          *
-         * @param message 失败消息
+         * @param message Failure message
          */
         public static ConditionResult fail(Component message) {
             return new ConditionResult(false, message);
         }
 
         /**
-         * 创建失败结果（纯文本消息）。
+         * Creates a failed result (plain text).
          *
-         * @param message 失败消息
+         * @param message Failure message
          */
         public static ConditionResult fail(String message) {
             return new ConditionResult(false, Component.text(message));

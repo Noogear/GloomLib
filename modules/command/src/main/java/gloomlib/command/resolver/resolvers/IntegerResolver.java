@@ -10,10 +10,10 @@ import io.papermc.paper.command.brigadier.CommandSourceStack;
 import java.lang.reflect.Parameter;
 
 /**
- * 整数参数解析器。
+ * Integer argument resolver.
  *
  * <p>
- * 支持 {@code @Range} 注解指定范围约束。
+ * Supports {@code @Range} annotation for range constraints.
  * </p>
  */
 public class IntegerResolver implements ArgumentResolver<Integer> {

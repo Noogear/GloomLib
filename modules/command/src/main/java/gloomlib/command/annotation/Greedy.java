@@ -6,14 +6,14 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 标记参数为贪婪参数，消耗所有剩余输入。
+ * Marks an argument as greedy, consuming all remaining input.
  *
  * <p>
- * 贪婪参数必须是方法的最后一个参数。
+ * Greedy arguments must be the last argument of the method.
  * </p>
  *
  * <p>
- * 用法示例：
+ * Usage example:
  * </p>
  * 
  * <pre>{@code
@@ -27,5 +27,5 @@ import java.lang.annotation.Target;
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Greedy {
-    // 标记注解，无需属性
+    // Marker annotation, no attributes required
 }

@@ -13,17 +13,18 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 消息服务（基于 Adventure API）。
+ * Message Service (based on Adventure API).
  *
  * <p>
- * 提供统一的消息发送和格式化功能，支持 MiniMessage 格式。
+ * Provides unified message sending and formatting capabilities, supporting
+ * MiniMessage format.
  * </p>
  *
- * <h2>用法示例</h2>
+ * <h2>Usage Example</h2>
  * 
  * <pre>{@code
  * MessageService messages = new MessageService();
- * messages.setMessage("teleport.success", "<green>已传送到 <yellow>{target}</yellow>！</green>");
+ * messages.setMessage("teleport.success", "<green>Teleported to <yellow>{target}</yellow>!</green>");
  *
  * messages.send(player, "teleport.success", "target", "Steve");
  * }</pre>
@@ -32,53 +33,59 @@ public class MessageService {
 
     private final Map<String, String> messages = new HashMap<>();
 
-    /** 成功前缀 */
-    private Component successPrefix = Component.text("✓ ", NamedTextColor.GREEN);
+    public static final Component DEFAULT_SUCCESS_PREFIX = Component.text("✓ ", NamedTextColor.GREEN);
+    public static final Component DEFAULT_ERROR_PREFIX = Component.text("✗ ", NamedTextColor.RED);
+    public static final Component DEFAULT_WARNING_PREFIX = Component.text("⚠ ", NamedTextColor.YELLOW);
+    public static final Component DEFAULT_INFO_PREFIX = Component.text("ℹ ", NamedTextColor.AQUA);
 
-    /** 错误前缀 */
-    private Component errorPrefix = Component.text("✗ ", NamedTextColor.RED);
+    /** Success prefix */
+    private Component successPrefix = DEFAULT_SUCCESS_PREFIX;
 
-    /** 警告前缀 */
-    private Component warningPrefix = Component.text("⚠ ", NamedTextColor.YELLOW);
+    /** Error prefix */
+    private Component errorPrefix = DEFAULT_ERROR_PREFIX;
 
-    /** 信息前缀 */
-    private Component infoPrefix = Component.text("ℹ ", NamedTextColor.AQUA);
+    /** Warning prefix */
+    private Component warningPrefix = DEFAULT_WARNING_PREFIX;
+
+    /** Info prefix */
+    private Component infoPrefix = DEFAULT_INFO_PREFIX;
 
     /**
-     * 设置消息模板。
+     * Sets message template.
      *
-     * @param key     消息键
-     * @param message MiniMessage 格式的消息模板
+     * @param key     Message key
+     * @param message MiniMessage format template
      */
     public void setMessage(String key, String message) {
         messages.put(key, message);
     }
 
     /**
-     * 批量设置消息模板。
+     * Sets message templates in batch.
      *
-     * @param messages 消息映射
+     * @param messages Message map
      */
     public void setMessages(Map<String, String> messages) {
         this.messages.putAll(messages);
     }
 
     /**
-     * 获取消息模板。
+     * Gets message template.
      *
-     * @param key 消息键
-     * @return 消息模板，或 null
+     * @param key Message key
+     * @return Message template, or null
      */
     public String getMessage(String key) {
         return messages.get(key);
     }
 
     /**
-     * 发送消息。
+     * Sends message.
      *
-     * @param sender       接收者
-     * @param key          消息键
-     * @param placeholders 占位符（键值对形式：key1, value1, key2, value2...）
+     * @param sender       Receiver
+     * @param key          Message key
+     * @param placeholders Placeholders (key-value pairs: key1, value1, key2,
+     *                     value2...)
      */
     public void send(CommandSender sender, String key, Object... placeholders) {
         String template = messages.getOrDefault(key, key);
@@ -87,11 +94,11 @@ public class MessageService {
     }
 
     /**
-     * 发送成功消息（带前缀）。
+     * Sends success message (with prefix).
      *
-     * @param sender       接收者
-     * @param key          消息键
-     * @param placeholders 占位符
+     * @param sender       Receiver
+     * @param key          Message key
+     * @param placeholders Placeholders
      */
     public void success(CommandSender sender, String key, Object... placeholders) {
         String template = messages.getOrDefault(key, key);
@@ -100,11 +107,11 @@ public class MessageService {
     }
 
     /**
-     * 发送错误消息（带前缀）。
+     * Sends error message (with prefix).
      *
-     * @param sender       接收者
-     * @param key          消息键
-     * @param placeholders 占位符
+     * @param sender       Receiver
+     * @param key          Message key
+     * @param placeholders Placeholders
      */
     public void error(CommandSender sender, String key, Object... placeholders) {
         String template = messages.getOrDefault(key, key);
@@ -113,11 +120,11 @@ public class MessageService {
     }
 
     /**
-     * 发送警告消息（带前缀）。
+     * Sends warning message (with prefix).
      *
-     * @param sender       接收者
-     * @param key          消息键
-     * @param placeholders 占位符
+     * @param sender       Receiver
+     * @param key          Message key
+     * @param placeholders Placeholders
      */
     public void warning(CommandSender sender, String key, Object... placeholders) {
         String template = messages.getOrDefault(key, key);
@@ -126,11 +133,11 @@ public class MessageService {
     }
 
     /**
-     * 发送信息消息（带前缀）。
+     * Sends info message (with prefix).
      *
-     * @param sender       接收者
-     * @param key          消息键
-     * @param placeholders 占位符
+     * @param sender       Receiver
+     * @param key          Message key
+     * @param placeholders Placeholders
      */
     public void info(CommandSender sender, String key, Object... placeholders) {
         String template = messages.getOrDefault(key, key);
@@ -139,20 +146,20 @@ public class MessageService {
     }
 
     /**
-     * 直接发送 MiniMessage 格式的消息。
+     * Sends raw MiniMessage string.
      *
-     * @param sender       接收者
-     * @param miniMessage  MiniMessage 格式字符串
-     * @param placeholders 占位符
+     * @param sender       Receiver
+     * @param miniMessage  MiniMessage format string
+     * @param placeholders Placeholders
      */
     public void sendRaw(CommandSender sender, String miniMessage, Object... placeholders) {
         sender.sendMessage(parse(miniMessage, placeholders));
     }
 
     /**
-     * 直接发送 Component。
+     * Sends raw Component.
      *
-     * @param sender    接收者
+     * @param sender    Receiver
      * @param component Adventure Component
      */
     public void send(CommandSender sender, Component component) {
@@ -160,10 +167,10 @@ public class MessageService {
     }
 
     /**
-     * 解析 MiniMessage 格式字符串。
+     * Parses MiniMessage format string.
      *
-     * @param template     模板
-     * @param placeholders 占位符
+     * @param template     Template
+     * @param placeholders Placeholders
      * @return Adventure Component
      */
     public Component parse(String template, Object... placeholders) {
@@ -188,36 +195,36 @@ public class MessageService {
     }
 
     /**
-     * 设置成功前缀。
+     * Sets success prefix.
      *
-     * @param prefix 前缀组件
+     * @param prefix Prefix component
      */
     public void setSuccessPrefix(Component prefix) {
         this.successPrefix = prefix;
     }
 
     /**
-     * 设置错误前缀。
+     * Sets error prefix.
      *
-     * @param prefix 前缀组件
+     * @param prefix Prefix component
      */
     public void setErrorPrefix(Component prefix) {
         this.errorPrefix = prefix;
     }
 
     /**
-     * 设置警告前缀。
+     * Sets warning prefix.
      *
-     * @param prefix 前缀组件
+     * @param prefix Prefix component
      */
     public void setWarningPrefix(Component prefix) {
         this.warningPrefix = prefix;
     }
 
     /**
-     * 设置信息前缀。
+     * Sets info prefix.
      *
-     * @param prefix 前缀组件
+     * @param prefix Prefix component
      */
     public void setInfoPrefix(Component prefix) {
         this.infoPrefix = prefix;

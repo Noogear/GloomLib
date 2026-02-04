@@ -5,12 +5,11 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import gloomlib.command.exception.CommandException;
+import gloomlib.command.message.CommandMessages;
 import gloomlib.command.resolver.ArgumentResolver;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.command.brigadier.argument.resolvers.selector.PlayerSelectorArgumentResolver;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 
 import java.lang.reflect.Parameter;
@@ -40,14 +39,12 @@ public class PlayerResolver implements ArgumentResolver<Player> {
             List<Player> players = selector.resolve(context.getSource());
 
             if (players.isEmpty()) {
-                throw new CommandException(
-                        Component.text("未找到指定的玩家！").color(NamedTextColor.RED));
+                throw new CommandException(CommandMessages.PLAYER_NOT_FOUND.get());
             }
 
             return players.get(0);
         } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
-            throw new CommandException(
-                    Component.text("无效的玩家选择器！").color(NamedTextColor.RED));
+            throw new CommandException(CommandMessages.SELECTOR_UNKNOWN.get());
         }
     }
 
