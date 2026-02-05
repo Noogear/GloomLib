@@ -11,7 +11,7 @@ import java.lang.annotation.Target;
  * <p>
  * Usage example:
  * </p>
- * 
+ *
  * <pre>{@code
  * public void execute(Player sender, @Arg @Optional Player target) {
  *     // target argument is optional

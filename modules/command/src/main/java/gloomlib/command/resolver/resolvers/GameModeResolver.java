@@ -7,11 +7,8 @@ import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import gloomlib.command.exception.CommandException;
 import gloomlib.command.message.CommandMessages;
-import gloomlib.command.exception.CommandException;
-import gloomlib.command.message.CommandMessages;
 import gloomlib.command.resolver.ArgumentResolver;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
-import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.Component;
 import org.bukkit.GameMode;
 

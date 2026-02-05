@@ -5,7 +5,6 @@ import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import gloomlib.command.suggestion.SuggestionProvider;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
-
 import org.bukkit.Material;
 
 import java.util.concurrent.CompletableFuture;

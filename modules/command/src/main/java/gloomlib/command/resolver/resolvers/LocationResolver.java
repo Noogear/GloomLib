@@ -5,11 +5,11 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import gloomlib.command.exception.CommandException;
+import gloomlib.command.message.CommandMessages;
 import gloomlib.command.resolver.ArgumentResolver;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.command.brigadier.argument.resolvers.FinePositionResolver;
-import gloomlib.command.message.CommandMessages;
 import org.bukkit.Location;
 
 import java.lang.reflect.Parameter;

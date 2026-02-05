@@ -12,7 +12,7 @@ import java.lang.annotation.Target;
  * <p>
  * Usage example:
  * </p>
- * 
+ *
  * <pre>{@code
  * @Usage
  * public void execute(Player player, @Arg GameMode mode) {

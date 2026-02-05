@@ -8,9 +8,8 @@ import gloomlib.command.exception.CommandException;
 import gloomlib.command.message.CommandMessages;
 import gloomlib.command.resolver.ArgumentResolver;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
-import net.kyori.adventure.text.Component;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
-
+import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 
 import java.lang.reflect.Parameter;

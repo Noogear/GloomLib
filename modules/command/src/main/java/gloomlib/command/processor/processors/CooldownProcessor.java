@@ -2,7 +2,6 @@ package gloomlib.command.processor.processors;
 
 import gloomlib.command.context.GloomCommandContext;
 import gloomlib.command.processor.PreProcessor;
-import net.kyori.adventure.text.Component;
 
 import java.util.Map;
 import java.util.UUID;
@@ -18,8 +17,33 @@ import java.util.concurrent.TimeUnit;
  */
 public class CooldownProcessor implements PreProcessor {
 
-    /** Cooldown data: commandName -> (playerUuid -> lastExecutionTime) */
+    /**
+     * Cooldown data: commandName -> (playerUuid -> lastExecutionTime)
+     */
     private final Map<String, Map<UUID, Long>> cooldowns = new ConcurrentHashMap<>();
+
+    /**
+     * Formats remaining time.
+     *
+     * @param remainingMs Remaining milliseconds
+     * @return Formatted time string
+     */
+    public static String formatRemainingTime(long remainingMs) {
+        if (remainingMs <= 0)
+            return "0s";
+
+        long seconds = TimeUnit.MILLISECONDS.toSeconds(remainingMs);
+        long minutes = TimeUnit.MILLISECONDS.toMinutes(remainingMs);
+        long hours = TimeUnit.MILLISECONDS.toHours(remainingMs);
+
+        if (hours > 0) {
+            return String.format("%dh %dm", hours, minutes % 60);
+        } else if (minutes > 0) {
+            return String.format("%dm %ds", minutes, seconds % 60);
+        } else {
+            return seconds + "s";
+        }
+    }
 
     /**
      * Sets cooldown time.
@@ -88,28 +112,5 @@ public class CooldownProcessor implements PreProcessor {
     @Override
     public int getPriority() {
         return 100; // Execute after permission check
-    }
-
-    /**
-     * Formats remaining time.
-     *
-     * @param remainingMs Remaining milliseconds
-     * @return Formatted time string
-     */
-    public static String formatRemainingTime(long remainingMs) {
-        if (remainingMs <= 0)
-            return "0s";
-
-        long seconds = TimeUnit.MILLISECONDS.toSeconds(remainingMs);
-        long minutes = TimeUnit.MILLISECONDS.toMinutes(remainingMs);
-        long hours = TimeUnit.MILLISECONDS.toHours(remainingMs);
-
-        if (hours > 0) {
-            return hours + "h " + (minutes % 60) + "m";
-        } else if (minutes > 0) {
-            return minutes + "m " + (seconds % 60) + "s";
-        } else {
-            return seconds + "s";
-        }
     }
 }

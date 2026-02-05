@@ -1,10 +1,11 @@
 package gloomlib.command.annotation;
 
+import gloomlib.command.suggestion.SuggestionProvider;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import gloomlib.command.suggestion.SuggestionProvider;
 
 /**
  * Specifies the Tab completion suggestion provider for an argument.
@@ -12,7 +13,7 @@ import gloomlib.command.suggestion.SuggestionProvider;
  * <p>
  * Usage example:
  * </p>
- * 
+ *
  * <pre>
  * {@code
  * &#64;SubCommand("warp")

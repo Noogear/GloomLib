@@ -31,17 +31,6 @@ public class DurationResolver implements ArgumentResolver<Duration> {
             "(?:(\\d+)d)?(?:(\\d+)h)?(?:(\\d+)m)?(?:(\\d+)s)?",
             Pattern.CASE_INSENSITIVE);
 
-    @Override
-    public ArgumentType<?> createArgumentType(Parameter parameter) {
-        return StringArgumentType.word();
-    }
-
-    @Override
-    public Duration resolve(CommandContext<CommandSourceStack> context, String name, Parameter parameter) {
-        String input = context.getArgument(name, String.class);
-        return parse(input);
-    }
-
     /**
      * 解析时间字符串。
      *
@@ -107,6 +96,17 @@ public class DurationResolver implements ArgumentResolver<Duration> {
             sb.append(seconds).append("s");
 
         return sb.toString();
+    }
+
+    @Override
+    public ArgumentType<?> createArgumentType(Parameter parameter) {
+        return StringArgumentType.word();
+    }
+
+    @Override
+    public Duration resolve(CommandContext<CommandSourceStack> context, String name, Parameter parameter) {
+        String input = context.getArgument(name, String.class);
+        return parse(input);
     }
 
     @Override

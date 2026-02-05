@@ -1,7 +1,5 @@
 package gloomlib.command.processor;
 
-import gloomlib.command.context.GloomCommandContext;
-
 /**
  * Command Processor Interface.
  *

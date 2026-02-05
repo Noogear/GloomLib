@@ -1,9 +1,12 @@
 package gloomlib.command;
 
+import gloomlib.command.core.CommandRegistry;
 import gloomlib.command.injection.DependencyInjector;
+import gloomlib.command.internal.CommandMetadata;
+import gloomlib.command.internal.CommandTracker;
+import gloomlib.command.internal.CommandUnregistrar;
 import gloomlib.command.processor.ProcessorPipeline;
 import gloomlib.command.processor.processors.LoggingProcessor;
-import gloomlib.command.registry.CommandRegistry;
 import gloomlib.command.resolver.ArgumentResolver;
 import gloomlib.command.resolver.ArgumentResolverRegistry;
 import gloomlib.command.resolver.resolvers.*;
@@ -15,6 +18,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * GloomCommand Framework Entry Point.
@@ -23,8 +27,21 @@ import java.util.List;
  * A modern command framework based on Paper API and Adventure API.
  * </p>
  *
+ * <h2>Instance Isolation</h2>
+ * <p>
+ * Each {@code GloomCommand} instance is <b>fully isolated</b>:
+ * </p>
+ * <ul>
+ * <li><b>Independent command registry</b>: Commands registered in one instance
+ * do not interfere with another instance</li>
+ * <li><b>Separate caches</b>: Each instance has its own resolver caches,
+ * dependency injection, and command tracking</li>
+ * <li><b>No cross-plugin interference</b>: One plugin cannot accidentally
+ * unregister or affect another plugin's commands</li>
+ * </ul>
+ *
  * <h2>Quick Start</h2>
- * 
+ *
  * <pre>{@code
  * public class MyPlugin extends JavaPlugin {
  *     @Override
@@ -39,7 +56,7 @@ import java.util.List;
  * }</pre>
  *
  * <h2>Command Class Example</h2>
- * 
+ *
  * <pre>
  * {
  *     &#64;code
@@ -66,7 +83,12 @@ public final class GloomCommand {
     private final CommandRegistry commandRegistry;
     private final ProcessorPipeline pipeline;
     private final List<Object> pendingCommands = new ArrayList<>();
+
+    private final CommandTracker tracker = new CommandTracker();
+    private volatile CommandUnregistrar unregistrar = null;
+
     private boolean initialized = false;
+    private volatile io.papermc.paper.command.brigadier.Commands commands = null;
 
     private GloomCommand(Builder builder) {
         this.plugin = builder.plugin;
@@ -84,6 +106,16 @@ public final class GloomCommand {
 
         // Register Paper Lifecycle event handlers
         registerLifecycleHandler();
+    }
+
+    /**
+     * Creates a Builder.
+     *
+     * @param plugin Paper plugin instance
+     * @return Builder
+     */
+    public static Builder builder(JavaPlugin plugin) {
+        return new Builder(plugin);
     }
 
     /**
@@ -122,10 +154,20 @@ public final class GloomCommand {
                 LifecycleEvents.COMMANDS,
                 event -> {
                     initialized = true;
+                    commands = event.registrar();
+
+                    // Initialize CommandUnregistrar
+                    unregistrar = new CommandUnregistrar(commands, tracker);
 
                     // Register all pending commands
                     for (Object command : pendingCommands) {
-                        commandRegistry.registerCommand(command, event.registrar());
+                        Set<String> actualNames = commandRegistry.registerCommand(
+                                command, commands, plugin.getPluginMeta()
+                        );
+
+                        if (actualNames != null && !actualNames.isEmpty()) {
+                            tracker.track(command, actualNames);
+                        }
                     }
                     pendingCommands.clear();
                 });
@@ -134,26 +176,26 @@ public final class GloomCommand {
     /**
      * Registers a command instance.
      *
-     * <p>
-     * The command class must be annotated with {@code @Command}.
-     * </p>
-     *
      * @param commandInstance Command class instance
      * @return this (chainable)
      */
     public GloomCommand registerCommand(Object commandInstance) {
-        // Inject dependencies
         injector.injectDependencies(commandInstance);
 
         if (initialized) {
-            // Already initialized, register directly (via re-triggering event or direct
-            // registration if supported,
-            // here we attach to lifecycle again which is safe in Paper)
+            // Register directly if already initialized
             plugin.getLifecycleManager().registerEventHandler(
                     LifecycleEvents.COMMANDS,
-                    event -> commandRegistry.registerCommand(commandInstance, event.registrar()));
+                    event -> {
+                        Set<String> actualNames = commandRegistry.registerCommand(
+                                commandInstance, event.registrar(), plugin.getPluginMeta()
+                        );
+
+                        if (actualNames != null && !actualNames.isEmpty()) {
+                            tracker.track(commandInstance, actualNames);
+                        }
+                    });
         } else {
-            // Not initialized, add to pending list
             pendingCommands.add(commandInstance);
         }
 
@@ -209,9 +251,70 @@ public final class GloomCommand {
     }
 
     /**
-     * Gets the argument resolver registry.
+     * Unregisters a command by name with ownership verification.
      *
-     * @return resolver registry
+     * @param commandName Command name (without '/')
+     * @return true if successfully unregistered
+     */
+    public boolean unregisterCommand(String commandName) {
+        if (unregistrar == null) {
+            plugin.getLogger().warning("Cannot unregister: Framework not initialized");
+            return false;
+        }
+
+        boolean success = unregistrar.unregister(commandName);
+        if (success) {
+            if (resolverRegistry != null) {
+                resolverRegistry.clearAllResolverCaches();
+                resolverRegistry.clearCache();
+            }
+        }
+        return success;
+    }
+
+    /**
+     * Unregisters a command by instance.
+     *
+     * @param commandInstance Command instance to unregister
+     * @return true if successfully unregistered
+     */
+    public boolean unregisterCommand(Object commandInstance) {
+        if (commandInstance == null) {
+            return false;
+        }
+
+        String commandName = CommandMetadata.getName(commandInstance);
+        if (commandName == null) {
+            plugin.getLogger().warning("Cannot unregister: no @Command annotation");
+            return false;
+        }
+
+        return unregisterCommand(commandName);
+    }
+
+    /**
+     * Checks if a command is registered.
+     *
+     * @param commandName Command name to check
+     * @return true if registered
+     */
+    public boolean isCommandRegistered(String commandName) {
+        return commandName != null && tracker.owns(commandName);
+    }
+
+    /**
+     * Gets all registered command names.
+     *
+     * @return Unmodifiable set of registered command names
+     */
+    public Set<String> getRegisteredCommandNames() {
+        return tracker.getTrackedNames();
+    }
+
+    /**
+     * Gets the resolver registry.
+     *
+     * @return Resolver registry
      */
     public ArgumentResolverRegistry getResolverRegistry() {
         return resolverRegistry;
@@ -224,16 +327,6 @@ public final class GloomCommand {
      */
     public JavaPlugin getPlugin() {
         return plugin;
-    }
-
-    /**
-     * Creates a Builder.
-     *
-     * @param plugin Paper plugin instance
-     * @return Builder
-     */
-    public static Builder builder(JavaPlugin plugin) {
-        return new Builder(plugin);
     }
 
     /**

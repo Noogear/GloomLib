@@ -1,5 +1,6 @@
-package gloomlib.command.parser;
+package gloomlib.command.core;
 
+import com.mojang.brigadier.context.CommandContext;
 import gloomlib.command.annotation.*;
 import gloomlib.command.context.AsyncContext;
 import gloomlib.command.context.GloomCommandContext;
@@ -7,10 +8,8 @@ import gloomlib.command.exception.CommandException;
 import gloomlib.command.processor.processors.ValidationProcessor;
 import gloomlib.command.resolver.ArgumentResolver;
 import gloomlib.command.resolver.ArgumentResolverRegistry;
-
 import gloomlib.command.util.ParameterUtils;
 import gloomlib.command.util.TypeConverterUtil;
-import com.mojang.brigadier.context.CommandContext;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -205,8 +204,8 @@ public class ArgumentParser {
         Range range = param.getAnnotation(Range.class);
         ValidationProcessor.ValidationResult result = validationProcessor.validateRange(value, range, param);
 
-        if (!result.isValid()) {
-            throw new CommandException(result.getErrorMessage());
+        if (!result.valid()) {
+            throw new CommandException(result.errorMessage());
         }
     }
 }

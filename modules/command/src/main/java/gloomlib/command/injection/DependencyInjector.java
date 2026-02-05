@@ -16,10 +16,14 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class DependencyInjector {
 
-    /** Singleton services stored by type */
+    /**
+     * Singleton services stored by type
+     */
     private final Map<Class<?>, Object> singletons = new ConcurrentHashMap<>();
 
-    /** Services stored by qualifier (for multiple instances of the same type) */
+    /**
+     * Services stored by qualifier (for multiple instances of the same type)
+     */
     private final Map<String, Object> qualifiedBeans = new ConcurrentHashMap<>();
 
     /**
@@ -105,9 +109,10 @@ public class DependencyInjector {
         }
 
         if (dependency == null) {
-            throw new RuntimeException(
-                    "Cannot inject dependency: " + field.getDeclaringClass().getName() + "." + field.getName() +
-                            " (Type: " + field.getType().getName() + ", Qualifier: " + qualifier + ")");
+            throw new RuntimeException(String.format(
+                    "Cannot inject dependency: %s.%s (Type: %s, Qualifier: %s)",
+                    field.getDeclaringClass().getName(), field.getName(),
+                    field.getType().getName(), qualifier));
         }
 
         try {

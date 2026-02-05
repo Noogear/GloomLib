@@ -2,8 +2,6 @@ package gloomlib.command.processor.processors;
 
 import gloomlib.command.context.GloomCommandContext;
 import gloomlib.command.processor.PreProcessor;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.logging.Logger;

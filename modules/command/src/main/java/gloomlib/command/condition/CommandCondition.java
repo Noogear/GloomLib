@@ -27,7 +27,9 @@ public interface CommandCondition {
      */
     record ConditionResult(boolean passed, @Nullable Component failureMessage) {
 
-        /** Condition passed */
+        /**
+         * Condition passed
+         */
         public static final ConditionResult PASS = new ConditionResult(true, null);
 
         /**

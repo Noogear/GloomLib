@@ -1,18 +1,13 @@
-package gloomlib.command.registry;
+package gloomlib.command.core;
 
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
 import gloomlib.command.annotation.*;
 import gloomlib.command.exception.CommandException;
 import gloomlib.command.processor.MethodInvoker;
 import gloomlib.command.processor.ProcessorPipeline;
 import gloomlib.command.processor.processors.CooldownProcessor;
-import gloomlib.command.resolver.ArgumentResolver;
 import gloomlib.command.resolver.ArgumentResolverRegistry;
-
-import gloomlib.command.parser.ArgumentParser;
-import gloomlib.command.executor.CommandExecutor;
-import gloomlib.command.builder.BrigadierTreeBuilder;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import com.mojang.brigadier.context.CommandContext;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import org.bukkit.command.CommandSender;
@@ -21,6 +16,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
 
 /**
  * Command Registry (Coordinator).
@@ -49,6 +45,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class CommandRegistry {
 
+    private final JavaPlugin plugin;
+    private final Logger logger;
     private final Map<Method, MethodInvoker> methodInvokerCache = new ConcurrentHashMap<>();
 
     // Performance Caches
@@ -70,6 +68,20 @@ public class CommandRegistry {
      * @param pipeline         Processor pipeline
      */
     public CommandRegistry(JavaPlugin plugin, ArgumentResolverRegistry resolverRegistry, ProcessorPipeline pipeline) {
+        this(plugin, plugin.getLogger(), resolverRegistry, pipeline);
+    }
+
+    /**
+     * Creates a command registry with custom logger.
+     *
+     * @param plugin           Plugin instance
+     * @param logger           Custom logger (if null, uses plugin.getLogger())
+     * @param resolverRegistry Argument resolver registry
+     * @param pipeline         Processor pipeline
+     */
+    public CommandRegistry(JavaPlugin plugin, Logger logger, ArgumentResolverRegistry resolverRegistry, ProcessorPipeline pipeline) {
+        this.plugin = plugin;
+        this.logger = logger;
         // Initialize components
         this.argumentParser = new ArgumentParser(plugin, resolverRegistry);
         this.commandExecutor = new CommandExecutor(plugin, pipeline, cooldownProcessor);
@@ -79,10 +91,17 @@ public class CommandRegistry {
     /**
      * Registers a command instance to Paper.
      *
+     * <p>
+     * Returns the actual registered names, which may include namespaced versions
+     * (e.g., "myplugin:fly") if the command name conflicts with existing commands.
+     * </p>
+     *
      * @param commandInstance Command class instance
      * @param commands        Paper Commands registrar
+     * @param pluginMeta      Plugin metadata for namespace
+     * @return Set of actually registered command names (may include namespace)
      */
-    public void registerCommand(Object commandInstance, Commands commands) {
+    public java.util.Set<String> registerCommand(Object commandInstance, Commands commands, io.papermc.paper.plugin.configuration.PluginMeta pluginMeta) {
         Class<?> clazz = commandInstance.getClass();
 
         // Check @Command annotation
@@ -96,54 +115,97 @@ public class CommandRegistry {
 
         String commandName = cmdAnnotation.value();
         String[] aliases = cmdAnnotation.aliases();
-
         Description descAnnotation = clazz.getAnnotation(Description.class);
         String description = descAnnotation != null ? descAnnotation.value() : "";
-
         Permission classPermission = clazz.getAnnotation(Permission.class);
 
-        LiteralArgumentBuilder<CommandSourceStack> rootBuilder = Commands.literal(commandName);
+        // Scan methods
+        Methods methods = scanMethods(clazz);
 
+        // Warmup caches
+        warmup(methods);
+
+        // Build command tree
+        LiteralArgumentBuilder<CommandSourceStack> rootBuilder = Commands.literal(commandName);
         if (classPermission != null) {
             rootBuilder.requires(source -> checkPermission(source.getSender(), classPermission));
         }
 
-        List<Method> usageMethods = new ArrayList<>();
-        List<Method> subCommandMethods = new ArrayList<>();
-        List<Method> rootAliasMethods = new ArrayList<>();
-        Map<Class<? extends Throwable>, Method> errorHandlers = new HashMap<>();
+        buildTree(rootBuilder, commandInstance, methods);
+
+        // Register main command
+        java.util.Set<String> actualRegisteredNames = new java.util.HashSet<>();
+        actualRegisteredNames.addAll(commands.registerWithFlags(
+                pluginMeta, rootBuilder.build(), description,
+                Arrays.asList(aliases),
+                Collections.emptySet()
+        ));
+
+        // Register root alias commands
+        for (Method method : methods.rootAliases) {
+            gloomlib.command.annotation.Command rootAliasAnnotation = method
+                    .getAnnotation(gloomlib.command.annotation.Command.class);
+
+            LiteralArgumentBuilder<CommandSourceStack> aliasRoot = Commands.literal(rootAliasAnnotation.value());
+            Permission methodPermission = method.getAnnotation(Permission.class);
+            if (methodPermission != null) {
+                aliasRoot.requires(source -> checkPermission(source.getSender(), methodPermission));
+            }
+
+            buildMethodBranch(aliasRoot, method, commandInstance, methods.errorHandlers);
+
+            Description aliasDesc = method.getAnnotation(Description.class);
+            actualRegisteredNames.addAll(commands.registerWithFlags(
+                    pluginMeta, aliasRoot.build(),
+                    aliasDesc != null ? aliasDesc.value() : "",
+                    Arrays.asList(rootAliasAnnotation.aliases()),
+                    Collections.emptySet()
+            ));
+        }
+
+        // Conflict detection
+        logConflict(commandName, aliases, actualRegisteredNames);
+
+        return actualRegisteredNames;
+    }
+
+    private Methods scanMethods(Class<?> clazz) {
+        Methods result = new Methods();
 
         for (Method method : clazz.getDeclaredMethods()) {
             if (method.isAnnotationPresent(Usage.class)) {
-                usageMethods.add(method);
+                result.usage.add(method);
             } else if (method.isAnnotationPresent(SubCommand.class)) {
-                subCommandMethods.add(method);
+                result.subCommands.add(method);
             } else if (method.isAnnotationPresent(gloomlib.command.annotation.Command.class)) {
-                rootAliasMethods.add(method);
+                result.rootAliases.add(method);
             } else if (method.isAnnotationPresent(OnError.class)) {
                 OnError onError = method.getAnnotation(OnError.class);
                 for (Class<? extends Throwable> exType : onError.value()) {
-                    errorHandlers.put(exType, method);
+                    result.errorHandlers.put(exType, method);
                 }
             }
         }
 
-        // Warm-up cache
-        for (Method method : usageMethods)
-            prepareInvoker(method);
-        for (Method method : subCommandMethods)
-            prepareInvoker(method);
-        for (Method method : rootAliasMethods)
-            prepareInvoker(method);
-        for (Method method : errorHandlers.values())
-            prepareInvoker(method);
+        return result;
+    }
 
-        // Build branches
-        for (Method method : usageMethods) {
-            buildMethodBranch(rootBuilder, method, commandInstance, errorHandlers);
+    private void warmup(Methods methods) {
+        for (Method method : methods.usage) prepareInvoker(method);
+        for (Method method : methods.subCommands) prepareInvoker(method);
+        for (Method method : methods.rootAliases) prepareInvoker(method);
+        for (Method method : methods.errorHandlers.values()) prepareInvoker(method);
+    }
+
+    private void buildTree(LiteralArgumentBuilder<CommandSourceStack> rootBuilder,
+                           Object commandInstance, Methods methods) {
+        // Build usage branches
+        for (Method method : methods.usage) {
+            buildMethodBranch(rootBuilder, method, commandInstance, methods.errorHandlers);
         }
 
-        for (Method method : subCommandMethods) {
+        // Build subcommand branches
+        for (Method method : methods.subCommands) {
             SubCommand subCmd = method.getAnnotation(SubCommand.class);
             LiteralArgumentBuilder<CommandSourceStack> subBuilder = Commands.literal(subCmd.value());
 
@@ -152,39 +214,39 @@ public class CommandRegistry {
                 subBuilder.requires(source -> checkPermission(source.getSender(), methodPermission));
             }
 
-            buildMethodBranch(subBuilder, method, commandInstance, errorHandlers);
+            buildMethodBranch(subBuilder, method, commandInstance, methods.errorHandlers);
             rootBuilder.then(subBuilder);
 
+            // Build subcommand aliases
             for (String alias : subCmd.aliases()) {
                 LiteralArgumentBuilder<CommandSourceStack> aliasBuilder = Commands.literal(alias);
                 if (methodPermission != null) {
                     aliasBuilder.requires(source -> checkPermission(source.getSender(), methodPermission));
                 }
-                buildMethodBranch(aliasBuilder, method, commandInstance, errorHandlers);
+                buildMethodBranch(aliasBuilder, method, commandInstance, methods.errorHandlers);
                 rootBuilder.then(aliasBuilder);
             }
         }
+    }
 
-        commands.register(rootBuilder.build(), description, Arrays.asList(aliases));
+    private void logConflict(String commandName, String[] aliases,
+                             java.util.Set<String> actualRegisteredNames) {
+        java.util.Set<String> requestedNames = new java.util.HashSet<>();
+        requestedNames.add(commandName.toLowerCase());
+        for (String alias : aliases) {
+            requestedNames.add(alias.toLowerCase());
+        }
 
-        for (Method method : rootAliasMethods) {
-            gloomlib.command.annotation.Command rootAliasAnnotation = method
-                    .getAnnotation(gloomlib.command.annotation.Command.class);
+        boolean hasNamespaced = actualRegisteredNames.stream()
+                .anyMatch(name -> name.contains(":"));
 
-            LiteralArgumentBuilder<CommandSourceStack> aliasRoot = Commands.literal(rootAliasAnnotation.value());
-
-            Permission methodPermission = method.getAnnotation(Permission.class);
-            if (methodPermission != null) {
-                aliasRoot.requires(source -> checkPermission(source.getSender(), methodPermission));
-            }
-
-            buildMethodBranch(aliasRoot, method, commandInstance, errorHandlers);
-
-            Description aliasDesc = method.getAnnotation(Description.class);
-            commands.register(
-                    aliasRoot.build(),
-                    aliasDesc != null ? aliasDesc.value() : "",
-                    Arrays.asList(rootAliasAnnotation.aliases()));
+        if (hasNamespaced || actualRegisteredNames.size() != requestedNames.size()) {
+            logger.warning(String.format(
+                    "Command '%s' conflict detected: requested [%s], registered [%s]",
+                    commandName,
+                    String.join(", ", requestedNames),
+                    String.join(", ", actualRegisteredNames)
+            ));
         }
     }
 
@@ -241,6 +303,13 @@ public class CommandRegistry {
             case ANY -> true;
             case REQUIRE -> sender.hasPermission(permission.value());
         };
+    }
+
+    private static class Methods {
+        List<Method> usage = new ArrayList<>();
+        List<Method> subCommands = new ArrayList<>();
+        List<Method> rootAliases = new ArrayList<>();
+        Map<Class<? extends Throwable>, Method> errorHandlers = new HashMap<>();
     }
 
 }

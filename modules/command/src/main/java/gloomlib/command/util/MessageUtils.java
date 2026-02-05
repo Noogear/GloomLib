@@ -14,7 +14,9 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
  */
 public final class MessageUtils {
 
-    /** Global MiniMessage instance (Thread-safe) */
+    /**
+     * Global MiniMessage instance (Thread-safe)
+     */
     public static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
 
     private MessageUtils() {

@@ -22,7 +22,7 @@ import java.util.function.Supplier;
  * </p>
  *
  * <h2>Usage Example</h2>
- * 
+ *
  * <pre>
  * {@code
  * &#64;SubCommand("stats")
@@ -30,7 +30,7 @@ import java.util.function.Supplier;
  * public void showStats(AsyncContext ctx, Player player) {
  *     // Query database in async thread
  *     Map<String, Object> stats = ctx.runAsync(() -> database.queryStats(player));
- * 
+ *
  *     // Automatically switch back to main thread to send message
  *     ctx.reply(Component.text("Query complete!"));
  * }
@@ -50,6 +50,17 @@ public class AsyncContext extends GloomCommandContext {
     public AsyncContext(CommandContext<CommandSourceStack> brigadierContext, JavaPlugin plugin) {
         super(brigadierContext);
         this.plugin = plugin;
+    }
+
+    /**
+     * Creates an asynchronous version of a regular context.
+     *
+     * @param context Regular context
+     * @param plugin  Plugin instance
+     * @return Asynchronous context
+     */
+    public static AsyncContext from(GloomCommandContext context, JavaPlugin plugin) {
+        return new AsyncContext(context.getBrigadierContext(), plugin);
     }
 
     /**
@@ -184,16 +195,5 @@ public class AsyncContext extends GloomCommandContext {
                 runSync(() -> consumer.accept(player));
             }
         }
-    }
-
-    /**
-     * Creates an asynchronous version of a regular context.
-     *
-     * @param context Regular context
-     * @param plugin  Plugin instance
-     * @return Asynchronous context
-     */
-    public static AsyncContext from(GloomCommandContext context, JavaPlugin plugin) {
-        return new AsyncContext(context.getBrigadierContext(), plugin);
     }
 }

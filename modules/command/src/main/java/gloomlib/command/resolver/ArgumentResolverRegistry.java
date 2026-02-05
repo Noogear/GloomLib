@@ -14,7 +14,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class ArgumentResolverRegistry {
 
-    private final Map<Class<?>, ArgumentResolver<?>> resolvers = new ConcurrentHashMap<>();
     private static final Map<Class<?>, Class<?>> PRIMITIVE_WRAPPERS = Map.of(
             int.class, Integer.class,
             long.class, Long.class,
@@ -24,6 +23,8 @@ public class ArgumentResolverRegistry {
             byte.class, Byte.class,
             short.class, Short.class,
             char.class, Character.class);
+    private final Map<Class<?>, ArgumentResolver<?>> resolvers = new ConcurrentHashMap<>();
+    private final Map<Class<?>, ArgumentResolver<?>> resolverCache = new ConcurrentHashMap<>();
 
     /**
      * Registers an argument resolver.
@@ -35,8 +36,6 @@ public class ArgumentResolverRegistry {
     public <T> void register(Class<T> type, ArgumentResolver<T> resolver) {
         resolvers.put(type, resolver);
     }
-
-    private final Map<Class<?>, ArgumentResolver<?>> resolverCache = new ConcurrentHashMap<>();
 
     /**
      * Gets or finds a resolver for the specified type.
@@ -96,10 +95,40 @@ public class ArgumentResolverRegistry {
     }
 
     /**
-     * Clears the cache.
+     * Clears the resolver lookup cache.
+     * This only clears the type-to-resolver mapping cache.
      */
     public void clearCache() {
         resolverCache.clear();
+    }
+
+    /**
+     * Clears all internal caches in all registered resolvers.
+     *
+     * <p>
+     * This method calls {@link ArgumentResolver#clearCache()} on every
+     * registered resolver. Should be called when:
+     * </p>
+     * <ul>
+     * <li>Framework is reloaded</li>
+     * <li>Server is reloading</li>
+     * <li>Cached data (like player lists) need to be refreshed</li>
+     * </ul>
+     *
+     * <p>
+     * Note: This does NOT clear the resolver registry itself,
+     * only the internal caches of each resolver.
+     * </p>
+     */
+    public void clearAllResolverCaches() {
+        for (ArgumentResolver<?> resolver : resolvers.values()) {
+            try {
+                resolver.clearCache();
+            } catch (Exception e) {
+                // Log and continue with other resolvers
+                e.printStackTrace();
+            }
+        }
     }
 
     /**

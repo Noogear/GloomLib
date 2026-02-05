@@ -12,7 +12,7 @@ import java.lang.annotation.Target;
  * <p>
  * Usage example:
  * </p>
- * 
+ *
  * <pre>{@code
  * @Command("gamemode")
  * @Permission("server.gamemode")
@@ -24,7 +24,7 @@ import java.lang.annotation.Target;
  * <p>
  * Can also be used on methods to create independent root command aliases:
  * </p>
- * 
+ *
  * <pre>{@code
  * @Command("gmc")
  * public void creative(Player player) {
@@ -32,7 +32,7 @@ import java.lang.annotation.Target;
  * }
  * }</pre>
  */
-@Target({ ElementType.TYPE, ElementType.METHOD })
+@Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Command {
 

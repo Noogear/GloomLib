@@ -14,22 +14,28 @@ import gloomlib.command.context.GloomCommandContext;
 public interface PreProcessor extends CommandProcessor {
 
     /**
-     * Pre-processing result enum.
-     */
-    enum Result {
-        /** Continue execution */
-        CONTINUE,
-        /** Halt execution (no error message sent) */
-        HALT,
-        /** Halt execution (error message already sent) */
-        HANDLED
-    }
-
-    /**
      * Executes pre-processing.
      *
      * @param context Command context
      * @return Processing result
      */
     Result preProcess(GloomCommandContext context);
+
+    /**
+     * Pre-processing result enum.
+     */
+    enum Result {
+        /**
+         * Continue execution
+         */
+        CONTINUE,
+        /**
+         * Halt execution (no error message sent)
+         */
+        HALT,
+        /**
+         * Halt execution (error message already sent)
+         */
+        HANDLED
+    }
 }

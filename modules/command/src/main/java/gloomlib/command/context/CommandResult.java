@@ -7,10 +7,14 @@ import org.jetbrains.annotations.Nullable;
  */
 public class CommandResult {
 
-    /** Success result */
+    /**
+     * Success result
+     */
     public static final CommandResult SUCCESS = new CommandResult(true, null, null);
 
-    /** Failure result (no error message) */
+    /**
+     * Failure result (no error message)
+     */
     public static final CommandResult FAILURE = new CommandResult(false, null, null);
 
     private final boolean success;

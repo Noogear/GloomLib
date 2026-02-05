@@ -20,7 +20,7 @@ import java.util.concurrent.CompletableFuture;
  * <p>
  * Usage example:
  * </p>
- * 
+ *
  * <pre>
  * {
  *     &#64;code
@@ -94,4 +94,25 @@ public interface ArgumentResolver<T> {
      * @return Supported type
      */
     Class<T> getType();
+
+    /**
+     * Clears any internal caches maintained by this resolver.
+     *
+     * <p>
+     * This method should be called when:
+     * <ul>
+     * <li>Framework is reloaded</li>
+     * <li>Server is reloading</li>
+     * <li>Player list or other cached data may have changed</li>
+     * </ul>
+     * </p>
+     *
+     * <p>
+     * Default implementation does nothing. Resolvers with caching
+     * should override this method to clear their caches.
+     * </p>
+     */
+    default void clearCache() {
+        // Default: no-op (most resolvers don't have caches)
+    }
 }

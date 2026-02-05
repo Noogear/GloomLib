@@ -11,7 +11,7 @@ import java.lang.annotation.Target;
  * <p>
  * Usage example:
  * </p>
- * 
+ *
  * <pre>{@code
  * @Command("gamemode")
  * @Description("Change game mode")
@@ -20,7 +20,7 @@ import java.lang.annotation.Target;
  * }
  * }</pre>
  */
-@Target({ ElementType.TYPE, ElementType.METHOD })
+@Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Description {
 

@@ -16,7 +16,7 @@ import java.lang.annotation.Target;
  * <p>
  * Usage example:
  * </p>
- * 
+ *
  * <pre>
  * {@code
  * &#64;Usage

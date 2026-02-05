@@ -11,7 +11,7 @@ import java.lang.annotation.Target;
  * <p>
  * Usage example:
  * </p>
- * 
+ *
  * <pre>
  * {@code
  * &#64;Command("gamemode")
@@ -28,7 +28,7 @@ import java.lang.annotation.Target;
  * }
  * </pre>
  */
-@Target({ ElementType.TYPE, ElementType.METHOD })
+@Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Permission {
 
@@ -50,11 +50,17 @@ public @interface Permission {
      * Permission check mode enumeration.
      */
     enum PermissionMode {
-        /** Must have the specified permission */
+        /**
+         * Must have the specified permission
+         */
         REQUIRE,
-        /** Must be an OP */
+        /**
+         * Must be an OP
+         */
         OP,
-        /** Anyone can use */
+        /**
+         * Anyone can use
+         */
         ANY
     }
 }

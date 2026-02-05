@@ -21,7 +21,7 @@ import java.util.Map;
  * </p>
  *
  * <h2>Usage Example</h2>
- * 
+ *
  * <pre>{@code
  * MessageService messages = new MessageService();
  * messages.setMessage("teleport.success", "<green>Teleported to <yellow>{target}</yellow>!</green>");
@@ -31,23 +31,29 @@ import java.util.Map;
  */
 public class MessageService {
 
-    private final Map<String, String> messages = new HashMap<>();
-
     public static final Component DEFAULT_SUCCESS_PREFIX = Component.text("✓ ", NamedTextColor.GREEN);
     public static final Component DEFAULT_ERROR_PREFIX = Component.text("✗ ", NamedTextColor.RED);
     public static final Component DEFAULT_WARNING_PREFIX = Component.text("⚠ ", NamedTextColor.YELLOW);
     public static final Component DEFAULT_INFO_PREFIX = Component.text("ℹ ", NamedTextColor.AQUA);
-
-    /** Success prefix */
+    private final Map<String, String> messages = new HashMap<>();
+    /**
+     * Success prefix
+     */
     private Component successPrefix = DEFAULT_SUCCESS_PREFIX;
 
-    /** Error prefix */
+    /**
+     * Error prefix
+     */
     private Component errorPrefix = DEFAULT_ERROR_PREFIX;
 
-    /** Warning prefix */
+    /**
+     * Warning prefix
+     */
     private Component warningPrefix = DEFAULT_WARNING_PREFIX;
 
-    /** Info prefix */
+    /**
+     * Info prefix
+     */
     private Component infoPrefix = DEFAULT_INFO_PREFIX;
 
     /**

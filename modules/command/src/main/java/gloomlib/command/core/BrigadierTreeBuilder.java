@@ -1,15 +1,17 @@
-package gloomlib.command.builder;
+package gloomlib.command.core;
 
-import gloomlib.command.annotation.*;
-import gloomlib.command.resolver.ArgumentResolver;
-import gloomlib.command.resolver.ArgumentResolverRegistry;
-import gloomlib.command.suggestion.SuggestionProvider;
-
-import gloomlib.command.util.ParameterUtils;
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import gloomlib.command.annotation.Flag;
+import gloomlib.command.annotation.Optional;
+import gloomlib.command.annotation.Suggest;
+import gloomlib.command.annotation.Switch;
+import gloomlib.command.resolver.ArgumentResolver;
+import gloomlib.command.resolver.ArgumentResolverRegistry;
+import gloomlib.command.suggestion.SuggestionProvider;
+import gloomlib.command.util.ParameterUtils;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 
@@ -36,14 +38,6 @@ public class BrigadierTreeBuilder {
 
     private final ArgumentResolverRegistry resolverRegistry;
     private final Map<Class<? extends SuggestionProvider>, SuggestionProvider> suggestionCache = new HashMap<>();
-
-    /**
-     * Command execution function type.
-     */
-    @FunctionalInterface
-    public interface ExecutionFunction {
-        int execute(CommandContext<CommandSourceStack> ctx) throws Exception;
-    }
 
     public BrigadierTreeBuilder(ArgumentResolverRegistry resolverRegistry) {
         this.resolverRegistry = resolverRegistry;
@@ -193,5 +187,13 @@ public class BrigadierTreeBuilder {
                         e);
             }
         });
+    }
+
+    /**
+     * Command execution function type.
+     */
+    @FunctionalInterface
+    public interface ExecutionFunction {
+        int execute(CommandContext<CommandSourceStack> ctx) throws Exception;
     }
 }

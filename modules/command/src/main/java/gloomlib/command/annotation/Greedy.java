@@ -15,7 +15,7 @@ import java.lang.annotation.Target;
  * <p>
  * Usage example:
  * </p>
- * 
+ *
  * <pre>{@code
  * @SubCommand("broadcast")
  * public void broadcast(CommandSender sender, @Arg @Greedy String message) {

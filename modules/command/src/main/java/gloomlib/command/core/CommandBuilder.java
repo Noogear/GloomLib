@@ -1,4 +1,4 @@
-package gloomlib.command.builder;
+package gloomlib.command.core;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.ArgumentType;
@@ -25,7 +25,7 @@ import java.util.function.Predicate;
  * </p>
  *
  * <h2>Usage Example</h2>
- * 
+ *
  * <pre>{@code
  * CommandBuilder.create("hello")
  *         .description("Hello command")
@@ -44,13 +44,13 @@ import java.util.function.Predicate;
 public class CommandBuilder {
 
     private final String name;
-    private String description = "";
     private final List<String> aliases = new ArrayList<>();
+    private final List<ArgumentBuilder<?>> arguments = new ArrayList<>();
+    private final List<SubCommandBuilder> subCommands = new ArrayList<>();
+    private String description = "";
     private String permission = null;
     private Predicate<CommandSender> requirement = sender -> true;
     private Consumer<GloomCommandContext> executor = null;
-    private final List<ArgumentBuilder<?>> arguments = new ArrayList<>();
-    private final List<SubCommandBuilder> subCommands = new ArrayList<>();
 
     private CommandBuilder(String name) {
         this.name = name;
@@ -216,7 +216,7 @@ public class CommandBuilder {
     /**
      * Recursively builds argument chain.
      */
-    @SuppressWarnings({ "rawtypes", "unchecked" })
+    @SuppressWarnings({"rawtypes", "unchecked"})
     private void buildArgumentChain(
             com.mojang.brigadier.builder.ArgumentBuilder<CommandSourceStack, ?> parent,
             int index) {
@@ -348,11 +348,11 @@ public class CommandBuilder {
         private final CommandBuilder parent;
         private final String name;
         private final List<String> aliases = new ArrayList<>();
+        private final List<ArgumentBuilder<?>> arguments = new ArrayList<>();
+        private final List<SubCommandBuilder> subCommands = new ArrayList<>();
         private String permission = null;
         private Predicate<CommandSender> requirement = sender -> true;
         private Consumer<GloomCommandContext> executor = null;
-        private final List<ArgumentBuilder<?>> arguments = new ArrayList<>();
-        private final List<SubCommandBuilder> subCommands = new ArrayList<>();
 
         SubCommandBuilder(CommandBuilder parent, String name) {
             this.parent = parent;

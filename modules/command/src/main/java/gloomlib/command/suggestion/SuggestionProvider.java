@@ -17,7 +17,7 @@ import java.util.concurrent.CompletableFuture;
  * <p>
  * Usage Example:
  * </p>
- * 
+ *
  * <pre>{@code
  * public class WarpSuggestionProvider implements SuggestionProvider {
  *     @Override

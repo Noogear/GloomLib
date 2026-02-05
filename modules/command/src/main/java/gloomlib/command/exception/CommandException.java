@@ -57,6 +57,16 @@ public class CommandException extends RuntimeException {
     }
 
     /**
+     * Simple Component to String converter (for super constructor).
+     */
+    private static String componentToString(Component component) {
+        // Simplified implementation, using Adventure's plain text serializer
+        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
+                .plainText()
+                .serialize(component);
+    }
+
+    /**
      * Gets the Adventure component message.
      * If the exception was created with a string, returns a plain text component.
      *
@@ -76,15 +86,5 @@ public class CommandException extends RuntimeException {
      */
     public boolean hasAdventureMessage() {
         return adventureMessage != null;
-    }
-
-    /**
-     * Simple Component to String converter (for super constructor).
-     */
-    private static String componentToString(Component component) {
-        // Simplified implementation, using Adventure's plain text serializer
-        return net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
-                .plainText()
-                .serialize(component);
     }
 }

@@ -24,7 +24,7 @@ public final class ParameterUtils {
 
     /**
      * Gets parameter name.
-     * 
+     *
      * <p>
      * Prioritizes name specified by @Arg annotation, otherwise uses actual
      * parameter name.
@@ -43,7 +43,7 @@ public final class ParameterUtils {
 
     /**
      * Gets the starting index of command parameters.
-     * 
+     *
      * <p>
      * Skips special parameters (CommandSender, Player, GloomCommandContext,
      * AsyncContext),

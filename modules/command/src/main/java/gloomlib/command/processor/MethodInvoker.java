@@ -28,10 +28,14 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class MethodInvoker {
 
-    /** MethodHandle cache */
+    /**
+     * MethodHandle cache
+     */
     private static final Map<Method, MethodHandle> HANDLE_CACHE = new ConcurrentHashMap<>();
 
-    /** MethodHandles.Lookup instance */
+    /**
+     * MethodHandles.Lookup instance
+     */
     private static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
 
     private final MethodHandle handle;
@@ -87,6 +91,36 @@ public class MethodInvoker {
         MethodHandle handle = LOOKUP.unreflect(method);
         HANDLE_CACHE.put(method, handle);
         return handle;
+    }
+
+    /**
+     * Clears the cache.
+     */
+    public static void clearCache() {
+        HANDLE_CACHE.clear();
+    }
+
+    /**
+     * Gets cache size.
+     *
+     * @return Number of cached MethodHandles
+     */
+    public static int getCacheSize() {
+        return HANDLE_CACHE.size();
+    }
+
+    /**
+     * Factory method: Creates a method invoker.
+     *
+     * @param method Target method
+     * @return Method invoker
+     */
+    public static MethodInvoker of(Method method) {
+        try {
+            return new MethodInvoker(method);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException("Could not create method invoker: " + method.getName(), e);
+        }
     }
 
     /**
@@ -161,35 +195,5 @@ public class MethodInvoker {
      */
     public MethodHandle getHandle() {
         return handle;
-    }
-
-    /**
-     * Clears the cache.
-     */
-    public static void clearCache() {
-        HANDLE_CACHE.clear();
-    }
-
-    /**
-     * Gets cache size.
-     *
-     * @return Number of cached MethodHandles
-     */
-    public static int getCacheSize() {
-        return HANDLE_CACHE.size();
-    }
-
-    /**
-     * Factory method: Creates a method invoker.
-     *
-     * @param method Target method
-     * @return Method invoker
-     */
-    public static MethodInvoker of(Method method) {
-        try {
-            return new MethodInvoker(method);
-        } catch (IllegalAccessException e) {
-            throw new RuntimeException("Could not create method invoker: " + method.getName(), e);
-        }
     }
 }

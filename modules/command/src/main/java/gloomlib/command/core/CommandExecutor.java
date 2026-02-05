@@ -1,16 +1,18 @@
-package gloomlib.command.executor;
+package gloomlib.command.core;
 
-import gloomlib.command.annotation.*;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.context.CommandContext;
+import gloomlib.command.annotation.ConsoleOnly;
+import gloomlib.command.annotation.Cooldown;
+import gloomlib.command.annotation.PlayerOnly;
 import gloomlib.command.context.CommandResult;
 import gloomlib.command.context.GloomCommandContext;
 import gloomlib.command.exception.CommandException;
-import gloomlib.command.processor.MethodInvoker;
 import gloomlib.command.message.CommandMessages;
+import gloomlib.command.processor.MethodInvoker;
 import gloomlib.command.processor.ProcessorPipeline;
 import gloomlib.command.processor.processors.CooldownProcessor;
 import gloomlib.command.util.MessageUtils;
-import com.mojang.brigadier.Command;
-import com.mojang.brigadier.context.CommandContext;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;

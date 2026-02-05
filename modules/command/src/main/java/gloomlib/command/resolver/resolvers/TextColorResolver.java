@@ -34,7 +34,9 @@ import java.util.concurrent.CompletableFuture;
  */
 public class TextColorResolver implements ArgumentResolver<TextColor> {
 
-    /** Named color map */
+    /**
+     * Named color map
+     */
     private static final Map<String, NamedTextColor> NAMED_COLORS = new HashMap<>();
 
     static {

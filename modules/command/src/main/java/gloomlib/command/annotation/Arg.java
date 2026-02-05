@@ -11,7 +11,7 @@ import java.lang.annotation.Target;
  * <p>
  * Usage example:
  * </p>
- * 
+ *
  * <pre>{@code
  * public void execute(Player sender, @Arg("mode") GameMode mode) {
  *     // Argument name is "mode"

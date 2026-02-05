@@ -15,7 +15,9 @@ import java.util.Optional;
  */
 public final class TypeConverterUtil {
 
-    /** "self" placeholder, representing the command sender themselves */
+    /**
+     * "self" placeholder, representing the command sender themselves
+     */
     public static final String SELF_PLACEHOLDER = "self";
 
     private TypeConverterUtil() {

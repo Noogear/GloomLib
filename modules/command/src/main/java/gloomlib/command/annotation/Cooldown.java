@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * Usage example:
  * </p>
- * 
+ *
  * <pre>
  * {@code
  * &#64;SubCommand("teleport")
@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
  * }
  * </pre>
  */
-@Target({ ElementType.TYPE, ElementType.METHOD })
+@Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Cooldown {
 

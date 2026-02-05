@@ -131,16 +131,11 @@ public class ValidationProcessor implements PreProcessor {
 
     /**
      * Validation Result.
+     *
+     * @param valid        whether validation passed
+     * @param errorMessage error message (null if valid)
      */
-    public static class ValidationResult {
-
-        private final boolean valid;
-        private final Component errorMessage;
-
-        private ValidationResult(boolean valid, Component errorMessage) {
-            this.valid = valid;
-            this.errorMessage = errorMessage;
-        }
+    public record ValidationResult(boolean valid, Component errorMessage) {
 
         /**
          * Creates success result.
@@ -159,24 +154,6 @@ public class ValidationProcessor implements PreProcessor {
          */
         public static ValidationResult failure(Component errorMessage) {
             return new ValidationResult(false, errorMessage);
-        }
-
-        /**
-         * Check if validation passed.
-         *
-         * @return True if passed
-         */
-        public boolean isValid() {
-            return valid;
-        }
-
-        /**
-         * Gets error message.
-         *
-         * @return Error message component
-         */
-        public Component getErrorMessage() {
-            return errorMessage;
         }
     }
 }

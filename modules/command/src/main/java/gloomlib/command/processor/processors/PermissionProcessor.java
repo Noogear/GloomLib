@@ -25,26 +25,10 @@ import net.kyori.adventure.text.Component;
 public class PermissionProcessor implements PreProcessor {
 
     /** Default no permission message */
-    /** Default no permission message */
+    /**
+     * Default no permission message
+     */
     private Component noPermissionMessage = CommandMessages.NO_PERMISSION.get();
-
-    /**
-     * Sets the no permission message.
-     *
-     * @param message Adventure Component message
-     */
-    public void setNoPermissionMessage(Component message) {
-        this.noPermissionMessage = message;
-    }
-
-    /**
-     * Sets the no permission message (MiniMessage format).
-     *
-     * @param miniMessageFormat MiniMessage format string
-     */
-    public void setNoPermissionMessage(String miniMessageFormat) {
-        this.noPermissionMessage = MessageUtils.MINI_MESSAGE.deserialize(miniMessageFormat);
-    }
 
     /**
      * Checks permission.
@@ -123,5 +107,23 @@ public class PermissionProcessor implements PreProcessor {
      */
     public Component getNoPermissionMessage() {
         return noPermissionMessage;
+    }
+
+    /**
+     * Sets the no permission message.
+     *
+     * @param message Adventure Component message
+     */
+    public void setNoPermissionMessage(Component message) {
+        this.noPermissionMessage = message;
+    }
+
+    /**
+     * Sets the no permission message (MiniMessage format).
+     *
+     * @param miniMessageFormat MiniMessage format string
+     */
+    public void setNoPermissionMessage(String miniMessageFormat) {
+        this.noPermissionMessage = MessageUtils.MINI_MESSAGE.deserialize(miniMessageFormat);
     }
 }

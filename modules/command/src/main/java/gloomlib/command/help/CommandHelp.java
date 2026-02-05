@@ -187,12 +187,12 @@ public class CommandHelp {
             Component pageHint = Component.text()
                     .append(page > 1
                             ? CommandMessages.HELP_PREV.get().color(NamedTextColor.GREEN)
-                                    .clickEvent(ClickEvent.runCommand("/" + commandName + " help " + (page - 1)))
+                            .clickEvent(ClickEvent.runCommand(String.format("/%s help %d", commandName, page - 1)))
                             : CommandMessages.HELP_PREV.get().color(NamedTextColor.DARK_GRAY))
                     .append(Component.text(" | ", NamedTextColor.GRAY))
                     .append(page < totalPages
                             ? CommandMessages.HELP_NEXT.get().color(NamedTextColor.GREEN)
-                                    .clickEvent(ClickEvent.runCommand("/" + commandName + " help " + (page + 1)))
+                            .clickEvent(ClickEvent.runCommand(String.format("/%s help %d", commandName, page + 1)))
                             : CommandMessages.HELP_NEXT.get().color(NamedTextColor.DARK_GRAY))
                     .build();
             sender.sendMessage(pageHint);
