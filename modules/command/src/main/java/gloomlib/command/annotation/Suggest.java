@@ -1,6 +1,6 @@
 package gloomlib.command.annotation;
 
-import gloomlib.command.suggestion.SuggestionProvider;
+import gloomlib.command.core.SuggestionProvider;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

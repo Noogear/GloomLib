@@ -1,19 +1,12 @@
 package gloomlib.command.processor;
 
 /**
- * Command Processor Interface.
- *
- * <p>
- * Processors can perform operations before or after command execution.
- * </p>
+ * Base interface for command processors.
  */
 public interface CommandProcessor {
 
     /**
-     * Gets processor priority.
-     * Lower value means higher priority.
-     *
-     * @return Priority
+     * Gets processor priority (lower = higher priority).
      */
     default int getPriority() {
         return 0;

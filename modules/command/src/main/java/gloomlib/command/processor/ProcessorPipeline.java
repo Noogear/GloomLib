@@ -3,6 +3,7 @@ package gloomlib.command.processor;
 import gloomlib.command.context.CommandResult;
 import gloomlib.command.context.GloomCommandContext;
 import gloomlib.command.exception.CommandException;
+import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -10,14 +11,24 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * Command Processor Pipeline.
+ * Executes pre/post processors in priority order.
  *
- * <p>
- * Manages and executes command pre-processing and post-processing logic.
- * Processors are executed in priority order.
- * </p>
+ * <h2>Execution Flow</h2>
+ * <pre>
+ * PreProcessors (priority: 0 → 1000)
+ *    ├─> PermissionProcessor (0)
+ *    ├─> CooldownProcessor (100)
+ *    ├─> ValidationProcessor (200)
+ *    └─> LoggingProcessor (1000)
+ *    ↓
+ * HALT/HANDLED → Stop | CONTINUE → Method Invocation
+ *    ↓
+ * PostProcessors (priority order)
+ * </pre>
  */
 public class ProcessorPipeline {
+
+    private static final ComponentLogger LOGGER = ComponentLogger.logger(ProcessorPipeline.class);
 
     private static final Comparator<PreProcessor> PRE_PROCESSOR_COMPARATOR = Comparator
             .comparingInt(PreProcessor::getPriority);
@@ -27,32 +38,16 @@ public class ProcessorPipeline {
     private final List<PreProcessor> preProcessors = new ArrayList<>();
     private final List<PostProcessor> postProcessors = new ArrayList<>();
 
-    /**
-     * Registers a pre-processor.
-     *
-     * @param processor Pre-processor
-     */
     public void registerPreProcessor(PreProcessor processor) {
         preProcessors.add(processor);
         preProcessors.sort(PRE_PROCESSOR_COMPARATOR);
     }
 
-    /**
-     * Registers a post-processor.
-     *
-     * @param processor Post-processor
-     */
     public void registerPostProcessor(PostProcessor processor) {
         postProcessors.add(processor);
         postProcessors.sort(POST_PROCESSOR_COMPARATOR);
     }
 
-    /**
-     * Executes the pre-processing pipeline.
-     *
-     * @param context Command context
-     * @return Whether to continue execution
-     */
     public boolean runPreProcessors(GloomCommandContext context) {
         for (PreProcessor processor : preProcessors) {
             try {
@@ -64,48 +59,30 @@ public class ProcessorPipeline {
                     return false;
                 }
             } catch (CommandException e) {
-                // Processor throws CommandException, send message and stop
                 context.sendMessage(e.getAdventureMessage());
                 return false;
             } catch (Exception e) {
-                // Processor internal error, print stack trace and stop
-                e.printStackTrace();
+                LOGGER.debug("PreProcessor execution failed", e);
                 return false;
             }
         }
         return true;
     }
 
-    /**
-     * Executes the post-processing pipeline.
-     *
-     * @param context Command context
-     * @param result  Command execution result
-     */
     public void runPostProcessors(GloomCommandContext context, CommandResult result) {
         for (PostProcessor processor : postProcessors) {
             try {
                 processor.postProcess(context, result);
             } catch (Exception e) {
-                e.printStackTrace();
+                LOGGER.debug("PostProcessor execution failed", e);
             }
         }
     }
 
-    /**
-     * Gets all pre-processors (read-only).
-     *
-     * @return List of pre-processors
-     */
     public List<PreProcessor> getPreProcessors() {
         return Collections.unmodifiableList(preProcessors);
     }
 
-    /**
-     * Gets all post-processors (read-only).
-     *
-     * @return List of post-processors
-     */
     public List<PostProcessor> getPostProcessors() {
         return Collections.unmodifiableList(postProcessors);
     }

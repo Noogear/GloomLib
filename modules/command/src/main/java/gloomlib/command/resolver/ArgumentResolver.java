@@ -2,6 +2,7 @@ package gloomlib.command.resolver;
 
 import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
@@ -10,75 +11,47 @@ import java.lang.reflect.Parameter;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Command Argument Resolver Interface.
+ * Resolver for command method parameters.
  *
- * <p>
- * Implement this interface to support parsing and suggestions for custom
- * argument types.
- * </p>
+ * <p>Implementations define how to:
+ * <ul>
+ * <li>Create Brigadier ArgumentType for parameter</li>
+ * <li>Extract and convert parameter from CommandContext</li>
+ * <li>Provide auto-completion suggestions</li>
+ * </ul>
  *
- * <p>
- * Usage example:
- * </p>
- *
- * <pre>
- * {
- *     &#64;code
- *     public class RankResolver implements ArgumentResolver<Rank> {
- *         &#64;Override
- *         public ArgumentType<?> createArgumentType(Parameter parameter) {
- *             return StringArgumentType.word();
- *         }
- *
- *         &#64;Override
- *         public Rank resolve(CommandContext<CommandSourceStack> context, String name, Parameter parameter) {
- *             String rankName = context.getArgument(name, String.class);
- *             return rankManager.getRank(rankName);
- *         }
- *
- *         @Override
- *         public CompletableFuture<Suggestions> suggest(
- *                 CommandContext<CommandSourceStack> context,
- *                 SuggestionsBuilder builder,
- *                 Parameter parameter) {
- *             rankManager.getRanks().forEach(rank -> builder.suggest(rank.getName()));
- *             return builder.buildFuture();
- *         }
- *     }
- * }
- * </pre>
- *
- * @param <T> Argument type
+ * @param <T> The Java type this resolver handles
+ * @see gloomlib.command.resolver.registry.BrigadierResolver
  */
 public interface ArgumentResolver<T> {
 
     /**
-     * Creates a Brigadier argument type.
-     * Returns a Paper API compatible ArgumentType.
+     * Creates Brigadier ArgumentType for this parameter.
      *
-     * @param parameter Method parameter reflection object
-     * @return Brigadier argument type
+     * @param parameter Method parameter metadata
+     * @return ArgumentType instance for command tree
      */
     ArgumentType<?> createArgumentType(Parameter parameter);
 
     /**
-     * Resolves argument value from Brigadier context.
+     * Resolves parameter value from command context.
      *
-     * @param context   Paper Brigadier command context
-     * @param name      Argument name
-     * @param parameter Method parameter reflection object
-     * @return Resolved argument value
+     * @param context Brigadier command context
+     * @param name Parameter name in command tree
+     * @param parameter Method parameter metadata
+     * @return Resolved parameter value
+     * @throws CommandSyntaxException If resolution fails
      */
-    T resolve(CommandContext<CommandSourceStack> context, String name, Parameter parameter);
+    T resolve(CommandContext<CommandSourceStack> context, String name, Parameter parameter)
+            throws CommandSyntaxException;
 
     /**
-     * Provides Tab completion suggestions.
-     * Defaults to empty suggestions (Paper may provide built-in suggestions).
+     * Provides auto-completion suggestions.
      *
-     * @param context   Paper Brigadier command context
-     * @param builder   Suggestions builder
-     * @param parameter Method parameter reflection object
-     * @return Async suggestions list
+     * @param context Brigadier command context
+     * @param builder Suggestions builder
+     * @param parameter Method parameter metadata
+     * @return Future with suggestions
      */
     default CompletableFuture<Suggestions> suggest(
             CommandContext<CommandSourceStack> context,
@@ -88,31 +61,15 @@ public interface ArgumentResolver<T> {
     }
 
     /**
-     * Gets the type supported by this resolver.
-     * Used for auto-registration.
+     * Gets the Java type this resolver handles.
      *
-     * @return Supported type
+     * @return Type class
      */
     Class<T> getType();
 
     /**
-     * Clears any internal caches maintained by this resolver.
-     *
-     * <p>
-     * This method should be called when:
-     * <ul>
-     * <li>Framework is reloaded</li>
-     * <li>Server is reloading</li>
-     * <li>Player list or other cached data may have changed</li>
-     * </ul>
-     * </p>
-     *
-     * <p>
-     * Default implementation does nothing. Resolvers with caching
-     * should override this method to clear their caches.
-     * </p>
+     * Clears internal cache if any.
      */
     default void clearCache() {
-        // Default: no-op (most resolvers don't have caches)
     }
 }

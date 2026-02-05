@@ -9,25 +9,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Command Cooldown Processor.
- *
- * <p>
- * Manages command cooldowns to prevent command spamming.
- * </p>
+ * Command cooldown management.
  */
 public class CooldownProcessor implements PreProcessor {
 
-    /**
-     * Cooldown data: commandName -> (playerUuid -> lastExecutionTime)
-     */
+    private static final long SECONDS_PER_MINUTE = 60L;
+    private static final long MINUTES_PER_HOUR = 60L;
+
     private final Map<String, Map<UUID, Long>> cooldowns = new ConcurrentHashMap<>();
 
-    /**
-     * Formats remaining time.
-     *
-     * @param remainingMs Remaining milliseconds
-     * @return Formatted time string
-     */
     public static String formatRemainingTime(long remainingMs) {
         if (remainingMs <= 0)
             return "0s";
@@ -37,33 +27,19 @@ public class CooldownProcessor implements PreProcessor {
         long hours = TimeUnit.MILLISECONDS.toHours(remainingMs);
 
         if (hours > 0) {
-            return String.format("%dh %dm", hours, minutes % 60);
+            return String.format("%dh %dm", hours, minutes % MINUTES_PER_HOUR);
         } else if (minutes > 0) {
-            return String.format("%dm %ds", minutes, seconds % 60);
+            return String.format("%dm %ds", minutes, seconds % SECONDS_PER_MINUTE);
         } else {
             return seconds + "s";
         }
     }
 
-    /**
-     * Sets cooldown time.
-     *
-     * @param commandName Command name
-     * @param playerUuid  Player UUID
-     * @param durationMs  Cooldown duration (milliseconds)
-     */
     public void setCooldown(String commandName, UUID playerUuid, long durationMs) {
         cooldowns.computeIfAbsent(commandName, k -> new ConcurrentHashMap<>())
                 .put(playerUuid, System.currentTimeMillis() + durationMs);
     }
 
-    /**
-     * Checks if cooldown is active.
-     *
-     * @param commandName Command name
-     * @param playerUuid  Player UUID
-     * @return Remaining cooldown time (milliseconds), 0 if not in cooldown
-     */
     public long getRemainingCooldown(String commandName, UUID playerUuid) {
         Map<UUID, Long> commandCooldowns = cooldowns.get(commandName);
         if (commandCooldowns == null)
@@ -82,12 +58,6 @@ public class CooldownProcessor implements PreProcessor {
         return remaining;
     }
 
-    /**
-     * Clears cooldown for a player.
-     *
-     * @param commandName Command name
-     * @param playerUuid  Player UUID
-     */
     public void clearCooldown(String commandName, UUID playerUuid) {
         Map<UUID, Long> commandCooldowns = cooldowns.get(commandName);
         if (commandCooldowns != null) {

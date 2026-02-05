@@ -1,21 +1,36 @@
 package gloomlib.command.util;
 
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 
 /**
- * Message utility class.
+ * Modern message utility using MiniMessage.
  *
  * <p>
- * Provides unified MiniMessage instance and message formatting methods.
+ * Provides a global MiniMessage instance and MiniMessage deserialization methods.
+ * All other formatting should use MiniMessage tags directly.
  * </p>
+ *
+ * <h2>Example Usage</h2>
+ * <pre>
+ * {@code
+ * // Simple message
+ * Component msg = MessageUtils.deserialize("<red>Error!</red>");
+ *
+ * // With placeholders (use unparsed for safety)
+ * Component msg = MessageUtils.deserialize(
+ *     "<gold>Hello <player>!</gold>",
+ *     Placeholder.unparsed("player", playerName)
+ * );
+ * }
+ * </pre>
  */
 public final class MessageUtils {
 
     /**
-     * Global MiniMessage instance (Thread-safe)
+     * Global MiniMessage instance (Thread-safe and reusable).
+     * Reusing this instance improves performance.
      */
     public static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
 
@@ -26,7 +41,7 @@ public final class MessageUtils {
     /**
      * Deserializes a MiniMessage formatted string.
      *
-     * @param message Message template
+     * @param message Message template with MiniMessage tags
      * @return Component object
      */
     public static Component deserialize(String message) {
@@ -36,51 +51,16 @@ public final class MessageUtils {
     /**
      * Deserializes a message with placeholders.
      *
+     * <p>
+     * <b>Security Note:</b> Always use {@code Placeholder.unparsed()} for user input
+     * to prevent MiniMessage injection attacks.
+     * </p>
+     *
      * @param message   Message template
      * @param resolvers Placeholder resolvers
      * @return Component object
      */
     public static Component deserialize(String message, TagResolver... resolvers) {
         return MINI_MESSAGE.deserialize(message, resolvers);
-    }
-
-    /**
-     * Creates an error message.
-     *
-     * @param message Error info
-     * @return Red error message Component
-     */
-    public static Component createErrorMessage(String message) {
-        return Component.text(message, NamedTextColor.RED);
-    }
-
-    /**
-     * Creates a success message.
-     *
-     * @param message Success info
-     * @return Green success message Component
-     */
-    public static Component createSuccessMessage(String message) {
-        return Component.text(message, NamedTextColor.GREEN);
-    }
-
-    /**
-     * Creates a warning message.
-     *
-     * @param message Warning info
-     * @return Yellow warning message Component
-     */
-    public static Component createWarningMessage(String message) {
-        return Component.text(message, NamedTextColor.YELLOW);
-    }
-
-    /**
-     * Creates an info message.
-     *
-     * @param message Info content
-     * @return Aqua info message Component
-     */
-    public static Component createInfoMessage(String message) {
-        return Component.text(message, NamedTextColor.AQUA);
     }
 }

@@ -13,14 +13,14 @@ import java.util.Optional;
  * conversion, etc.
  * </p>
  */
-public final class TypeConverterUtil {
+public final class TypeConverterUtils {
 
     /**
      * "self" placeholder, representing the command sender themselves
      */
     public static final String SELF_PLACEHOLDER = "self";
 
-    private TypeConverterUtil() {
+    private TypeConverterUtils() {
         throw new UnsupportedOperationException("Utility class");
     }
 

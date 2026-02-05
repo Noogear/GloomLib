@@ -1,4 +1,4 @@
-package gloomlib.command.suggestion;
+package gloomlib.command.core;
 
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
@@ -8,26 +8,28 @@ import io.papermc.paper.command.brigadier.CommandSourceStack;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Command Argument Tab Suggestion Provider Interface.
+ * Functional interface for providing command argument suggestions.
  *
- * <p>
- * Implement this interface to provide custom Tab completion suggestions.
- * </p>
+ * <p>This interface simplifies Brigadier's {@code SuggestionProvider<CommandSourceStack>}
+ * by fixing the generic type parameter. Use this to implement custom tab completion
+ * providers for your commands.
  *
- * <p>
- * Usage Example:
- * </p>
- *
+ * <p>Usage example:
  * <pre>{@code
  * public class WarpSuggestionProvider implements SuggestionProvider {
  *     @Override
  *     public CompletableFuture<Suggestions> suggest(
  *             CommandContext<CommandSourceStack> context,
  *             SuggestionsBuilder builder) {
- *         WarpManager warpManager = // Get manager
- *                 warpManager.getWarps().forEach(warp -> builder.suggest(warp.getName()));
+ *         warpManager.getWarpNames().forEach(builder::suggest);
  *         return builder.buildFuture();
  *     }
+ * }
+ *
+ * // Use with @Suggest annotation
+ * @SubCommand("warp")
+ * public void warp(@Arg @Suggest(WarpSuggestionProvider.class) String warpName) {
+ *     // Auto-completion for warp names
  * }
  * }</pre>
  */
@@ -35,11 +37,11 @@ import java.util.concurrent.CompletableFuture;
 public interface SuggestionProvider {
 
     /**
-     * Provides Tab completion suggestions.
+     * Provides suggestions for command arguments.
      *
-     * @param context Paper Brigadier command context
-     * @param builder Suggestions builder
-     * @return Async suggestions list
+     * @param context Current command context
+     * @param builder Builder for creating suggestions
+     * @return CompletableFuture of suggestions
      */
     CompletableFuture<Suggestions> suggest(
             CommandContext<CommandSourceStack> context,

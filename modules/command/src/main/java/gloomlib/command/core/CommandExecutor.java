@@ -16,6 +16,7 @@ import gloomlib.command.util.MessageUtils;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -39,6 +40,8 @@ import java.util.Map;
  * </ul>
  */
 public class CommandExecutor {
+
+    private static final ComponentLogger LOGGER = ComponentLogger.logger(CommandExecutor.class);
 
     private final JavaPlugin plugin;
     private final ProcessorPipeline pipeline;
@@ -82,7 +85,7 @@ public class CommandExecutor {
                 try {
                     executeInternal(ctx, method, instance, args, invoker, cooldownKey, errorHandlers);
                 } catch (Throwable e) {
-                    e.printStackTrace();
+                    LOGGER.debug("Async command execution failed", e);
                 }
             });
             return Command.SINGLE_SUCCESS;
@@ -247,7 +250,7 @@ public class CommandExecutor {
                     handler.invoke(instance, new GloomCommandContext(ctx), cause);
                     return 0;
                 } catch (Exception handlerEx) {
-                    handlerEx.printStackTrace();
+                    LOGGER.debug("Error handler invocation failed", handlerEx);
                 }
             }
         }
@@ -260,7 +263,7 @@ public class CommandExecutor {
             sender.sendMessage(
                     CommandMessages.COMMAND_FAILED.get()
                             .hoverEvent(Component.text(cause.getMessage(), NamedTextColor.GRAY)));
-            cause.printStackTrace();
+                LOGGER.debug("Command execution failed", cause);
         }
 
         return 0;

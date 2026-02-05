@@ -10,13 +10,15 @@ import gloomlib.command.processor.processors.CooldownProcessor;
 import gloomlib.command.resolver.ArgumentResolverRegistry;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Logger;
 
 /**
  * Command Registry (Coordinator).
@@ -42,11 +44,38 @@ import java.util.logging.Logger;
  * <li>{@link BrigadierTreeBuilder} - Brigadier tree builder, responsible for
  * building command trees</li>
  * </ul>
+ *
+ * <h2>Registration Flow</h2>
+ * <pre>
+ * Command Instance
+ *    ↓
+ * 1. Scan Annotations (@Command, @Usage, @SubCommand)
+ *    ↓
+ * 2. Warm Cache (MethodInvoker, Cooldown Keys, Async flags)
+ *    ↓
+ * 3. Build Brigadier Tree (with argument resolvers)
+ *    ↓
+ * 4. Register to Paper Commands API
+ *    ↓
+ * 5. Bind Execution Logic
+ *    │
+ *    ├──> ArgumentParser: Parse CommandContext → Object[]
+ *    ├──> ProcessorPipeline: Run PreProcessors
+ *    ├──> MethodInvoker: Invoke command method (MethodHandle)
+ *    └──> ProcessorPipeline: Run PostProcessors
+ * </pre>
+ *
+ * <h2>Performance Characteristics</h2>
+ * <ul>
+ * <li><b>Cache Strategy</b>: 3-layer cache (MethodInvoker, Cooldown, Async) - O(1) lookup</li>
+ * <li><b>Method Invocation</b>: MethodHandle (~3-5x faster than reflection)</li>
+ * <li><b>Thread Safety</b>: All caches use ConcurrentHashMap for lock-free reads</li>
+ * </ul>
  */
 public class CommandRegistry {
 
     private final JavaPlugin plugin;
-    private final Logger logger;
+    private final ComponentLogger logger;
     private final Map<Method, MethodInvoker> methodInvokerCache = new ConcurrentHashMap<>();
 
     // Performance Caches
@@ -68,20 +97,8 @@ public class CommandRegistry {
      * @param pipeline         Processor pipeline
      */
     public CommandRegistry(JavaPlugin plugin, ArgumentResolverRegistry resolverRegistry, ProcessorPipeline pipeline) {
-        this(plugin, plugin.getLogger(), resolverRegistry, pipeline);
-    }
-
-    /**
-     * Creates a command registry with custom logger.
-     *
-     * @param plugin           Plugin instance
-     * @param logger           Custom logger (if null, uses plugin.getLogger())
-     * @param resolverRegistry Argument resolver registry
-     * @param pipeline         Processor pipeline
-     */
-    public CommandRegistry(JavaPlugin plugin, Logger logger, ArgumentResolverRegistry resolverRegistry, ProcessorPipeline pipeline) {
         this.plugin = plugin;
-        this.logger = logger;
+        this.logger = plugin.getComponentLogger();
         // Initialize components
         this.argumentParser = new ArgumentParser(plugin, resolverRegistry);
         this.commandExecutor = new CommandExecutor(plugin, pipeline, cooldownProcessor);
@@ -241,12 +258,16 @@ public class CommandRegistry {
                 .anyMatch(name -> name.contains(":"));
 
         if (hasNamespaced || actualRegisteredNames.size() != requestedNames.size()) {
-            logger.warning(String.format(
-                    "Command '%s' conflict detected: requested [%s], registered [%s]",
-                    commandName,
-                    String.join(", ", requestedNames),
-                    String.join(", ", actualRegisteredNames)
-            ));
+            Component warningMessage = Component.text()
+                    .append(Component.text("Command '", NamedTextColor.YELLOW))
+                    .append(Component.text(commandName, NamedTextColor.GOLD))
+                    .append(Component.text("' conflict detected: requested [", NamedTextColor.YELLOW))
+                    .append(Component.text(String.join(", ", requestedNames), NamedTextColor.GRAY))
+                    .append(Component.text("], registered [", NamedTextColor.YELLOW))
+                    .append(Component.text(String.join(", ", actualRegisteredNames), NamedTextColor.GRAY))
+                    .append(Component.text("]", NamedTextColor.YELLOW))
+                    .build();
+            logger.warn(warningMessage);
         }
     }
 

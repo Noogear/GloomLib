@@ -4,6 +4,7 @@ import gloomlib.command.context.GloomCommandContext;
 import gloomlib.command.message.CommandMessages;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Map;
@@ -17,6 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * </p>
  */
 public class ExceptionResolverRegistry {
+
+    private static final ComponentLogger LOGGER = ComponentLogger.logger(ExceptionResolverRegistry.class);
 
     private final Map<Class<? extends Throwable>, ExceptionResolver<?>> resolvers = new ConcurrentHashMap<>();
 
@@ -96,7 +99,7 @@ public class ExceptionResolverRegistry {
             ctx.getSender().sendMessage(
                     CommandMessages.COMMAND_FAILED.get()
                             .hoverEvent(Component.text(ex.getMessage(), NamedTextColor.GRAY)));
-            ex.printStackTrace();
+            LOGGER.debug("Unhandled command exception", ex);
         });
     }
 }

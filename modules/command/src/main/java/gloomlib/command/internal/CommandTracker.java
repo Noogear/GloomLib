@@ -6,44 +6,25 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Tracks registered commands for ownership verification (Cloud-style).
- *
- * <p>
- * Thread-safe implementation using concurrent collections.
- * Each GloomCommand instance has its own tracker for isolation.
- * </p>
+ * Thread-safe command registration tracker.
  */
 public final class CommandTracker {
 
     private final Set<Object> instances = ConcurrentHashMap.newKeySet();
     private final Map<String, Set<String>> aliases = new ConcurrentHashMap<>();
 
-    /**
-     * Tracks a command instance and its registered names.
-     *
-     * @param instance Command instance
-     * @param names    All registered names (including main name and aliases)
-     */
     public void track(Object instance, Set<String> names) {
         instances.add(instance);
 
         if (!names.isEmpty()) {
-            // Use first name as key, store all names as aliases
             String mainName = names.iterator().next();
             aliases.put(mainName.toLowerCase(), names);
         }
     }
 
-    /**
-     * Untracks a command by name.
-     *
-     * @param commandName Command name to untrack
-     * @return true if untracked, false if not found
-     */
     public boolean untrack(String commandName) {
         Set<String> names = aliases.remove(commandName.toLowerCase());
         if (names != null) {
-            // Remove all aliases as well
             for (String name : names) {
                 aliases.remove(name.toLowerCase());
             }

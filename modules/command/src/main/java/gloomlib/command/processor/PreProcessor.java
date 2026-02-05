@@ -3,39 +3,16 @@ package gloomlib.command.processor;
 import gloomlib.command.context.GloomCommandContext;
 
 /**
- * Command Pre-Processor Interface.
- *
- * <p>
- * Called before command execution, can be used for permission checks, cooldown
- * checks, logging, etc.
- * </p>
+ * Pre-processor for command execution validation and setup.
  */
 @FunctionalInterface
 public interface PreProcessor extends CommandProcessor {
 
-    /**
-     * Executes pre-processing.
-     *
-     * @param context Command context
-     * @return Processing result
-     */
     Result preProcess(GloomCommandContext context);
 
-    /**
-     * Pre-processing result enum.
-     */
     enum Result {
-        /**
-         * Continue execution
-         */
         CONTINUE,
-        /**
-         * Halt execution (no error message sent)
-         */
         HALT,
-        /**
-         * Halt execution (error message already sent)
-         */
         HANDLED
     }
 }

@@ -7,36 +7,14 @@ import gloomlib.command.util.MessageUtils;
 import net.kyori.adventure.text.Component;
 
 /**
- * Permission Processor.
+ * Permission verification processor.
  *
- * <p>
- * Checks if the command sender has the required permissions.
- * Supports multiple permission checks (any match) and negated permissions.
- * </p>
- *
- * <h2>Permission Format</h2>
- * <ul>
- * <li>{@code plugin.command} — Standard permission node</li>
- * <li>{@code plugin.command.*} — Wildcard permission</li>
- * <li>{@code !plugin.command} — Negated permission (must NOT have this
- * permission)</li>
- * </ul>
+ * <p>Permission formats: {@code plugin.cmd}, {@code plugin.cmd.*}, {@code !plugin.cmd} (negated)
  */
 public class PermissionProcessor implements PreProcessor {
 
-    /** Default no permission message */
-    /**
-     * Default no permission message
-     */
     private Component noPermissionMessage = CommandMessages.NO_PERMISSION.get();
 
-    /**
-     * Checks permission.
-     *
-     * @param context     Command context
-     * @param permissions Permission list (any match)
-     * @return True if has permission
-     */
     public boolean checkPermission(GloomCommandContext context, String... permissions) {
         if (permissions == null || permissions.length == 0) {
             return true;
@@ -44,7 +22,6 @@ public class PermissionProcessor implements PreProcessor {
 
         var sender = context.getSender();
 
-        // OP always has permission
         if (sender.isOp()) {
             return true;
         }
@@ -54,14 +31,12 @@ public class PermissionProcessor implements PreProcessor {
                 continue;
             }
 
-            // Handle negated permission
             if (permission.startsWith("!")) {
                 String negatedPerm = permission.substring(1);
                 if (sender.hasPermission(negatedPerm)) {
-                    return false; // Has negated permission, deny
+                    return false;
                 }
             } else {
-                // Standard permission check
                 if (sender.hasPermission(permission)) {
                     return true;
                 }

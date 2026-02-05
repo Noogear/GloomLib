@@ -10,29 +10,18 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import java.lang.reflect.Parameter;
 
 /**
- * Parameter Validation Processor.
- *
- * <p>
- * Validates command parameters, supports:
- * <ul>
- * <li>Range validation ({@code @Range})</li>
- * <li>Not-null validation</li>
- * <li>Custom validation rules</li>
- * </ul>
- * </p>
+ * Parameter validation processor.
  */
 public class ValidationProcessor implements PreProcessor {
 
     @Override
     public Result preProcess(GloomCommandContext context) {
-        // Default implementation: Validation is completed during parameter parsing
-        // phase
         return Result.CONTINUE;
     }
 
     @Override
     public int getPriority() {
-        return 50; // After permission check, before cooldown check
+        return 50;
     }
 
     /**

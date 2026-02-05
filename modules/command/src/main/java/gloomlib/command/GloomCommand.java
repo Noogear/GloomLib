@@ -9,11 +9,8 @@ import gloomlib.command.processor.ProcessorPipeline;
 import gloomlib.command.processor.processors.LoggingProcessor;
 import gloomlib.command.resolver.ArgumentResolver;
 import gloomlib.command.resolver.ArgumentResolverRegistry;
-import gloomlib.command.resolver.resolvers.*;
+import gloomlib.command.resolver.registry.BuiltInResolvers;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
-import org.bukkit.GameMode;
-import org.bukkit.World;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.ArrayList;
@@ -122,28 +119,7 @@ public final class GloomCommand {
      * Initializes built-in argument resolvers.
      */
     private void initializeBuiltInResolvers() {
-        // Basic Types
-        resolverRegistry.register(String.class, new StringResolver());
-        resolverRegistry.register(Integer.class, new IntegerResolver());
-        resolverRegistry.register(Long.class, new LongResolver());
-        resolverRegistry.register(Float.class, new FloatResolver());
-        resolverRegistry.register(Double.class, new DoubleResolver());
-        resolverRegistry.register(Boolean.class, new BooleanResolver());
-
-        // Paper API Types
-        resolverRegistry.register(Player.class, new PlayerResolver());
-        resolverRegistry.register(org.bukkit.OfflinePlayer.class, new OfflinePlayerResolver());
-        resolverRegistry.register(World.class, new WorldResolver());
-        resolverRegistry.register(GameMode.class, new GameModeResolver());
-        resolverRegistry.register(org.bukkit.Material.class, new MaterialResolver());
-        resolverRegistry.register(org.bukkit.Location.class, new LocationResolver());
-
-        // Adventure API Types
-        resolverRegistry.register(net.kyori.adventure.text.Component.class, new ComponentResolver());
-        resolverRegistry.register(net.kyori.adventure.text.format.TextColor.class, new TextColorResolver());
-
-        // Utility Types
-        resolverRegistry.register(java.time.Duration.class, new DurationResolver());
+        BuiltInResolvers.registerAll(resolverRegistry);
     }
 
     /**

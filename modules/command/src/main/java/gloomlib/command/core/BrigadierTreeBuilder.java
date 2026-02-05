@@ -10,10 +10,10 @@ import gloomlib.command.annotation.Suggest;
 import gloomlib.command.annotation.Switch;
 import gloomlib.command.resolver.ArgumentResolver;
 import gloomlib.command.resolver.ArgumentResolverRegistry;
-import gloomlib.command.suggestion.SuggestionProvider;
 import gloomlib.command.util.ParameterUtils;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
+import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -33,8 +33,21 @@ import java.util.Map;
  * <li>Suggestion provider registration</li>
  * <li>Command executor binding</li>
  * </ul>
+ *
+ * <h2>Tree Structure Example</h2>
+ * <pre>
+ * /gamemode [mode] [player]
+ *    ↓
+ * LiteralArgumentBuilder("gamemode")
+ *    └─> RequiredArgumentBuilder("mode", GameModeResolver)
+ *        ├─> executes() ← Optional: only mode provided
+ *        └─> RequiredArgumentBuilder("player", PlayerResolver)
+ *            └─> executes() ← Full command: mode + player
+ * </pre>
  */
 public class BrigadierTreeBuilder {
+
+    private static final ComponentLogger LOGGER = ComponentLogger.logger(BrigadierTreeBuilder.class);
 
     private final ArgumentResolverRegistry resolverRegistry;
     private final Map<Class<? extends SuggestionProvider>, SuggestionProvider> suggestionCache = new HashMap<>();
@@ -64,7 +77,7 @@ public class BrigadierTreeBuilder {
                 try {
                     return executionFn.execute(ctx);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    LOGGER.debug("Command execution failed", e);
                     return 0;
                 }
             });
@@ -96,7 +109,7 @@ public class BrigadierTreeBuilder {
                 try {
                     return executionFn.execute(ctx);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    LOGGER.debug("Command execution failed", e);
                     return 0;
                 }
             });
@@ -135,7 +148,7 @@ public class BrigadierTreeBuilder {
                 try {
                     return executionFn.execute(ctx);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    LOGGER.debug("Command execution failed", e);
                     return 0;
                 }
             });

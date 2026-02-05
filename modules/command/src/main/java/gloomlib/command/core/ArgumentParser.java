@@ -9,7 +9,7 @@ import gloomlib.command.processor.processors.ValidationProcessor;
 import gloomlib.command.resolver.ArgumentResolver;
 import gloomlib.command.resolver.ArgumentResolverRegistry;
 import gloomlib.command.util.ParameterUtils;
-import gloomlib.command.util.TypeConverterUtil;
+import gloomlib.command.util.TypeConverterUtils;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -32,6 +32,27 @@ import java.lang.reflect.Parameter;
  * <li>Switches and Flags</li>
  * <li>Range validation</li>
  * </ul>
+ *
+ * <h2>Parameter Resolution Flow</h2>
+ * <pre>
+ * Parameter
+ *    ↓
+ * 1. Check if special type (Player, CommandSender, Context) → Auto-inject
+ *    ↓ (no)
+ * 2. Check @Switch/@Flag → Boolean handling
+ *    ↓ (no)
+ * 3. Lookup ArgumentResolver by type
+ *    ↓
+ * 4. Extract from CommandContext via resolver
+ *    ↓
+ * 5. Apply @Range validation (if present)
+ *    ↓
+ * 6. Fallback to @Default value (if provided and arg missing)
+ *    ↓
+ * 7. Handle @Optional (return null if missing)
+ *    ↓
+ * Result: Typed argument or exception
+ * </pre>
  */
 public class ArgumentParser {
 
@@ -171,7 +192,7 @@ public class ArgumentParser {
         // Check for @Default annotation
         Default defaultAnnotation = param.getAnnotation(Default.class);
         if (defaultAnnotation != null) {
-            return TypeConverterUtil.convertDefault(
+            return TypeConverterUtils.convertDefault(
                     defaultAnnotation.value(),
                     param.getType(),
                     sender).orElse(null);

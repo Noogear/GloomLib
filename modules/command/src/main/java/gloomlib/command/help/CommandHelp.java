@@ -2,6 +2,7 @@ package gloomlib.command.help;
 
 import gloomlib.command.annotation.*;
 import gloomlib.command.message.CommandMessages;
+import gloomlib.command.util.MessageUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
@@ -15,11 +16,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Command Help Generator.
+ * Command Help Generator with modern Adventure interactive components.
  *
  * <p>
- * Automatically generates beautiful command help information (based on
- * Adventure API).
+ * Automatically generates beautiful command help with:
+ * <ul>
+ * <li>Click events to suggest commands</li>
+ * <li>Hover events to show detailed descriptions</li>
+ * <li>MiniMessage formatting for colors and gradients</li>
+ * <li>Interactive pagination controls</li>
+ * </ul>
  * </p>
  */
 public class CommandHelp {
@@ -128,7 +134,7 @@ public class CommandHelp {
     }
 
     /**
-     * Displays help page.
+     * Displays help page with interactive components.
      *
      * @param sender Receiver
      * @param page   Page number (1-based)
@@ -147,54 +153,90 @@ public class CommandHelp {
         int totalPages = (int) Math.ceil((double) visibleEntries.size() / itemsPerPage);
         page = Math.max(1, Math.min(page, totalPages));
 
-        // Header
-        Component header = Component.text()
-                .append(Component.text("═".repeat(20), NamedTextColor.GOLD))
-                .append(Component.text(" " + commandName.toUpperCase() + " HELP ", NamedTextColor.YELLOW,
-                        TextDecoration.BOLD))
-                .append(Component.text("═".repeat(20), NamedTextColor.GOLD))
-                .build();
+        // Header with separator
+        String separator = "=".repeat(20);
+        Component header = CommandMessages.HELP_HEADER.get(
+                separator,
+                commandName.toUpperCase(),
+                separator
+        );
         sender.sendMessage(header);
 
-        // Entries
+        // Entries with rich interactions
         int start = (page - 1) * itemsPerPage;
         int end = Math.min(start + itemsPerPage, visibleEntries.size());
 
         for (int i = start; i < end; i++) {
             HelpEntry entry = visibleEntries.get(i);
 
-            Component usageComponent = Component.text(entry.usage, NamedTextColor.AQUA)
-                    .clickEvent(ClickEvent.suggestCommand(entry.usage))
-                    .hoverEvent(HoverEvent.showText(CommandMessages.HELP_CLICK_HINT.get()));
+            // Build detailed hover text
+            String description = entry.description.isEmpty() ? CommandMessages.HELP_NO_DESC.fallback() : entry.description;
+            Component hoverText = Component.text()
+                    .append(CommandMessages.HELP_HOVER_COMMAND.get(entry.usage))
+                    .append(Component.newline())
+                    .append(CommandMessages.HELP_HOVER_DESCRIPTION.get(description))
+                    .append(Component.newline())
+                    .append(Component.newline())
+                    .append(CommandMessages.HELP_HOVER_CLICK.get())
+                    .build();
 
-            Component descComponent = Component.text(" - " + entry.description, NamedTextColor.GRAY);
+            // Usage component with click and hover
+            Component usageComponent = Component.text()
+                    .append(CommandMessages.HELP_USAGE_PREFIX.get())
+                    .append(Component.text(entry.usage, NamedTextColor.AQUA, TextDecoration.BOLD))
+                    .clickEvent(ClickEvent.suggestCommand(entry.usage))
+                    .hoverEvent(HoverEvent.showText(hoverText))
+                    .build();
+
+            // Description with subtle color
+            Component descComponent = entry.description.isEmpty()
+                    ? Component.empty()
+                    : Component.text()
+                    .append(Component.newline())
+                    .append(CommandMessages.HELP_DESC_PREFIX.get(entry.description))
+                    .build();
 
             sender.sendMessage(usageComponent.append(descComponent));
         }
 
-        // Footer
+        // Footer with pagination
         if (totalPages > 1) {
-            Component footer = Component.text()
-                    .append(Component.text("═".repeat(15), NamedTextColor.GOLD))
-                    .append(Component.text(" ")
-                            .append(CommandMessages.HELP_PAGE.get(Component.text(page), Component.text(totalPages)))
-                            .append(Component.text(" ")))
-                    .append(Component.text("═".repeat(15), NamedTextColor.GOLD))
-                    .build();
+            sender.sendMessage(Component.empty()); // Spacing
+
+            String footerSeparator = "=".repeat(15);
+            Component footer = CommandMessages.HELP_SEPARATOR.get(
+                    footerSeparator + " " + CommandMessages.HELP_PAGE_INFO.get(page, totalPages) + " " + footerSeparator
+            );
             sender.sendMessage(footer);
 
-            // Pagination hint
+            // Interactive pagination buttons
+            Component prevButton = page > 1
+                    ? CommandMessages.HELP_PREV_BUTTON.get()
+                    .clickEvent(ClickEvent.runCommand(String.format("/%s help %d", commandName, page - 1)))
+                    .hoverEvent(HoverEvent.showText(
+                            MessageUtils.MINI_MESSAGE.deserialize(
+                                    CommandMessages.HELP_GOTO_PAGE.get(page - 1).toString()
+                            )
+                    ))
+                    : CommandMessages.HELP_PREV_DISABLED.get();
+
+            Component nextButton = page < totalPages
+                    ? CommandMessages.HELP_NEXT_BUTTON.get()
+                    .clickEvent(ClickEvent.runCommand(String.format("/%s help %d", commandName, page + 1)))
+                    .hoverEvent(HoverEvent.showText(
+                            MessageUtils.MINI_MESSAGE.deserialize(
+                                    CommandMessages.HELP_GOTO_PAGE.get(page + 1).toString()
+                            )
+                    ))
+                    : CommandMessages.HELP_NEXT_DISABLED.get();
+
             Component pageHint = Component.text()
-                    .append(page > 1
-                            ? CommandMessages.HELP_PREV.get().color(NamedTextColor.GREEN)
-                            .clickEvent(ClickEvent.runCommand(String.format("/%s help %d", commandName, page - 1)))
-                            : CommandMessages.HELP_PREV.get().color(NamedTextColor.DARK_GRAY))
-                    .append(Component.text(" | ", NamedTextColor.GRAY))
-                    .append(page < totalPages
-                            ? CommandMessages.HELP_NEXT.get().color(NamedTextColor.GREEN)
-                            .clickEvent(ClickEvent.runCommand(String.format("/%s help %d", commandName, page + 1)))
-                            : CommandMessages.HELP_NEXT.get().color(NamedTextColor.DARK_GRAY))
+                    .append(Component.text("  "))
+                    .append(prevButton)
+                    .append(CommandMessages.HELP_PAGE_SEPARATOR.get())
+                    .append(nextButton)
                     .build();
+
             sender.sendMessage(pageHint);
         }
     }

@@ -5,37 +5,23 @@ import com.mojang.brigadier.tree.RootCommandNode;
 import gloomlib.command.util.Reflection;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
+import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 /**
- * Brigadier command unregister utility using hidden {@code removeCommand()} API.
+ * Brigadier command unregistration via hidden removeCommand() API.
  *
- * <p>
- * Based on cloud-minecraft's ModernPaperBrigadier implementation.
- * Uses Brigadier's undocumented but stable removeCommand method.
- * </p>
- *
- * <h2>Optimizations</h2>
- * <ul>
- * <li>Cached reflection - removeCommand method is cached by {@link Reflection}</li>
- * <li>Unified reflection API - all reflection goes through Reflection utility</li>
- * <li>Thread-safe operation - uses atomic invalid flag manipulation</li>
- * </ul>
+ * @implNote Uses cached reflection for thread-safe atomic operations.
  */
 public final class BrigadierUnregister {
+
+    private static final ComponentLogger LOGGER = ComponentLogger.logger(BrigadierUnregister.class);
 
     private BrigadierUnregister() {
         throw new UnsupportedOperationException("Utility class");
     }
 
-    /**
-     * Unregisters a command using Brigadier's {@code removeCommand()} method.
-     *
-     * @param commands    Paper Commands registrar
-     * @param commandName Command name (without '/')
-     * @return true if successfully removed
-     */
     public static boolean unregisterCommand(Commands commands, String commandName) {
         if (commands == null || commandName == null || commandName.isEmpty()) {
             return false;
@@ -46,7 +32,6 @@ public final class BrigadierUnregister {
                 CommandDispatcher<CommandSourceStack> dispatcher = commands.getDispatcher();
                 RootCommandNode<CommandSourceStack> root = dispatcher.getRoot();
 
-                // Invoke Brigadier's removeCommand method (cached by Reflection)
                 Reflection.invokeMethod(root, "removeCommand",
                         new Class<?>[]{String.class},
                         commandName.toLowerCase());
@@ -56,7 +41,7 @@ public final class BrigadierUnregister {
             return true;
 
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.debug("Failed to unregister command", e);
             return false;
         }
     }
