@@ -1,5 +1,7 @@
 package gloomlib.configuration.model;
 
+import gloomlib.configuration.util.ReflectionUtils;
+
 import java.lang.annotation.Annotation;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -20,20 +22,13 @@ public final class FieldMeta {
     private final boolean hasCheck;
     private final boolean hasComment;
     private final boolean hasInline;
-    
+
     private final VarHandle varHandle;
     private final MethodHandle getter;
     private final MethodHandle setter;
     private final boolean isPrimitive;
-    
-    private final Map<Class<? extends Annotation>, Annotation> annotationCache = new ConcurrentHashMap<>();
 
-    private static IllegalAccessException wrapException(Throwable e, String operation) {
-        if (e instanceof IllegalAccessException iae) {
-            return iae;
-        }
-        return new IllegalAccessException(operation + ": " + e.getMessage());
-    }
+    private final Map<Class<? extends Annotation>, Annotation> annotationCache = new ConcurrentHashMap<>();
 
     public FieldMeta(Field field, String key, boolean hasCheck, boolean hasComment, boolean hasInline) {
         this.field = field;
@@ -42,14 +37,14 @@ public final class FieldMeta {
         this.hasComment = hasComment;
         this.hasInline = hasInline;
         this.isPrimitive = field.getType().isPrimitive();
-        
+
         try {
             field.setAccessible(true);
             MethodHandles.Lookup lookup = MethodHandles.privateLookupIn(
-                field.getDeclaringClass(), 
-                MethodHandles.lookup()
+                    field.getDeclaringClass(),
+                    MethodHandles.lookup()
             );
-            
+
             if (isPrimitive) {
                 this.varHandle = lookup.unreflectVarHandle(field);
                 this.getter = null;
@@ -63,7 +58,7 @@ public final class FieldMeta {
             throw new IllegalStateException("Failed to create handles for field: " + field.getName(), e);
         }
     }
-    
+
     @SuppressWarnings("unchecked")
     public <T extends Annotation> T getAnnotation(Class<T> type) {
         return (T) annotationCache.computeIfAbsent(type, field::getAnnotation);
@@ -73,7 +68,7 @@ public final class FieldMeta {
         try {
             return isPrimitive ? varHandle.get(instance) : getter.invoke(instance);
         } catch (Throwable e) {
-            throw wrapException(e, "Failed to get field value");
+            throw ReflectionUtils.wrapReflectionException(e, "Failed to get field value");
         }
     }
 
@@ -85,7 +80,7 @@ public final class FieldMeta {
                 setter.invoke(instance, value);
             }
         } catch (Throwable e) {
-            throw wrapException(e, "Failed to set field value");
+            throw ReflectionUtils.wrapReflectionException(e, "Failed to set field value");
         }
     }
 

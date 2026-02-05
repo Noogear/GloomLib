@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static gloomlib.configuration.util.NamingUtils.camelToKebab;
+
 /**
  * Cache manager for configuration metadata and reflection results.
  */
@@ -101,13 +103,6 @@ public final class ConfigurationCache {
      */
     public static Method getCachedMethod(String key, MethodFactory factory) {
         return METHOD_CACHE.computeIfAbsent(key, k -> factory.create());
-    }
-
-    /**
-     * Converts camelCase to kebab-case.
-     */
-    private static String camelToKebab(String s) {
-        return s.replaceAll("([a-z])([A-Z]+)", "$1-$2").toLowerCase();
     }
 
     /**

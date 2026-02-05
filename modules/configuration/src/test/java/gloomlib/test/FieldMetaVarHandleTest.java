@@ -15,13 +15,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("FieldMeta Hybrid Optimization Test")
 class FieldMetaVarHandleTest {
 
-    static class TestConfig {
-        public String name = "default";
-        public int level = 1;
-        public boolean enabled = true;
-        public double score = 3.14;
-    }
-
     private TestConfig config;
     private Field nameField;
     private Field levelField;
@@ -66,8 +59,8 @@ class FieldMetaVarHandleTest {
         assertEquals(50, config.level);
 
         // Should throw for object
-        assertThrows(UnsupportedOperationException.class, () -> 
-            nameMeta.compareAndSet(config, "default", "new")
+        assertThrows(UnsupportedOperationException.class, () ->
+                nameMeta.compareAndSet(config, "default", "new")
         );
     }
 
@@ -125,5 +118,12 @@ class FieldMetaVarHandleTest {
         System.out.println("║ Note: Hybrid uses MethodHandle for objects (stable)      ║");
         System.out.println("╚═══════════════════════════════════════════════════════════╝");
         System.out.println();
+    }
+
+    static class TestConfig {
+        public String name = "default";
+        public int level = 1;
+        public boolean enabled = true;
+        public double score = 3.14;
     }
 }

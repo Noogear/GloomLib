@@ -5,7 +5,10 @@ import gloomlib.configuration.ConfigurationManager;
 import gloomlib.configuration.ConfigurationPart;
 import gloomlib.configuration.annotations.Check;
 import gloomlib.configuration.annotations.Comment;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -38,39 +41,6 @@ class RealWorldConfigPerformanceTest {
                 }
             }
             testDir.delete();
-        }
-    }
-
-    // Test configuration classes
-    public static class ServerConfig extends ConfigurationFile {
-        @Comment("Server name displayed in listings")
-        public String serverName = "My Awesome Server";
-
-        @Comment("Maximum number of players")
-        @Check(RangeCheck.class)
-        public int maxPlayers = 100;
-
-        public boolean whitelist = false;
-        public String motd = "Welcome!";
-        public Map<String, GameMode> gameModes = new HashMap<>();
-
-        public ServerConfig() {
-            gameModes.put("survival", new GameMode());
-            gameModes.put("creative", new GameMode());
-        }
-    }
-
-    public static class GameMode extends ConfigurationPart {
-        public String displayName = "Survival";
-        public boolean pvpEnabled = true;
-        public int difficulty = 1;
-        public Map<String, String> rules = new HashMap<>();
-    }
-
-    public static class RangeCheck implements Check.Validator<Integer> {
-        @Override
-        public Integer validate(Integer value) {
-            return Math.max(1, Math.min(1000, value));
         }
     }
 
@@ -163,21 +133,21 @@ class RealWorldConfigPerformanceTest {
     @DisplayName("Validation performance - @Check annotation")
     void testValidationPerformance() throws Exception {
         File configFile = new File(testDir, "validation-test.yml");
-        
+
         int iterations = 500;
         long total = 0;
 
         for (int i = 0; i < iterations; i++) {
             long start = System.nanoTime();
             ServerConfig config = ConfigurationManager.load(ServerConfig.class, configFile);
-            
+
             // Test validation on invalid values
             config.maxPlayers = -100;  // Should be validated to 1
             config.save();
-            
+
             ServerConfig reloaded = ConfigurationManager.load(ServerConfig.class, configFile);
             assertEquals(1, reloaded.maxPlayers, "Validator should correct negative value");
-            
+
             total += System.nanoTime() - start;
         }
 
@@ -223,5 +193,38 @@ class RealWorldConfigPerformanceTest {
         }
 
         assertTrue(elapsed < 2_000_000_000L, "Should handle 100 configs in under 2 seconds");
+    }
+
+    // Test configuration classes
+    public static class ServerConfig extends ConfigurationFile {
+        @Comment("Server name displayed in listings")
+        public String serverName = "My Awesome Server";
+
+        @Comment("Maximum number of players")
+        @Check(RangeCheck.class)
+        public int maxPlayers = 100;
+
+        public boolean whitelist = false;
+        public String motd = "Welcome!";
+        public Map<String, GameMode> gameModes = new HashMap<>();
+
+        public ServerConfig() {
+            gameModes.put("survival", new GameMode());
+            gameModes.put("creative", new GameMode());
+        }
+    }
+
+    public static class GameMode extends ConfigurationPart {
+        public String displayName = "Survival";
+        public boolean pvpEnabled = true;
+        public int difficulty = 1;
+        public Map<String, String> rules = new HashMap<>();
+    }
+
+    public static class RangeCheck implements Check.Validator<Integer> {
+        @Override
+        public Integer validate(Integer value) {
+            return Math.max(1, Math.min(1000, value));
+        }
     }
 }

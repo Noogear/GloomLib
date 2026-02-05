@@ -9,7 +9,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Comprehensive benchmark comparing Field API, MethodHandles, and VarHandles.
@@ -25,25 +25,15 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("Reflection API Benchmark: Field vs MethodHandle vs VarHandle")
 class ReflectionBenchmarkComparison {
 
-    static class TestObject {
-        public String name = "default";
-        public int value = 42;
-        public boolean flag = true;
-        public double score = 3.14;
-    }
-
     private TestObject testObj;
-    
     // Field API
     private Field nameField;
     private Field valueField;
-    
     // MethodHandles
     private MethodHandle nameGetter;
     private MethodHandle nameSetter;
     private MethodHandle valueGetter;
     private MethodHandle valueSetter;
-    
     // VarHandles
     private VarHandle nameVarHandle;
     private VarHandle valueVarHandle;
@@ -51,20 +41,20 @@ class ReflectionBenchmarkComparison {
     @BeforeEach
     void setUp() throws Exception {
         testObj = new TestObject();
-        
+
         // Setup Field API
         nameField = TestObject.class.getField("name");
         valueField = TestObject.class.getField("value");
         nameField.setAccessible(true);
         valueField.setAccessible(true);
-        
+
         // Setup MethodHandles
         MethodHandles.Lookup lookup = MethodHandles.lookup();
         nameGetter = lookup.unreflectGetter(nameField);
         nameSetter = lookup.unreflectSetter(nameField);
         valueGetter = lookup.unreflectGetter(valueField);
         valueSetter = lookup.unreflectSetter(valueField);
-        
+
         // Setup VarHandles
         nameVarHandle = lookup.unreflectVarHandle(nameField);
         valueVarHandle = lookup.unreflectVarHandle(valueField);
@@ -76,20 +66,20 @@ class ReflectionBenchmarkComparison {
         // Test String field
         nameField.set(testObj, "field");
         assertEquals("field", nameField.get(testObj));
-        
+
         nameSetter.invoke(testObj, "method");
         assertEquals("method", nameGetter.invoke(testObj));
-        
+
         nameVarHandle.set(testObj, "var");
         assertEquals("var", nameVarHandle.get(testObj));
-        
+
         // Test int field
         valueField.set(testObj, 100);
         assertEquals(100, valueField.get(testObj));
-        
+
         valueSetter.invoke(testObj, 200);
         assertEquals(200, valueGetter.invoke(testObj));
-        
+
         valueVarHandle.set(testObj, 300);
         assertEquals(300, valueVarHandle.get(testObj));
     }
@@ -98,40 +88,40 @@ class ReflectionBenchmarkComparison {
     @DisplayName("GET Performance: Field vs MethodHandle vs VarHandle")
     void benchmarkGetPerformance() throws Throwable {
         int iterations = 100_000;
-        
+
         // Warmup all three
         for (int i = 0; i < 1000; i++) {
             nameField.get(testObj);
             nameGetter.invoke(testObj);
             nameVarHandle.get(testObj);
         }
-        
+
         // Benchmark Field API
         long fieldStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
             Object val = nameField.get(testObj);
         }
         long fieldTime = System.nanoTime() - fieldStart;
-        
+
         // Benchmark MethodHandle
         long mhStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
             Object val = nameGetter.invoke(testObj);
         }
         long mhTime = System.nanoTime() - mhStart;
-        
+
         // Benchmark VarHandle
         long vhStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
             Object val = nameVarHandle.get(testObj);
         }
         long vhTime = System.nanoTime() - vhStart;
-        
+
         // Calculate speedups
         double mhSpeedup = (double) fieldTime / mhTime;
         double vhSpeedup = (double) fieldTime / vhTime;
         double vhVsMh = (double) mhTime / vhTime;
-        
+
         System.out.println("╔═══════════════════════════════════════════════════╗");
         System.out.println("║       GET Performance (" + String.format("%,d", iterations) + " iterations)      ║");
         System.out.println("╠═══════════════════════════════════════════════════╣");
@@ -148,39 +138,39 @@ class ReflectionBenchmarkComparison {
     @DisplayName("SET Performance: Field vs MethodHandle vs VarHandle")
     void benchmarkSetPerformance() throws Throwable {
         int iterations = 100_000;
-        
+
         // Warmup
         for (int i = 0; i < 1000; i++) {
             valueField.set(testObj, i);
             valueSetter.invoke(testObj, i);
             valueVarHandle.set(testObj, i);
         }
-        
+
         // Benchmark Field API
         long fieldStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
             valueField.set(testObj, i);
         }
         long fieldTime = System.nanoTime() - fieldStart;
-        
+
         // Benchmark MethodHandle
         long mhStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
             valueSetter.invoke(testObj, i);
         }
         long mhTime = System.nanoTime() - mhStart;
-        
+
         // Benchmark VarHandle
         long vhStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
             valueVarHandle.set(testObj, i);
         }
         long vhTime = System.nanoTime() - vhStart;
-        
+
         double mhSpeedup = (double) fieldTime / mhTime;
         double vhSpeedup = (double) fieldTime / vhTime;
         double vhVsMh = (double) mhTime / vhTime;
-        
+
         System.out.println("╔═══════════════════════════════════════════════════╗");
         System.out.println("║       SET Performance (" + String.format("%,d", iterations) + " iterations)      ║");
         System.out.println("╠═══════════════════════════════════════════════════╣");
@@ -197,7 +187,7 @@ class ReflectionBenchmarkComparison {
     @DisplayName("Mixed Operations: Realistic workload simulation")
     void benchmarkMixedOperations() throws Throwable {
         int iterations = 50_000;
-        
+
         // Warmup
         for (int i = 0; i < 500; i++) {
             nameField.set(testObj, "test" + i);
@@ -205,7 +195,7 @@ class ReflectionBenchmarkComparison {
             valueField.set(testObj, i);
             int v = (int) valueField.get(testObj);
         }
-        
+
         // Benchmark Field API
         long fieldStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
@@ -215,7 +205,7 @@ class ReflectionBenchmarkComparison {
             int v = (int) valueField.get(testObj);
         }
         long fieldTime = System.nanoTime() - fieldStart;
-        
+
         // Benchmark MethodHandle
         long mhStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
@@ -225,7 +215,7 @@ class ReflectionBenchmarkComparison {
             int v = (int) valueGetter.invoke(testObj);
         }
         long mhTime = System.nanoTime() - mhStart;
-        
+
         // Benchmark VarHandle
         long vhStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
@@ -235,11 +225,11 @@ class ReflectionBenchmarkComparison {
             int v = (int) valueVarHandle.get(testObj);
         }
         long vhTime = System.nanoTime() - vhStart;
-        
+
         double mhSpeedup = (double) fieldTime / mhTime;
         double vhSpeedup = (double) fieldTime / vhTime;
         double vhVsMh = (double) mhTime / vhTime;
-        
+
         System.out.println("╔═══════════════════════════════════════════════════╗");
         System.out.println("║    Mixed Operations (" + String.format("%,d", iterations) + " iterations)      ║");
         System.out.println("║     (2 sets + 2 gets per iteration)               ║");
@@ -258,14 +248,14 @@ class ReflectionBenchmarkComparison {
     @DisplayName("Primitive int optimization: VarHandle advantage")
     void benchmarkPrimitiveInt() throws Throwable {
         int iterations = 100_000;
-        
+
         // Warmup
         for (int i = 0; i < 1000; i++) {
             valueField.set(testObj, i);
             valueSetter.invoke(testObj, i);
             valueVarHandle.set(testObj, i);
         }
-        
+
         // Field API (boxing overhead)
         long fieldStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
@@ -273,7 +263,7 @@ class ReflectionBenchmarkComparison {
             int val = (int) valueField.get(testObj);  // Unboxes Integer -> int
         }
         long fieldTime = System.nanoTime() - fieldStart;
-        
+
         // MethodHandle (boxing overhead)
         long mhStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
@@ -281,7 +271,7 @@ class ReflectionBenchmarkComparison {
             int val = (int) valueGetter.invoke(testObj);
         }
         long mhTime = System.nanoTime() - mhStart;
-        
+
         // VarHandle (no boxing with typed accessors)
         long vhStart = System.nanoTime();
         for (int i = 0; i < iterations; i++) {
@@ -289,10 +279,10 @@ class ReflectionBenchmarkComparison {
             int val = (int) valueVarHandle.get(testObj);
         }
         long vhTime = System.nanoTime() - vhStart;
-        
+
         double vhSpeedup = (double) fieldTime / vhTime;
         double vhVsMh = (double) mhTime / vhTime;
-        
+
         System.out.println("╔═══════════════════════════════════════════════════╗");
         System.out.println("║  Primitive int Operations (100,000 iterations)    ║");
         System.out.println("║    Testing boxing/unboxing overhead               ║");
@@ -340,5 +330,12 @@ class ReflectionBenchmarkComparison {
         System.out.println("║    Field API for maximum compatibility                    ║");
         System.out.println("║                                                           ║");
         System.out.println("╚═══════════════════════════════════════════════════════════╝");
+    }
+
+    static class TestObject {
+        public String name = "default";
+        public int value = 42;
+        public boolean flag = true;
+        public double score = 3.14;
     }
 }

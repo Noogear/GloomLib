@@ -2,7 +2,9 @@ package gloomlib.test;
 
 import gloomlib.translation.impl.MapTranslationSource;
 import gloomlib.translation.loader.TranslationParsers;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
@@ -11,7 +13,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("TranslationSource Tests")
 class TranslationSourceTest {

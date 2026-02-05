@@ -45,6 +45,7 @@ public abstract class ConfigurationPart {
                 }
             }
         } catch (Exception ignored) {
+            // Expected: field access, type conversion, or nested access may fail
         }
         return null;
     }

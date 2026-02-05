@@ -1,8 +1,6 @@
 package gloomlib.test;
 
-import gloomlib.translation.api.TranslationManager;
 import gloomlib.translation.impl.TranslationManagerImpl;
-import gloomlib.translation.util.MiniMessages;
 import net.kyori.adventure.key.Key;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

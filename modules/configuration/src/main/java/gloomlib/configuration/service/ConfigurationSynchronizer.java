@@ -209,40 +209,57 @@ public final class ConfigurationSynchronizer {
     }
 
     /**
-     * Runs validation checks on a field value.
-     *
-     * @param meta the field metadata
-     * @param val  the field value
-     * @return the validated (possibly corrected) value
+     * Runs validation checks on field value.
      */
-    @SuppressWarnings("unchecked")
     private Object runCheck(FieldMeta meta, Object val) {
         Check annotation = meta.getAnnotation(Check.class);
         try {
             if (annotation.cls() != void.class && !annotation.method().isEmpty()) {
-                String key = annotation.cls().getName() + "#" + annotation.method();
-                Method m = ConfigurationCache.getCachedMethod(key, () -> {
-                    try {
-                        for (Method me : annotation.cls().getDeclaredMethods()) {
-                            if (me.getName().equals(annotation.method()) && me.getParameterCount() == 1) {
-                                me.setAccessible(true);
-                                return me;
-                            }
-                        }
-                        throw new RuntimeException("Method not found");
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
-                    }
-                });
-                return Modifier.isStatic(m.getModifiers()) ? m.invoke(null, val) : m.invoke(ReflectionUtils.createInstance(annotation.cls()), val);
+                return runCustomMethodCheck(annotation, val);
             }
             if (annotation.value() != Check.NoOpValidator.class) {
-                Check.Validator<Object> v = ConfigurationCache.getCachedValidator(annotation.value());
-                return v.validate(val);
+                return runValidatorCheck(annotation, val);
             }
         } catch (Exception e) {
             ConfigurationLogger.error("Validation failed: " + e.getMessage(), e);
         }
         return val;
+    }
+
+    /**
+     * Runs custom method validation.
+     */
+    private Object runCustomMethodCheck(Check annotation, Object val) throws Exception {
+        String key = annotation.cls().getName() + "#" + annotation.method();
+        Method m = ConfigurationCache.getCachedMethod(key, () -> findValidationMethod(annotation));
+        return Modifier.isStatic(m.getModifiers())
+                ? m.invoke(null, val)
+                : m.invoke(ReflectionUtils.createInstance(annotation.cls()), val);
+    }
+
+    /**
+     * Finds validation method from annotation.
+     */
+    private Method findValidationMethod(Check annotation) {
+        try {
+            for (Method me : annotation.cls().getDeclaredMethods()) {
+                if (me.getName().equals(annotation.method()) && me.getParameterCount() == 1) {
+                    me.setAccessible(true);
+                    return me;
+                }
+            }
+            throw new RuntimeException("Method not found: " + annotation.method());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Runs validator-based validation.
+     */
+    @SuppressWarnings("unchecked")
+    private Object runValidatorCheck(Check annotation, Object val) throws Exception {
+        Check.Validator<Object> v = ConfigurationCache.getCachedValidator(annotation.value());
+        return v.validate(val);
     }
 }
