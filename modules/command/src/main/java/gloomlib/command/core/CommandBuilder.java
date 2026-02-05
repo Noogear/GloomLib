@@ -216,7 +216,6 @@ public class CommandBuilder {
     /**
      * Recursively builds argument chain.
      */
-    @SuppressWarnings({"rawtypes", "unchecked"})
     private void buildArgumentChain(
             com.mojang.brigadier.builder.ArgumentBuilder<CommandSourceStack, ?> parent,
             int index) {

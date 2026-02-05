@@ -27,6 +27,10 @@ import java.util.function.BiConsumer;
  */
 public class AbstractWindow implements Window, InventoryHolder, Observer {
 
+    private static final int CHEST_ROW_SIZE = 9;
+    private static final int CHEST_MAX_SIZE = 54;
+    private static final long CLIENT_SYNC_CHECK_INTERVAL_MS = 1000L;
+
     protected final Player viewer;
     protected final Component title;
     protected final GloomGui gui;
@@ -36,9 +40,21 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
     private final InventoryType type;
     private final int size;
     protected Inventory inventory;
+    /**
+     * Thread-safe window state tracking for server-side state.
+     */
     protected volatile WindowState serverWindowState = WindowState.CLOSED;
+    /**
+     * Thread-safe window state tracking for client-side state.
+     */
     protected volatile WindowState clientWindowState = WindowState.CLOSED;
+    /**
+     * Timestamp for periodic client sync checks (atomic read/write).
+     */
     protected volatile long lastPingTime = 0;
+    /**
+     * Timestamp for periodic update cycle tracking.
+     */
     protected volatile long lastUpdatePeriodCheck = 0;
 
     /**
@@ -65,8 +81,8 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
      */
     protected Inventory createInventory() {
         if (type == InventoryType.CHEST) {
-            if (size <= 0 || size > 54 || size % 9 != 0) {
-                throw new IllegalArgumentException("Chest inventory size must be a multiple of 9 and between 9 and 54. Given: " + size);
+            if (size <= 0 || size > CHEST_MAX_SIZE || size % CHEST_ROW_SIZE != 0) {
+                throw new IllegalArgumentException("Chest inventory size must be a multiple of " + CHEST_ROW_SIZE + " and between " + CHEST_ROW_SIZE + " and " + CHEST_MAX_SIZE + ". Given: " + size);
             }
             return Bukkit.createInventory(this, size, title);
         } else {
@@ -131,7 +147,7 @@ public class AbstractWindow implements Window, InventoryHolder, Observer {
      */
     protected void checkWindowStateSync() {
         long now = System.currentTimeMillis();
-        if (now - lastPingTime > 1000) {
+        if (now - lastPingTime > CLIENT_SYNC_CHECK_INTERVAL_MS) {
             lastPingTime = now;
 
             if (serverWindowState == WindowState.OPEN && viewer.getOpenInventory().getTopInventory() != inventory) {
