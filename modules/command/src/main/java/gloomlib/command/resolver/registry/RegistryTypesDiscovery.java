@@ -25,7 +25,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * and register {@link BrigadierResolver} instances for each discovered type.
  * </p>
  *
- * @implNote Thread-safe singleton cache using AtomicReference for lazy initialization.
+ * <br>
+ * <b>Implementation Note:</b> Thread-safe singleton cache using AtomicReference
+ * for lazy initialization.
  */
 public final class RegistryTypesDiscovery {
 
@@ -70,7 +72,9 @@ public final class RegistryTypesDiscovery {
     /**
      * Discovers all Registry types from RegistryKey fields.
      *
-     * <p>Results are cached after first discovery for performance.</p>
+     * <p>
+     * Results are cached after first discovery for performance.
+     * </p>
      *
      * @return List of discovered Registry type information
      */
@@ -111,7 +115,9 @@ public final class RegistryTypesDiscovery {
     /**
      * Prints a formatted discovery report to the logger.
      *
-     * <p>Useful for debugging and verification purposes.</p>
+     * <p>
+     * Useful for debugging and verification purposes.
+     * </p>
      */
     public static void printDiscoveryReport() {
         List<RegistryTypeInfo> types = discoverAll();
@@ -124,8 +130,8 @@ public final class RegistryTypesDiscovery {
 
         for (RegistryTypeInfo info : types) {
             appendDebugLine(sb, String.format("  %-30s | %s",
-                info.fieldName(),
-                info.targetType().getSimpleName()));
+                    info.fieldName(),
+                    info.targetType().getSimpleName()));
         }
 
         LOGGER.debug(sb.toString());
@@ -180,8 +186,7 @@ public final class RegistryTypesDiscovery {
             return new RegistryTypeInfo(
                     field.getName(),
                     targetClass,
-                    registryKey
-            );
+                    registryKey);
 
         } catch (IllegalAccessException | ClassCastException e) {
             LOGGER.debug(MSG_EXTRACTION_FAILED, field.getName(), e.getMessage());
@@ -206,22 +211,20 @@ public final class RegistryTypesDiscovery {
 
         gloom.registerArgumentResolver(
                 type,
-                BrigadierResolver.of(type, () -> ArgumentTypes.resource(key))
-        );
+                BrigadierResolver.of(type, () -> ArgumentTypes.resource(key)));
     }
 
     /**
      * Container for discovered Registry type information.
      *
-     * @param fieldName    Name of the RegistryKey field
-     * @param targetType   Target type class (must extend Keyed)
-     * @param registryKey  The RegistryKey instance
+     * @param fieldName   Name of the RegistryKey field
+     * @param targetType  Target type class (must extend Keyed)
+     * @param registryKey The RegistryKey instance
      */
     public record RegistryTypeInfo(
             @NotNull String fieldName,
             @NotNull Class<?> targetType,
-            @NotNull RegistryKey<?> registryKey
-    ) {
+            @NotNull RegistryKey<?> registryKey) {
     }
 
     private static void appendDebugLine(StringBuilder sb, String line) {

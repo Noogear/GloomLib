@@ -12,7 +12,9 @@ import org.bukkit.entity.Player;
 /**
  * Brigadier command unregistration via hidden removeCommand() API.
  *
- * @implNote Uses cached reflection for thread-safe atomic operations.
+ * <br>
+ * <b>Implementation Note:</b> Uses cached reflection for thread-safe atomic
+ * operations.
  */
 public final class BrigadierUnregister {
 
@@ -33,7 +35,7 @@ public final class BrigadierUnregister {
                 RootCommandNode<CommandSourceStack> root = dispatcher.getRoot();
 
                 Reflection.invokeMethod(root, "removeCommand",
-                        new Class<?>[]{String.class},
+                        new Class<?>[] { String.class },
                         commandName.toLowerCase());
             });
 

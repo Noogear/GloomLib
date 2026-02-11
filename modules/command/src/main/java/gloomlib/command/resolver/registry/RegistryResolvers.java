@@ -10,7 +10,9 @@ import org.jetbrains.annotations.NotNull;
 /**
  * Registry type resolver utilities.
  *
- * @implNote Delegates to {@link RegistryTypesDiscovery} for type discovery.
+ * <br>
+ * <b>Implementation Note:</b> Delegates to {@link RegistryTypesDiscovery} for
+ * type discovery.
  */
 public final class RegistryResolvers {
 
@@ -22,10 +24,23 @@ public final class RegistryResolvers {
         throw new UnsupportedOperationException("Utility class");
     }
 
+    /**
+     * Registers all discovered registries.
+     *
+     * @param gloom GloomCommand instance
+     */
     public static void registerAll(@NotNull GloomCommand gloom) {
         RegistryTypesDiscovery.registerAllDiscovered(gloom);
     }
 
+    /**
+     * Registers a registry type.
+     *
+     * @param gloom       GloomCommand instance
+     * @param type        Type class
+     * @param registryKey Registry key
+     * @param <T>         Type
+     */
     public static <T extends Keyed> void register(
             @NotNull GloomCommand gloom,
             @NotNull Class<T> type,
@@ -33,12 +48,18 @@ public final class RegistryResolvers {
 
         gloom.registerArgumentResolver(
                 type,
-                BrigadierResolver.of(type, () -> ArgumentTypes.resource(registryKey))
-        );
+                BrigadierResolver.of(type, () -> ArgumentTypes.resource(registryKey)));
 
         LOGGER.debug(MSG_REGISTERED, type.getSimpleName(), registryKey.key());
     }
 
+    /**
+     * Registers a resource key.
+     *
+     * @param gloom       GloomCommand instance
+     * @param registryKey Registry key
+     * @param <T>         Type
+     */
     public static <T extends Keyed> void registerResourceKey(
             @NotNull GloomCommand gloom,
             @NotNull RegistryKey<T> registryKey) {
@@ -47,9 +68,7 @@ public final class RegistryResolvers {
                 org.bukkit.NamespacedKey.class,
                 BrigadierResolver.of(
                         org.bukkit.NamespacedKey.class,
-                        () -> ArgumentTypes.resourceKey(registryKey)
-                )
-        );
+                        () -> ArgumentTypes.resourceKey(registryKey)));
 
         LOGGER.debug(MSG_REGISTERED_KEY, registryKey.key());
     }

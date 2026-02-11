@@ -47,6 +47,13 @@ public class CommandExecutor {
     private final ProcessorPipeline pipeline;
     private final CooldownProcessor cooldownProcessor;
 
+    /**
+     * Creates a command executor.
+     *
+     * @param plugin            Plugin instance
+     * @param pipeline          Processor pipeline
+     * @param cooldownProcessor Cooldown processor
+     */
     public CommandExecutor(
             JavaPlugin plugin,
             ProcessorPipeline pipeline,
@@ -263,7 +270,7 @@ public class CommandExecutor {
             sender.sendMessage(
                     CommandMessages.COMMAND_FAILED.get()
                             .hoverEvent(Component.text(cause.getMessage(), NamedTextColor.GRAY)));
-                LOGGER.debug("Command execution failed", cause);
+            LOGGER.debug("Command execution failed", cause);
         }
 
         return 0;

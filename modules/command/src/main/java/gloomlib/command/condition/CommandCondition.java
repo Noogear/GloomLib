@@ -24,6 +24,9 @@ public interface CommandCondition {
 
     /**
      * Condition check result.
+     *
+     * @param passed         Whether the condition passed
+     * @param failureMessage Optional failure message (null if passed)
      */
     record ConditionResult(boolean passed, @Nullable Component failureMessage) {
 
@@ -34,6 +37,8 @@ public interface CommandCondition {
 
         /**
          * Creates a passed result.
+         *
+         * @return Passed result
          */
         public static ConditionResult pass() {
             return PASS;
@@ -43,6 +48,7 @@ public interface CommandCondition {
          * Creates a failed result.
          *
          * @param message Failure message
+         * @return Failed result
          */
         public static ConditionResult fail(Component message) {
             return new ConditionResult(false, message);
@@ -52,6 +58,7 @@ public interface CommandCondition {
          * Creates a failed result (plain text).
          *
          * @param message Failure message
+         * @return Failed result
          */
         public static ConditionResult fail(String message) {
             return new ConditionResult(false, Component.text(message));

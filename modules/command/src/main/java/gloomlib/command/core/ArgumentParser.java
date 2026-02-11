@@ -34,6 +34,7 @@ import java.lang.reflect.Parameter;
  * </ul>
  *
  * <h2>Parameter Resolution Flow</h2>
+ * 
  * <pre>
  * Parameter
  *    ↓
@@ -60,6 +61,12 @@ public class ArgumentParser {
     private final ArgumentResolverRegistry resolverRegistry;
     private final ValidationProcessor validationProcessor;
 
+    /**
+     * Creates an argument parser.
+     *
+     * @param plugin           Plugin instance
+     * @param resolverRegistry Argument resolver registry
+     */
     public ArgumentParser(JavaPlugin plugin, ArgumentResolverRegistry resolverRegistry) {
         this.plugin = plugin;
         this.resolverRegistry = resolverRegistry;

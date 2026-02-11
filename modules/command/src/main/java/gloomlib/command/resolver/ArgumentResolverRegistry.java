@@ -11,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Argument Resolver Registry with 3-level cache strategy.
  *
  * <h2>Cache Strategy</h2>
+ * 
  * <pre>
  * Level 1: Direct type lookup → resolvers.get(type)
  *    ↓ (miss)
@@ -21,7 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * Fallback: Enum resolver creation (if type.isEnum())
  * </pre>
  *
- * @implNote Performance:
+ * <br>
+ * <b>Implementation Note:</b> Performance:
  * <ul>
  * <li><b>Cache hit</b>: O(1) lookup via resolverCache</li>
  * <li><b>Cache miss</b>: O(n) scan of registered resolvers, then cached</li>
@@ -124,8 +126,7 @@ public class ArgumentResolverRegistry {
 
         ArgumentResolver<?> resolver = BrigadierResolver.of(
                 enumClass,
-                param -> com.mojang.brigadier.arguments.StringArgumentType.word()
-        );
+                param -> com.mojang.brigadier.arguments.StringArgumentType.word());
 
         LOGGER.debug(MSG_ENUM_RESOLVER_CREATED, enumType.getSimpleName());
         return resolver;

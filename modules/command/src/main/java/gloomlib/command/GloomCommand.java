@@ -55,6 +55,7 @@ import java.util.Set;
  * <h2>Command Class Example</h2>
  *
  * <pre>
+ * {@code
  * {
  *     &#64;code
  *     &#64;Command("gamemode")
@@ -69,7 +70,7 @@ import java.util.Set;
  *             player.sendMessage(Component.text("Switched to " + mode.name()));
  *         }
  *     }
- * }
+ * }}
  * </pre>
  */
 public final class GloomCommand {
@@ -138,8 +139,7 @@ public final class GloomCommand {
                     // Register all pending commands
                     for (Object command : pendingCommands) {
                         Set<String> actualNames = commandRegistry.registerCommand(
-                                command, commands, plugin.getPluginMeta()
-                        );
+                                command, commands, plugin.getPluginMeta());
 
                         if (actualNames != null && !actualNames.isEmpty()) {
                             tracker.track(command, actualNames);
@@ -164,8 +164,7 @@ public final class GloomCommand {
                     LifecycleEvents.COMMANDS,
                     event -> {
                         Set<String> actualNames = commandRegistry.registerCommand(
-                                commandInstance, event.registrar(), plugin.getPluginMeta()
-                        );
+                                commandInstance, event.registrar(), plugin.getPluginMeta());
 
                         if (actualNames != null && !actualNames.isEmpty()) {
                             tracker.track(commandInstance, actualNames);

@@ -20,13 +20,13 @@ import java.util.List;
  *
  * <p>
  * Automatically generates beautiful command help with:
+ * </p>
  * <ul>
  * <li>Click events to suggest commands</li>
  * <li>Hover events to show detailed descriptions</li>
  * <li>MiniMessage formatting for colors and gradients</li>
  * <li>Interactive pagination controls</li>
  * </ul>
- * </p>
  */
 public class CommandHelp {
 
@@ -158,8 +158,7 @@ public class CommandHelp {
         Component header = CommandMessages.HELP_HEADER.get(
                 separator,
                 commandName.toUpperCase(),
-                separator
-        );
+                separator);
         sender.sendMessage(header);
 
         // Entries with rich interactions
@@ -170,7 +169,8 @@ public class CommandHelp {
             HelpEntry entry = visibleEntries.get(i);
 
             // Build detailed hover text
-            String description = entry.description.isEmpty() ? CommandMessages.HELP_NO_DESC.fallback() : entry.description;
+            String description = entry.description.isEmpty() ? CommandMessages.HELP_NO_DESC.fallback()
+                    : entry.description;
             Component hoverText = Component.text()
                     .append(CommandMessages.HELP_HOVER_COMMAND.get(entry.usage))
                     .append(Component.newline())
@@ -192,9 +192,9 @@ public class CommandHelp {
             Component descComponent = entry.description.isEmpty()
                     ? Component.empty()
                     : Component.text()
-                    .append(Component.newline())
-                    .append(CommandMessages.HELP_DESC_PREFIX.get(entry.description))
-                    .build();
+                            .append(Component.newline())
+                            .append(CommandMessages.HELP_DESC_PREFIX.get(entry.description))
+                            .build();
 
             sender.sendMessage(usageComponent.append(descComponent));
         }
@@ -205,29 +205,25 @@ public class CommandHelp {
 
             String footerSeparator = "=".repeat(15);
             Component footer = CommandMessages.HELP_SEPARATOR.get(
-                    footerSeparator + " " + CommandMessages.HELP_PAGE_INFO.get(page, totalPages) + " " + footerSeparator
-            );
+                    footerSeparator + " " + CommandMessages.HELP_PAGE_INFO.get(page, totalPages) + " "
+                            + footerSeparator);
             sender.sendMessage(footer);
 
             // Interactive pagination buttons
             Component prevButton = page > 1
                     ? CommandMessages.HELP_PREV_BUTTON.get()
-                    .clickEvent(ClickEvent.runCommand(String.format("/%s help %d", commandName, page - 1)))
-                    .hoverEvent(HoverEvent.showText(
-                            MessageUtils.MINI_MESSAGE.deserialize(
-                                    CommandMessages.HELP_GOTO_PAGE.get(page - 1).toString()
-                            )
-                    ))
+                            .clickEvent(ClickEvent.runCommand(String.format("/%s help %d", commandName, page - 1)))
+                            .hoverEvent(HoverEvent.showText(
+                                    MessageUtils.MINI_MESSAGE.deserialize(
+                                            CommandMessages.HELP_GOTO_PAGE.get(page - 1).toString())))
                     : CommandMessages.HELP_PREV_DISABLED.get();
 
             Component nextButton = page < totalPages
                     ? CommandMessages.HELP_NEXT_BUTTON.get()
-                    .clickEvent(ClickEvent.runCommand(String.format("/%s help %d", commandName, page + 1)))
-                    .hoverEvent(HoverEvent.showText(
-                            MessageUtils.MINI_MESSAGE.deserialize(
-                                    CommandMessages.HELP_GOTO_PAGE.get(page + 1).toString()
-                            )
-                    ))
+                            .clickEvent(ClickEvent.runCommand(String.format("/%s help %d", commandName, page + 1)))
+                            .hoverEvent(HoverEvent.showText(
+                                    MessageUtils.MINI_MESSAGE.deserialize(
+                                            CommandMessages.HELP_GOTO_PAGE.get(page + 1).toString())))
                     : CommandMessages.HELP_NEXT_DISABLED.get();
 
             Component pageHint = Component.text()

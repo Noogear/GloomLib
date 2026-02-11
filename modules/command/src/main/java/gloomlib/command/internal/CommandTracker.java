@@ -13,6 +13,12 @@ public final class CommandTracker {
     private final Set<Object> instances = ConcurrentHashMap.newKeySet();
     private final Map<String, Set<String>> aliases = new ConcurrentHashMap<>();
 
+    /**
+     * Tracks a command instance.
+     *
+     * @param instance Command instance
+     * @param names    Command names (aliases)
+     */
     public void track(Object instance, Set<String> names) {
         instances.add(instance);
 
@@ -22,6 +28,12 @@ public final class CommandTracker {
         }
     }
 
+    /**
+     * Untracks a command.
+     *
+     * @param commandName Command name
+     * @return true if found and removed
+     */
     public boolean untrack(String commandName) {
         Set<String> names = aliases.remove(commandName.toLowerCase());
         if (names != null) {

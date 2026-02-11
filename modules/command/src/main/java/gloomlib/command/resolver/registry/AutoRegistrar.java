@@ -16,7 +16,8 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Automatically discovers and registers Paper ArgumentTypes.
  *
- * @implNote Thread-safe caching using AtomicReference.
+ * <br>
+ * <b>Implementation Note:</b> Thread-safe caching using AtomicReference.
  */
 public final class AutoRegistrar {
 
@@ -98,13 +99,13 @@ public final class AutoRegistrar {
                 continue;
             }
 
-                String params = "";
+            String params = "";
             if (info.parameterCount() > 0) {
                 params = new StringBuilder()
-                    .append(" (defaults: ")
-                    .append(info.getParameterDescription())
-                    .append(')')
-                    .toString();
+                        .append(" (defaults: ")
+                        .append(info.getParameterDescription())
+                        .append(')')
+                        .toString();
             }
 
             String methodName = new StringBuilder()
@@ -112,10 +113,10 @@ public final class AutoRegistrar {
                     .append("()")
                     .toString();
 
-                    appendDebugLine(sb, String.format("  %-30s -> %-25s%s",
-                        methodName,
-                        info.targetType().getSimpleName(),
-                        params));
+            appendDebugLine(sb, String.format("  %-30s -> %-25s%s",
+                    methodName,
+                    info.targetType().getSimpleName(),
+                    params));
 
             if (info.parameterCount() == 0) {
                 parameterless++;
@@ -199,8 +200,7 @@ public final class AutoRegistrar {
                 args[i] = getIntArgument(methodName, param);
             } else {
                 throw new IllegalArgumentException(
-                        "不支持的参数类型: " + paramTypes[i].getName()
-                );
+                        "不支持的参数类型: " + paramTypes[i].getName());
             }
         }
 
@@ -215,7 +215,7 @@ public final class AutoRegistrar {
         return true;
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     private static int getIntArgument(String methodName, java.lang.reflect.Parameter param) {
         if (param != null) {
             try {
@@ -248,8 +248,7 @@ public final class AutoRegistrar {
                 args[i] = 0;
             } else {
                 throw new IllegalArgumentException(
-                        "不支持的参数类型: " + parameterTypes[i].getName()
-                );
+                        "不支持的参数类型: " + parameterTypes[i].getName());
             }
         }
 
@@ -316,8 +315,8 @@ public final class AutoRegistrar {
 
         for (Map.Entry<String, List<TypeInfo>> entry : byCategory.entrySet()) {
             appendDebugLine(sb, String.format("Category: %s (%d types)",
-                entry.getKey(),
-                entry.getValue().size()));
+                    entry.getKey(),
+                    entry.getValue().size()));
 
             for (TypeInfo info : entry.getValue()) {
                 String methodName = new StringBuilder()
@@ -329,8 +328,8 @@ public final class AutoRegistrar {
                         : "Unknown";
 
                 String params = info.parameterCount() > 0
-                    ? " [params: " + info.parameterCount() + "]"
-                    : "";
+                        ? " [params: " + info.parameterCount() + "]"
+                        : "";
                 appendDebugLine(sb, String.format("  %-25s -> %-30s%s", methodName, targetName, params));
             }
 
@@ -373,8 +372,7 @@ public final class AutoRegistrar {
                     parameterTypes.length,
                     parameterTypes,
                     canAutoInvoke(parameterTypes),
-                    method
-            );
+                    method);
 
         } catch (Exception e) {
             return null;
@@ -459,8 +457,7 @@ public final class AutoRegistrar {
             int parameterCount,
             @NotNull Class<?>[] parameterTypes,
             boolean canAutoInvoke,
-            @NotNull Method method
-    ) {
+            @NotNull Method method) {
         public String getParameterDescription() {
             if (parameterCount == 0) {
                 return "无参数";
@@ -468,7 +465,8 @@ public final class AutoRegistrar {
 
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < parameterTypes.length; i++) {
-                if (i > 0) sb.append(", ");
+                if (i > 0)
+                    sb.append(", ");
                 sb.append(parameterTypes[i].getSimpleName());
             }
             return sb.toString();

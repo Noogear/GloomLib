@@ -360,6 +360,12 @@ public class CommandBuilder {
         /**
          * Adds aliases.
          */
+        /**
+         * Adds aliases.
+         *
+         * @param aliases Subcommand aliases
+         * @return this
+         */
         public SubCommandBuilder aliases(String... aliases) {
             this.aliases.addAll(Arrays.asList(aliases));
             return this;
@@ -367,6 +373,12 @@ public class CommandBuilder {
 
         /**
          * Sets permission.
+         */
+        /**
+         * Sets permission.
+         *
+         * @param permission Permission node
+         * @return this
          */
         public SubCommandBuilder permission(String permission) {
             this.permission = permission;
@@ -376,6 +388,12 @@ public class CommandBuilder {
         /**
          * Sets execution requirement.
          */
+        /**
+         * Sets execution requirement.
+         *
+         * @param requirement Requirement predicate
+         * @return this
+         */
         public SubCommandBuilder requires(Predicate<CommandSender> requirement) {
             this.requirement = requirement;
             return this;
@@ -383,6 +401,11 @@ public class CommandBuilder {
 
         /**
          * Restricts to players only.
+         */
+        /**
+         * Restricts to players only.
+         *
+         * @return this
          */
         public SubCommandBuilder playerOnly() {
             this.requirement = sender -> sender instanceof Player;
@@ -392,6 +415,12 @@ public class CommandBuilder {
         /**
          * Sets executor.
          */
+        /**
+         * Sets executor.
+         *
+         * @param executor Command executor
+         * @return this
+         */
         public SubCommandBuilder executes(Consumer<GloomCommandContext> executor) {
             this.executor = executor;
             return this;
@@ -399,6 +428,14 @@ public class CommandBuilder {
 
         /**
          * Adds argument.
+         */
+        /**
+         * Adds argument.
+         *
+         * @param name         Argument name
+         * @param argumentType Brigadier argument type
+         * @param <T>          Argument type
+         * @return Argument builder
          */
         public <T> ArgumentBuilder<T> argument(String name, ArgumentType<T> argumentType) {
             ArgumentBuilder<T> argBuilder = new ArgumentBuilder<>(parent, name, argumentType);
@@ -409,6 +446,12 @@ public class CommandBuilder {
         /**
          * Adds subcommand.
          */
+        /**
+         * Adds subcommand.
+         *
+         * @param name Subcommand name
+         * @return Subcommand builder
+         */
         public SubCommandBuilder subCommand(String name) {
             SubCommandBuilder subBuilder = new SubCommandBuilder(parent, name);
             subCommands.add(subBuilder);
@@ -417,6 +460,11 @@ public class CommandBuilder {
 
         /**
          * Returns parent builder.
+         */
+        /**
+         * Returns parent builder.
+         *
+         * @return Parent builder
          */
         public CommandBuilder end() {
             return parent;

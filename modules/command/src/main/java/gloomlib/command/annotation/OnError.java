@@ -18,6 +18,7 @@ import java.lang.annotation.Target;
  * </p>
  *
  * <pre>
+ * {@code
  * {
  *     &#64;code
  *     &#64;Command("rank")
@@ -33,7 +34,7 @@ import java.lang.annotation.Target;
  *             context.getSender().sendMessage(Component.text("Invalid argument: " + e.getMessage()));
  *         }
  *     }
- * }
+ * }}
  * </pre>
  */
 @Target(ElementType.METHOD)

@@ -13,8 +13,8 @@ import java.lang.annotation.Target;
  * </p>
  *
  * <pre>
+ * {@code
  * {
- *     &#64;code
  *     &#64;Command("economy")
  *     public class EconomyCommand {
  *
@@ -30,7 +30,7 @@ import java.lang.annotation.Target;
  *             // ...
  *         }
  *     }
- * }
+ * }}
  * </pre>
  */
 @Target(ElementType.FIELD)

@@ -35,6 +35,7 @@ import java.util.Map;
  * </ul>
  *
  * <h2>Tree Structure Example</h2>
+ * 
  * <pre>
  * /gamemode [mode] [player]
  *    ↓
@@ -52,6 +53,11 @@ public class BrigadierTreeBuilder {
     private final ArgumentResolverRegistry resolverRegistry;
     private final Map<Class<? extends SuggestionProvider>, SuggestionProvider> suggestionCache = new HashMap<>();
 
+    /**
+     * Creates a tree builder.
+     *
+     * @param resolverRegistry Argument resolver registry
+     */
     public BrigadierTreeBuilder(ArgumentResolverRegistry resolverRegistry) {
         this.resolverRegistry = resolverRegistry;
     }

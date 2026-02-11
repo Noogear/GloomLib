@@ -9,7 +9,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * High-performance method invocation via MethodHandle.
  *
- * @implNote Performance: Cold start ~50-100x slower, Warm ~3-5x faster than reflection, Hot ~1.1-1.5x overhead.
+ * <br>
+ * <b>Implementation Note:</b> Performance: Cold start ~50-100x slower, Warm
+ * ~3-5x faster than reflection, Hot ~1.1-1.5x overhead.
  */
 public class MethodInvoker {
 

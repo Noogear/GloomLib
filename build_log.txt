@@ -1,0 +1,633 @@
+> Task :modules:build:clean
+> Task :modules:clean
+> Task :modules:build:compileJava NO-SOURCE
+> Task :modules:compileJava NO-SOURCE
+> Task :modules:processResources NO-SOURCE
+> Task :modules:build:processResources NO-SOURCE
+> Task :modules:classes UP-TO-DATE
+> Task :modules:build:classes UP-TO-DATE
+> Task :modules:jar
+> Task :modules:build:jar
+> Task :modules:build:javadoc NO-SOURCE
+> Task :modules:javadoc NO-SOURCE
+> Task :modules:build:javadocJar
+> Task :modules:javadocJar
+> Task :modules:build:sourcesJar
+> Task :modules:sourcesJar
+> Task :modules:build:assemble
+> Task :modules:assemble
+> Task :modules:build:checkstyleMain NO-SOURCE
+> Task :modules:checkstyleMain NO-SOURCE
+> Task :modules:build:compileTestJava NO-SOURCE
+> Task :modules:compileTestJava NO-SOURCE
+> Task :modules:processTestResources NO-SOURCE
+> Task :modules:build:processTestResources NO-SOURCE
+> Task :modules:testClasses UP-TO-DATE
+> Task :modules:build:testClasses UP-TO-DATE
+> Task :modules:checkstyleTest NO-SOURCE
+> Task :modules:build:checkstyleTest NO-SOURCE
+> Task :modules:build:test NO-SOURCE
+> Task :modules:test NO-SOURCE
+> Task :modules:build:check UP-TO-DATE
+> Task :modules:build:build
+> Task :modules:check UP-TO-DATE
+> Task :modules:build
+> Task :modules:command:clean
+> Task :modules:configuration:clean
+> Task :modules:gui:clean
+> Task :modules:translation:clean
+> Task :modules:translation:compileJava FROM-CACHE
+> Task :modules:translation:processResources NO-SOURCE
+> Task :modules:translation:classes UP-TO-DATE
+> Task :modules:configuration:compileJava FROM-CACHE
+> Task :modules:configuration:processResources NO-SOURCE
+> Task :modules:configuration:classes UP-TO-DATE
+> Task :modules:translation:jar
+> Task :modules:gui:compileJava FROM-CACHE
+> Task :modules:gui:processResources NO-SOURCE
+> Task :modules:gui:classes UP-TO-DATE
+> Task :modules:command:compileJava FROM-CACHE
+> Task :modules:command:processResources
+> Task :modules:command:classes
+> Task :modules:configuration:jar
+> Task :modules:translation:javadoc FROM-CACHE
+> Task :modules:gui:jar
+> Task :modules:command:jar
+> Task :modules:configuration:javadoc FROM-CACHE
+> Task :modules:translation:javadocJar
+> Task :modules:translation:sourcesJar
+> Task :modules:translation:assemble
+> Task :modules:configuration:javadocJar
+> Task :modules:gui:javadoc FROM-CACHE
+> Task :modules:translation:checkstyleMain FROM-CACHE
+> Task :modules:configuration:sourcesJar
+> Task :modules:configuration:assemble
+> Task :modules:configuration:checkstyleMain FROM-CACHE
+> Task :modules:translation:compileTestJava FROM-CACHE
+> Task :modules:translation:processTestResources
+> Task :modules:translation:testClasses
+> Task :modules:configuration:compileTestJava FROM-CACHE
+> Task :modules:configuration:processTestResources NO-SOURCE
+> Task :modules:configuration:testClasses UP-TO-DATE
+> Task :modules:translation:checkstyleTest FROM-CACHE
+> Task :modules:configuration:checkstyleTest FROM-CACHE
+> Task :modules:gui:javadocJar
+> Task :modules:configuration:test FROM-CACHE
+> Task :modules:configuration:check UP-TO-DATE
+> Task :modules:configuration:build
+> Task :modules:gui:sourcesJar
+> Task :modules:gui:assemble
+> Task :modules:gui:checkstyleMain FROM-CACHE
+> Task :modules:translation:test FROM-CACHE
+> Task :modules:translation:check UP-TO-DATE
+> Task :modules:translation:build
+> Task :modules:gui:compileTestJava FROM-CACHE
+> Task :modules:gui:processTestResources NO-SOURCE
+> Task :modules:gui:testClasses UP-TO-DATE
+> Task :modules:gui:checkstyleTest FROM-CACHE
+> Task :modules:gui:test FROM-CACHE
+> Task :modules:gui:check UP-TO-DATE
+> Task :modules:gui:build
+
+> Task :modules:command:javadoc
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\annotation\Inject.java:15: ����: Ԫ��δ�ر�: pre
+ * <pre>
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\annotation\Inject.java:27: ����: δ֪���: Usage
+ *         @Usage
+           ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\annotation\Inject.java:34: ����: ����Ľ������: </pre>
+ * </pre>
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\annotation\OnError.java:20: ����: Ԫ��δ�ر�: pre
+ * <pre>
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\annotation\OnError.java:31: ����: δ֪���: OnError
+ *         @OnError({ IllegalArgumentException.class, NumberFormatException.class })
+           ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\annotation\OnError.java:37: ����: ����Ľ������: </pre>
+ * </pre>
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\condition\CommandCondition.java:28: ����: passedû�� @param
+    record ConditionResult(boolean passed, @Nullable Component failureMessage) {
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\condition\CommandCondition.java:28: ����: failureMessageû�� @param
+    record ConditionResult(boolean passed, @Nullable Component failureMessage) {
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\GloomCommand.java:57: ����: Ԫ��δ�ر�: pre
+ * <pre>
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\GloomCommand.java:66: ����: δ֪���: PlayerOnly
+ *         @PlayerOnly
+           ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\GloomCommand.java:73: ����: ����Ľ������: </pre>
+ * </pre>
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\help\CommandHelp.java:29: ����: ����Ľ������: </p>
+ * </p>
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\internal\BrigadierUnregister.java:15: ����: δ֪���: implNote
+ * @implNote Uses cached reflection for thread-safe atomic operations.
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:20: ����: ����Ľ������: </p>
+ * </p>
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\processor\MethodInvoker.java:12: ����: δ֪���: implNote
+ * @implNote Performance: Cold start ~50-100x slower, Warm ~3-5x faster than reflection, Hot ~1.1-1.5x overhead.
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\ArgumentResolverRegistry.java:24: ����: δ֪���: implNote
+ * @implNote Performance:
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\registry\AutoRegistrar.java:19: ����: δ֪���: implNote
+ * @implNote Thread-safe caching using AtomicReference.
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\registry\RegistryResolvers.java:13: ����: δ֪���: implNote
+ * @implNote Delegates to {@link RegistryTypesDiscovery} for type discovery.
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\registry\RegistryTypesDiscovery.java:28: ����: δ֪���: implNote
+ * @implNote Thread-safe singleton cache using AtomicReference for lazy initialization.
+   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\ArgumentParser.java:63: ����: û��ע��
+    public ArgumentParser(JavaPlugin plugin, ArgumentResolverRegistry resolverRegistry) {
+           ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\ArgumentResolverRegistry.java:31: ����: ʹ�ò��ṩע�͵�Ĭ�Ϲ�����
+public class ArgumentResolverRegistry {
+       ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\ArgumentResolverRegistry.java:99: ����: û��ע��
+    public void clearAllResolverCaches() {
+                ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\ArgumentResolverRegistry.java:95: ����: û��ע��
+    public void clearCache() {
+                ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\ArgumentResolverRegistry.java:113: ����: û��ע��
+    public Map<Class<?>, ArgumentResolver<?>> getAllResolvers() {
+                                              ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\ArgumentResolverRegistry.java:54: ����: û��ע��
+    public <T> @Nullable ArgumentResolver<T> getResolver(Class<T> type) {
+                                             ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\ArgumentResolverRegistry.java:109: ����: û��ע��
+    public boolean hasResolver(Class<?> type) {
+                   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\ArgumentResolverRegistry.java:49: ����: û��ע��
+    public <T> void register(Class<T> type, ArgumentResolver<T> resolver) {
+                    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\registry\AutoRegistrar.java:456: ����: û��ע��
+    public record TypeInfo(
+           ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\registry\AutoRegistrar.java:300: ����: û��ע��
+    public static Map<String, List<TypeInfo>> groupByCategory() {
+                                              ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\registry\AutoRegistrar.java:87: ����: û��ע��
+    public static void listAutoRegisterableTypes() {
+                       ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\registry\AutoRegistrar.java:311: ����: û��ע��
+    public static void printAllTypes() {
+                       ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\registry\AutoRegistrar.java:464: ����: û��ע��
+        public String getParameterDescription() {
+                      ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\registry\BrigadierResolver.java:44: ����: û��ע��
+    public static <T> BrigadierResolver<T> of(
+                                           ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\registry\BrigadierResolver.java:38: ����: û��ע��
+    public static <T> BrigadierResolver<T> of(
+                                           ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\BrigadierTreeBuilder.java:55: ����: û��ע��
+    public BrigadierTreeBuilder(ArgumentResolverRegistry resolverRegistry) {
+           ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\BrigadierTreeBuilder.java:210: ����: û��ע��
+        int execute(CommandContext<CommandSourceStack> ctx) throws Exception;
+            ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\internal\BrigadierUnregister.java:25: ����: û��ע��
+    public static boolean unregisterCommand(Commands commands, String commandName) {
+                          ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\resolver\registry\BuiltInResolvers.java:18: ����: û��ע��
+    public static void registerAll(@NotNull ArgumentResolverRegistry registry) {
+                       ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:247: ����: û�� @return
+    public String getName() {
+                  ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:254: ����: û�� @return
+    public String getDescription() {
+                  ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:261: ����: û�� @return
+    public List<String> getAliases() {
+                        ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:363: ����: aliasesû�� @param
+        public SubCommandBuilder aliases(String... aliases) {
+                                 ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:363: ����: û�� @return
+        public SubCommandBuilder aliases(String... aliases) {
+                                 ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:371: ����: permissionû�� @param
+        public SubCommandBuilder permission(String permission) {
+                                 ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:371: ����: û�� @return
+        public SubCommandBuilder permission(String permission) {
+                                 ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:379: ����: requirementû�� @param
+        public SubCommandBuilder requires(Predicate<CommandSender> requirement) {
+                                 ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:379: ����: û�� @return
+        public SubCommandBuilder requires(Predicate<CommandSender> requirement) {
+                                 ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:387: ����: û�� @return
+        public SubCommandBuilder playerOnly() {
+                                 ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:395: ����: executorû�� @param
+        public SubCommandBuilder executes(Consumer<GloomCommandContext> executor) {
+                                 ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:395: ����: û�� @return
+        public SubCommandBuilder executes(Consumer<GloomCommandContext> executor) {
+                                 ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:403: ����: <T>û�� @param
+        public <T> ArgumentBuilder<T> argument(String name, ArgumentType<T> argumentType) {
+                                      ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:403: ����: nameû�� @param
+        public <T> ArgumentBuilder<T> argument(String name, ArgumentType<T> argumentType) {
+                                      ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:403: ����: argumentTypeû�� @param
+        public <T> ArgumentBuilder<T> argument(String name, ArgumentType<T> argumentType) {
+                                      ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:403: ����: û�� @return
+        public <T> ArgumentBuilder<T> argument(String name, ArgumentType<T> argumentType) {
+                                      ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:412: ����: nameû�� @param
+        public SubCommandBuilder subCommand(String name) {
+                                 ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:412: ����: û�� @return
+        public SubCommandBuilder subCommand(String name) {
+                                 ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandBuilder.java:421: ����: û�� @return
+        public CommandBuilder end() {
+                              ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\condition\CommandCondition.java:38: ����: û�� @return
+        public static ConditionResult pass() {
+                                      ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\condition\CommandCondition.java:47: ����: û�� @return
+        public static ConditionResult fail(Component message) {
+                                      ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\condition\CommandCondition.java:56: ����: û�� @return
+        public static ConditionResult fail(String message) {
+                                      ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\condition\CommandConditionRegistry.java:15: ����: ʹ�ò��ṩע�͵�Ĭ�Ϲ�����
+public class CommandConditionRegistry {
+       ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\core\CommandExecutor.java:50: ����: û��ע��
+    public CommandExecutor(
+           ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:68: ����: û��ע��
+    ARG_COLOR_INVALID("argument.color.invalid", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:67: ����: û��ע��
+    ARG_GAMEMODE_INVALID("argument.gamemode.invalid", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:69: ����: û��ע��
+    ARG_MATERIAL_INVALID("argument.item.id.invalid", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:84: ����: û��ע��
+    COMMAND_FAILED("command.failed", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:85: ����: û��ע��
+    COMMAND_UNKNOWN_ARG("command.unknown.argument", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:63: ����: û��ע��
+    COOLDOWN_WAIT("command.cooldown.wait", "<red>Please wait {0}!</red>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:79: ����: û��ע��
+    DOUBLE_TOO_HIGH("argument.double.big", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:78: ����: û��ע��
+    DOUBLE_TOO_LOW("argument.double.low", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:81: ����: û��ע��
+    FLOAT_TOO_HIGH("argument.float.big", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:80: ����: û��ע��
+    FLOAT_TOO_LOW("argument.float.low", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:39: ����: û��ע��
+    HELP_DESC_PREFIX("command.help.desc_prefix", "<gray>     ? {0}</gray>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:49: ����: û��ע��
+    HELP_GOTO_PAGE("command.help.goto_page", "Go to page {0}", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:36: ����: û��ע��
+    HELP_HEADER("command.help.header", "<gold><bold>{0} HELP {1}</bold></gold>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:43: ����: û��ע��
+    HELP_HOVER_CLICK("command.help.hover.click", "<aqua><italic>? Click to fill command</italic></aqua>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:41: ����: û��ע��
+    HELP_HOVER_COMMAND("command.help.hover.command", "<gold>Command: </gold><white>{0}</white>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:42: ����: û��ע��
+    HELP_HOVER_DESCRIPTION("command.help.hover.description", "<gold>Description: </gold><gray>{0}</gray>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:46: ����: û��ע��
+    HELP_NEXT_BUTTON("command.help.next_button", "<green><bold>[Next ��]</bold></green>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:48: ����: û��ע��
+    HELP_NEXT_DISABLED("command.help.next_disabled", "<dark_gray>[Next ��]</dark_gray>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:35: ����: û��ע��
+    HELP_NO_COMMANDS("command.help.no_commands", "<gray>No commands available.</gray>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:40: ����: û��ע��
+    HELP_NO_DESC("command.help.no_desc", "No description", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:44: ����: û��ע��
+    HELP_PAGE_INFO("command.help.page_info", "<yellow>Page {0}/{1}</yellow>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:50: ����: û��ע��
+    HELP_PAGE_SEPARATOR("command.help.page_separator", "<dark_gray>  |  </dark_gray>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:45: ����: û��ע��
+    HELP_PREV_BUTTON("command.help.prev_button", "<green><bold>[�� Prev]</bold></green>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:47: ����: û��ע��
+    HELP_PREV_DISABLED("command.help.prev_disabled", "<dark_gray>[�� Prev]</dark_gray>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:37: ����: û��ע��
+    HELP_SEPARATOR("command.help.separator", "<gold>{0}</gold>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:38: ����: û��ע��
+    HELP_USAGE_PREFIX("command.help.usage_prefix", "<dark_gray>  ? </dark_gray>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:77: ����: û��ע��
+    INTEGER_TOO_HIGH("argument.integer.big", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:76: ����: û��ע��
+    INTEGER_TOO_LOW("argument.integer.low", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:88: ����: û��ע��
+    NO_PERMISSION("commands.help.failed", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:70: ����: û��ע��
+    PLAYER_NOT_FOUND("argument.entity.notfound.player", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:72: ����: û��ע��
+    PLAYER_UNKNOWN("argument.player.unknown", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:73: ����: û��ע��
+    POS_MISSING("argument.pos.missing.double", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:89: ����: û��ע��
+    REQUIRES_PLAYER("permissions.requires.player", null, true);
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:71: ����: û��ע��
+    SELECTOR_UNKNOWN("argument.entity.selector.unknown", null, true),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:58: ����: û��ע��
+    VALIDATION_DURATION_EMPTY("command.validation.duration_empty", "<red>Duration cannot be empty!</red>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:59: ����: û��ע��
+    VALIDATION_DURATION_INVALID("command.validation.duration_invalid", "<red>Invalid duration: {0} (e.g. 1d2h30m)</red>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:60: ����: û��ע��
+    VALIDATION_DURATION_POSITIVE("command.validation.duration_positive", "<red>Duration must be greater than 0!</red>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:53: ����: û��ע��
+    VALIDATION_EMPTY("command.validation.empty", "<red>Argument {0} cannot be empty!</red>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:57: ����: û��ע��
+    VALIDATION_ENUM_INVALID("command.validation.enum_invalid", "<red>Invalid value '{0}'. Allowed: {1}</red>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:56: ����: û��ע��
+    VALIDATION_LENGTH_MAX("command.validation.length_max", "<red>Argument {0} max length: {1}</red>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:55: ����: û��ע��
+    VALIDATION_LENGTH_MIN("command.validation.length_min", "<red>Argument {0} min length: {1}</red>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\message\CommandMessages.java:54: ����: û��ע��
+    VALIDATION_NULL("command.validation.null", "<red>Argument {0} cannot be null!</red>", false),
+    ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\internal\CommandMetadata.java:19: ����: û��ע��
+    public static String[] getAliases(Object instance) {
+                           ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\internal\CommandMetadata.java:14: ����: û��ע��
+    public static String getName(Object instance) {
+                         ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\processor\CommandProcessor.java:11: ����: û�� @return
+    default int getPriority() {
+                ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\internal\CommandTracker.java:11: ����: ʹ�ò��ṩע�͵�Ĭ�Ϲ�����
+public final class CommandTracker {
+             ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\internal\CommandTracker.java:16: ����: û��ע��
+    public void track(Object instance, Set<String> names) {
+                ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\internal\CommandTracker.java:25: ����: û��ע��
+    public boolean untrack(String commandName) {
+                   ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\processor\processors\CooldownProcessor.java:14: ����: ʹ�ò��ṩע�͵�Ĭ�Ϲ�����
+public class CooldownProcessor implements PreProcessor {
+       ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\processor\processors\CooldownProcessor.java:61: ����: û��ע��
+    public void clearCooldown(String commandName, UUID playerUuid) {
+                ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\processor\processors\CooldownProcessor.java:21: ����: û��ע��
+    public static String formatRemainingTime(long remainingMs) {
+                         ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\processor\processors\CooldownProcessor.java:43: ����: û��ע��
+    public long getRemainingCooldown(String commandName, UUID playerUuid) {
+                ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\processor\PreProcessor.java:11: ����: û��ע��
+    Result preProcess(GloomCommandContext context);
+           ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\processor\processors\CooldownProcessor.java:38: ����: û��ע��
+    public void setCooldown(String commandName, UUID playerUuid, long durationMs) {
+                ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\injection\DependencyInjector.java:17: ����: ʹ�ò��ṩע�͵�Ĭ�Ϲ�����
+public class DependencyInjector {
+       ^
+D:\myplugins\GloomLib\modules\command\src\main\java\gloomlib\command\processor\MethodInvoker.java:100: ����: ����Ľ������: </p>
+     * </p>
+       ^
+18 ������
+100 ������
+
+> Task :modules:command:javadoc FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':modules:command:javadoc'.
+> Javadoc generation failed. Generated Javadoc options file (useful for troubleshooting): 'D:\myplugins\GloomLib\modules\command\build\tmp\javadoc\javadoc.options'
+
+* Try:
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+* Exception is:
+org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':modules:command:javadoc'.
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.lambda$executeIfValid$1(ExecuteActionsTaskExecuter.java:130)
+	at org.gradle.internal.Try$Failure.ifSuccessfulOrElse(Try.java:293)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:128)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:41)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+Caused by: org.gradle.api.GradleException: Javadoc generation failed. Generated Javadoc options file (useful for troubleshooting): 'D:\myplugins\GloomLib\modules\command\build\tmp\javadoc\javadoc.options'
+	at org.gradle.api.tasks.javadoc.internal.JavadocGenerator.execute(JavadocGenerator.java:56)
+	at org.gradle.api.tasks.javadoc.internal.JavadocToolAdapter.execute(JavadocToolAdapter.java:37)
+	at org.gradle.api.tasks.javadoc.Javadoc.generate(Javadoc.java:179)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at org.gradle.internal.reflect.JavaMethod.invoke(JavaMethod.java:125)
+	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.doExecute(StandardTaskAction.java:58)
+	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.execute(StandardTaskAction.java:51)
+	at org.gradle.api.internal.project.taskfactory.StandardTaskAction.execute(StandardTaskAction.java:29)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$3.run(TaskExecution.java:244)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:30)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$1.execute(DefaultBuildOperationRunner.java:27)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.run(DefaultBuildOperationRunner.java:48)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeAction(TaskExecution.java:229)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeActions(TaskExecution.java:212)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.executeWithPreviousOutputFiles(TaskExecution.java:195)
+	at org.gradle.api.internal.tasks.execution.TaskExecution.execute(TaskExecution.java:162)
+	at org.gradle.internal.execution.steps.ExecuteStep.executeInternal(ExecuteStep.java:105)
+	at org.gradle.internal.execution.steps.ExecuteStep.access$000(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:59)
+	at org.gradle.internal.execution.steps.ExecuteStep$1.call(ExecuteStep.java:56)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:56)
+	at org.gradle.internal.execution.steps.ExecuteStep.execute(ExecuteStep.java:44)
+	at org.gradle.internal.execution.steps.CancelExecutionStep.execute(CancelExecutionStep.java:42)
+	at org.gradle.internal.execution.steps.TimeoutStep.executeWithoutTimeout(TimeoutStep.java:75)
+	at org.gradle.internal.execution.steps.TimeoutStep.execute(TimeoutStep.java:55)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:50)
+	at org.gradle.internal.execution.steps.PreCreateOutputParentsStep.execute(PreCreateOutputParentsStep.java:28)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:67)
+	at org.gradle.internal.execution.steps.RemovePreviousOutputsStep.execute(RemovePreviousOutputsStep.java:37)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:61)
+	at org.gradle.internal.execution.steps.BroadcastChangingOutputsStep.execute(BroadcastChangingOutputsStep.java:26)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:69)
+	at org.gradle.internal.execution.steps.CaptureOutputsAfterExecutionStep.execute(CaptureOutputsAfterExecutionStep.java:46)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:40)
+	at org.gradle.internal.execution.steps.ResolveInputChangesStep.execute(ResolveInputChangesStep.java:29)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithoutCache(BuildCacheStep.java:189)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeAndStoreInCache(BuildCacheStep.java:145)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$executeWithCache$4(BuildCacheStep.java:101)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$executeWithCache$5(BuildCacheStep.java:101)
+	at org.gradle.internal.Try$Success.map(Try.java:175)
+	at org.gradle.internal.execution.steps.BuildCacheStep.executeWithCache(BuildCacheStep.java:85)
+	at org.gradle.internal.execution.steps.BuildCacheStep.lambda$execute$0(BuildCacheStep.java:74)
+	at org.gradle.internal.Either$Left.fold(Either.java:115)
+	at org.gradle.internal.execution.caching.CachingState.fold(CachingState.java:62)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:73)
+	at org.gradle.internal.execution.steps.BuildCacheStep.execute(BuildCacheStep.java:48)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:46)
+	at org.gradle.internal.execution.steps.StoreExecutionStateStep.execute(StoreExecutionStateStep.java:35)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.executeBecause(SkipUpToDateStep.java:75)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.lambda$execute$2(SkipUpToDateStep.java:53)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:53)
+	at org.gradle.internal.execution.steps.SkipUpToDateStep.execute(SkipUpToDateStep.java:35)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:37)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsFinishedStep.execute(MarkSnapshottingInputsFinishedStep.java:27)
+	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:49)
+	at org.gradle.internal.execution.steps.ResolveIncrementalCachingStateStep.executeDelegate(ResolveIncrementalCachingStateStep.java:27)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:71)
+	at org.gradle.internal.execution.steps.AbstractResolveCachingStateStep.execute(AbstractResolveCachingStateStep.java:39)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:65)
+	at org.gradle.internal.execution.steps.ResolveChangesStep.execute(ResolveChangesStep.java:36)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:107)
+	at org.gradle.internal.execution.steps.ValidateStep.execute(ValidateStep.java:56)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:64)
+	at org.gradle.internal.execution.steps.AbstractCaptureStateBeforeExecutionStep.execute(AbstractCaptureStateBeforeExecutionStep.java:43)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.executeWithNonEmptySources(AbstractSkipEmptyWorkStep.java:125)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:61)
+	at org.gradle.internal.execution.steps.AbstractSkipEmptyWorkStep.execute(AbstractSkipEmptyWorkStep.java:36)
+	at org.gradle.internal.execution.steps.legacy.MarkSnapshottingInputsStartedStep.execute(MarkSnapshottingInputsStartedStep.java:38)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:36)
+	at org.gradle.internal.execution.steps.LoadPreviousExecutionStateStep.execute(LoadPreviousExecutionStateStep.java:23)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:75)
+	at org.gradle.internal.execution.steps.HandleStaleOutputsStep.execute(HandleStaleOutputsStep.java:41)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.lambda$execute$0(AssignMutableWorkspaceStep.java:35)
+	at org.gradle.api.internal.tasks.execution.TaskExecution$4.withWorkspace(TaskExecution.java:289)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:31)
+	at org.gradle.internal.execution.steps.AssignMutableWorkspaceStep.execute(AssignMutableWorkspaceStep.java:22)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:40)
+	at org.gradle.internal.execution.steps.ChoosePipelineStep.execute(ChoosePipelineStep.java:23)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.lambda$execute$2(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:67)
+	at org.gradle.internal.execution.steps.ExecuteWorkBuildOperationFiringStep.execute(ExecuteWorkBuildOperationFiringStep.java:39)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:46)
+	at org.gradle.internal.execution.steps.IdentityCacheStep.execute(IdentityCacheStep.java:34)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:48)
+	at org.gradle.internal.execution.steps.IdentifyStep.execute(IdentifyStep.java:35)
+	at org.gradle.internal.execution.impl.DefaultExecutionEngine$1.execute(DefaultExecutionEngine.java:64)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.executeIfValid(ExecuteActionsTaskExecuter.java:127)
+	at org.gradle.api.internal.tasks.execution.ExecuteActionsTaskExecuter.execute(ExecuteActionsTaskExecuter.java:116)
+	at org.gradle.api.internal.tasks.execution.ProblemsTaskPathTrackingTaskExecuter.execute(ProblemsTaskPathTrackingTaskExecuter.java:41)
+	at org.gradle.api.internal.tasks.execution.FinalizePropertiesTaskExecuter.execute(FinalizePropertiesTaskExecuter.java:46)
+	at org.gradle.api.internal.tasks.execution.ResolveTaskExecutionModeExecuter.execute(ResolveTaskExecutionModeExecuter.java:51)
+	at org.gradle.api.internal.tasks.execution.SkipTaskWithNoActionsExecuter.execute(SkipTaskWithNoActionsExecuter.java:57)
+	at org.gradle.api.internal.tasks.execution.SkipOnlyIfTaskExecuter.execute(SkipOnlyIfTaskExecuter.java:74)
+	at org.gradle.api.internal.tasks.execution.CatchExceptionTaskExecuter.execute(CatchExceptionTaskExecuter.java:36)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.executeTask(EventFiringTaskExecuter.java:77)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:55)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter$1.call(EventFiringTaskExecuter.java:52)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:210)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$CallableBuildOperationWorker.execute(DefaultBuildOperationRunner.java:205)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:67)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner$2.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:167)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.execute(DefaultBuildOperationRunner.java:60)
+	at org.gradle.internal.operations.DefaultBuildOperationRunner.call(DefaultBuildOperationRunner.java:54)
+	at org.gradle.api.internal.tasks.execution.EventFiringTaskExecuter.execute(EventFiringTaskExecuter.java:52)
+	at org.gradle.execution.plan.LocalTaskNodeExecutor.execute(LocalTaskNodeExecutor.java:42)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:331)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$InvokeNodeExecutorsAction.execute(DefaultTaskExecutionGraph.java:318)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.lambda$execute$0(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.internal.operations.CurrentBuildOperationRef.with(CurrentBuildOperationRef.java:85)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:314)
+	at org.gradle.execution.taskgraph.DefaultTaskExecutionGraph$BuildOperationAwareExecutionAction.execute(DefaultTaskExecutionGraph.java:303)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.execute(DefaultPlanExecutor.java:459)
+	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:376)
+	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:64)
+	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:48)
+Caused by: org.gradle.process.internal.ExecException: Process 'command 'C:\Program Files\Eclipse Adoptium\jdk-21.0.8.9-hotspot\bin\javadoc.exe'' finished with non-zero exit value 1
+	at org.gradle.process.internal.DefaultExecHandle$ExecResultImpl.assertNormalExitValue(DefaultExecHandle.java:442)
+	at org.gradle.process.internal.DefaultExecAction.execute(DefaultExecAction.java:49)
+	at org.gradle.api.tasks.javadoc.internal.JavadocGenerator.execute(JavadocGenerator.java:51)
+	... 126 more
+
+
+BUILD FAILED in 3s
+44 actionable tasks: 25 executed, 19 from cache
