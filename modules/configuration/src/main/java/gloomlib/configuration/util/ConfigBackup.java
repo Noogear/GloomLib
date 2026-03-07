@@ -1,5 +1,4 @@
 package gloomlib.configuration.util;
-
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
