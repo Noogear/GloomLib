@@ -2,39 +2,18 @@ package gloomlib.gui.util;
 
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BundleMeta;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * Utility class for Bundle item operations.
  */
 public final class BundleUtils {
 
-    private static final boolean BUNDLE_SUPPORTED;
-    private static Class<?> bundleContentsClass;
-    private static Class<?> dataComponentTypesClass;
-
-    static {
-        boolean supported = false;
-        try {
-            bundleContentsClass = Class.forName("org.bukkit.inventory.meta.BundleMeta");
-            dataComponentTypesClass = Class.forName("io.papermc.paper.datacomponent.DataComponentTypes");
-            supported = true;
-        } catch (ClassNotFoundException expected) {
-        }
-        BUNDLE_SUPPORTED = supported;
-    }
-
     private BundleUtils() {
-    }
-
-    /**
-     * Checks if the current server supports Bundles.
-     *
-     * @return true if supported
-     */
-    public static boolean isBundleSupported() {
-        return BUNDLE_SUPPORTED;
     }
 
     /**
@@ -44,10 +23,7 @@ public final class BundleUtils {
      * @return true if it is a Bundle
      */
     public static boolean isBundle(@Nullable ItemStack item) {
-        if (!BUNDLE_SUPPORTED || GuiItemUtils.isEmpty(item)) {
-            return false;
-        }
-        return item.getType() == Material.BUNDLE;
+        return !GuiItemUtils.isEmpty(item) && item.getType() == Material.BUNDLE;
     }
 
     /**
@@ -63,28 +39,22 @@ public final class BundleUtils {
             return new InsertResult(bundle, toInsert);
         }
 
-        try {
-            if (bundle.getItemMeta() instanceof org.bukkit.inventory.meta.BundleMeta bundleMeta) {
-                java.util.List<ItemStack> contents = bundleMeta.getItems();
+        if (bundle.getItemMeta() instanceof BundleMeta bundleMeta) {
+            List<ItemStack> contents = bundleMeta.getItems();
+            bundleMeta.addItem(toInsert.clone());
+            List<ItemStack> newContents = bundleMeta.getItems();
 
-                ItemStack cloned = toInsert.clone();
-                bundleMeta.addItem(cloned);
+            ItemStack newBundle = bundle.clone();
+            newBundle.setItemMeta(bundleMeta);
 
-                java.util.List<ItemStack> newContents = bundleMeta.getItems();
-
-                ItemStack newBundle = bundle.clone();
-                newBundle.setItemMeta(bundleMeta);
-
-                int inserted = getTotalAmount(newContents) - getTotalAmount(contents);
-                ItemStack remaining = null;
-                if (inserted < toInsert.getAmount()) {
-                    remaining = toInsert.clone();
-                    remaining.setAmount(toInsert.getAmount() - inserted);
-                }
-
-                return new InsertResult(newBundle, remaining);
+            int inserted = getTotalAmount(newContents) - getTotalAmount(contents);
+            ItemStack remaining = null;
+            if (inserted < toInsert.getAmount()) {
+                remaining = toInsert.clone();
+                remaining.setAmount(toInsert.getAmount() - inserted);
             }
-        } catch (Exception ignored) {
+
+            return new InsertResult(newBundle, remaining);
         }
 
         return new InsertResult(bundle, toInsert);
@@ -102,33 +72,26 @@ public final class BundleUtils {
             return new ExtractResult(bundle, null);
         }
 
-        try {
-            if (bundle.getItemMeta() instanceof org.bukkit.inventory.meta.BundleMeta bundleMeta) {
-                java.util.List<ItemStack> contents = bundleMeta.getItems();
-
-                if (contents.isEmpty()) {
-                    return new ExtractResult(bundle, null);
-                }
-
-                ItemStack extracted = contents.get(0).clone();
-                contents.remove(0);
-
-                bundleMeta.setItems(contents);
-                ItemStack newBundle = bundle.clone();
-                newBundle.setItemMeta(bundleMeta);
-
-                return new ExtractResult(newBundle, extracted);
+        if (bundle.getItemMeta() instanceof BundleMeta bundleMeta) {
+            List<ItemStack> contents = bundleMeta.getItems();
+            if (contents.isEmpty()) {
+                return new ExtractResult(bundle, null);
             }
-        } catch (Exception ignored) {
+
+            ItemStack extracted = contents.get(0).clone();
+            contents.remove(0);
+            bundleMeta.setItems(contents);
+
+            ItemStack newBundle = bundle.clone();
+            newBundle.setItemMeta(bundleMeta);
+            return new ExtractResult(newBundle, extracted);
         }
 
         return new ExtractResult(bundle, null);
     }
 
-    private static int getTotalAmount(java.util.List<ItemStack> items) {
-        return items.stream()
-                .mapToInt(ItemStack::getAmount)
-                .sum();
+    private static int getTotalAmount(List<ItemStack> items) {
+        return items.stream().mapToInt(ItemStack::getAmount).sum();
     }
 
     /**

@@ -1,6 +1,5 @@
 package gloomlib.gui.util;
 
-import org.bukkit.Material;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
@@ -15,13 +14,13 @@ public final class GuiItemUtils {
     }
 
     /**
-     * Checks if an item is empty.
+     * Checks if an item is empty (null, air, or zero amount).
      *
      * @param item the item to check
      * @return true if empty
      */
     public static boolean isEmpty(@Nullable ItemStack item) {
-        return item == null || item.getType() == Material.AIR || item.getAmount() <= 0;
+        return item == null || item.isEmpty();
     }
 
     /**
@@ -36,26 +35,6 @@ public final class GuiItemUtils {
             return false;
         }
         return a.isSimilar(b);
-    }
-
-    /**
-     * Gets the maximum stack size of an item.
-     *
-     * @param item the item
-     * @return the max stack size
-     */
-    public static int getMaxStackSize(@NotNull ItemStack item) {
-        return item.getMaxStackSize();
-    }
-
-    /**
-     * Creates an empty item.
-     *
-     * @return an empty ItemStack
-     */
-    @NotNull
-    public static ItemStack createEmpty() {
-        return new ItemStack(Material.AIR);
     }
 
     /**
@@ -90,7 +69,7 @@ public final class GuiItemUtils {
             return new AddResult(slotItem, toAdd);
         }
 
-        int maxStack = getMaxStackSize(slotItem);
+        int maxStack = slotItem.getMaxStackSize();
         int currentAmount = slotItem.getAmount();
         int toAddAmount = toAdd.getAmount();
         int totalAmount = currentAmount + toAddAmount;

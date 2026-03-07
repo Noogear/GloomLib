@@ -1,6 +1,7 @@
 [versions]
-paper = "1.21.11-R0.1-SNAPSHOT"
+paper = "1.21.1-R0.1-SNAPSHOT"
 shadow = "9.1.0"
+paperweight = "1.7.2"
 jetbrainsAnnotations = "24.1.0"
 junit = "5.10.1"
 mockito = "5.7.0"
@@ -18,3 +19,4 @@ mockbukkit = { group = "org.mockbukkit.mockbukkit", name = "mockbukkit-v1.21", v
 
 [plugins]
 shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
+paperweight-userdev = { id = "io.papermc.paperweight.userdev", version.ref = "paperweight" }

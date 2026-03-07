@@ -35,7 +35,6 @@ import java.util.Arrays;
  * </pre>
  */
 public enum CommandMessages {
-    // ===== Framework Messages (MiniMessage format) =====
     // Help system
     /** No commands available message. */
     HELP_NO_COMMANDS("command.help.no_commands", "<gray>No commands available.</gray>", false),
@@ -94,7 +93,6 @@ public enum CommandMessages {
     /** Cooldown wait message. */
     COOLDOWN_WAIT("command.cooldown.wait", "<red>Please wait {0}!</red>", false),
 
-    // ===== Vanilla Minecraft Messages (Built-in translation keys) =====
     // Argument errors
     /** Invalid gamemode error. */
     ARG_GAMEMODE_INVALID("argument.gamemode.invalid", null, true),

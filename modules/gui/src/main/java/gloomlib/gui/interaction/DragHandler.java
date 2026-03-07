@@ -1,6 +1,6 @@
 package gloomlib.gui.interaction;
 
-import org.bukkit.Material;
+import gloomlib.gui.util.GuiItemUtils;
 import org.bukkit.event.inventory.DragType;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
@@ -60,7 +60,7 @@ public final class DragHandler {
             ItemStack current = getSlotItem.apply(slot);
             int toAdd = Math.min(perSlot, remaining);
 
-            if (current == null || current.getType() == Material.AIR) {
+            if (GuiItemUtils.isEmpty(current)) {
                 ItemStack newStack = draggedItem.clone();
                 newStack.setAmount(toAdd);
                 updated.put(slot, newStack);
@@ -98,7 +98,7 @@ public final class DragHandler {
 
             ItemStack current = getSlotItem.apply(slot);
 
-            if (current == null || current.getType() == Material.AIR) {
+            if (GuiItemUtils.isEmpty(current)) {
                 ItemStack newStack = draggedItem.clone();
                 newStack.setAmount(1);
                 updated.put(slot, newStack);

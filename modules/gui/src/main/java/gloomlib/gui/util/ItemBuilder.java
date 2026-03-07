@@ -196,18 +196,14 @@ public class ItemBuilder {
     }
 
     /**
-     * Toggles the glow effect.
+     * Toggles the glow effect using Paper's enchantment glint override.
      *
      * @param glow true to glow
      * @return this builder
      */
     public ItemBuilder glow(boolean glow) {
-        if (glow) {
-            enchant(Enchantment.UNBREAKING, 1);
-            flags(ItemFlag.HIDE_ENCHANTS);
-        } else {
-            removeEnchant(Enchantment.UNBREAKING);
-            removeFlags(ItemFlag.HIDE_ENCHANTS);
+        if (meta != null) {
+            meta.setEnchantmentGlintOverride(glow);
         }
         return this;
     }

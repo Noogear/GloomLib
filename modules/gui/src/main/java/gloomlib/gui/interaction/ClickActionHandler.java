@@ -25,7 +25,7 @@ public final class ClickActionHandler {
      */
     @Nullable
     private static ClickResult tryExtractFromBundle(@Nullable ItemStack slotItem) {
-        if (!BundleUtils.isBundleSupported() || !BundleUtils.isBundle(slotItem)) {
+        if (!BundleUtils.isBundle(slotItem)) {
             return null;
         }
         BundleUtils.ExtractResult extractResult = BundleUtils.extractFromBundle(slotItem);
@@ -40,7 +40,7 @@ public final class ClickActionHandler {
      */
     @Nullable
     private static ClickResult tryInsertIntoBundle(@Nullable ItemStack slotItem, @NotNull ItemStack cursorItem) {
-        if (!BundleUtils.isBundleSupported() || !BundleUtils.isBundle(slotItem)) {
+        if (!BundleUtils.isBundle(slotItem)) {
             return null;
         }
         BundleUtils.InsertResult result = BundleUtils.insertIntoBundle(slotItem, cursorItem);
