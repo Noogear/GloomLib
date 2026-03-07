@@ -1,5 +1,6 @@
 package gloomlib.command.core.resolver.registry;
 
+import com.google.common.base.Suppliers;
 import com.mojang.brigadier.arguments.ArgumentType;
 import gloomlib.command.api.resolver.ArgumentResolver;
 import gloomlib.command.core.resolver.ArgumentResolverRegistry;
@@ -11,7 +12,7 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 /**
  * Automatically discovers and registers Paper ArgumentTypes.
@@ -24,7 +25,8 @@ public final class AutoRegistrar {
     private static final ComponentLogger LOGGER = ComponentLogger.logger(AutoRegistrar.class);
     private static final String LOG_PREFIX = "[AutoRegistrar]";
     private static final String ARGUMENT_TYPES_CLASS = "io.papermc.paper.command.brigadier.argument.ArgumentTypes";
-    private static final AtomicReference<List<TypeInfo>> CACHED_TYPES = new AtomicReference<>();
+    @SuppressWarnings("UnstableApiUsage")
+    private static final Supplier<List<TypeInfo>> CACHED_TYPES = Suppliers.memoize(AutoRegistrar::computeAllTypes);
 
     // Debug messages
     private static final String MSG_REGISTERED = LOG_PREFIX + " registered {}() -> {}";
@@ -135,11 +137,10 @@ public final class AutoRegistrar {
      * @return List of discovered type information
      */
     public static List<TypeInfo> discoverAllTypes() {
-        List<TypeInfo> cached = CACHED_TYPES.get();
-        if (cached != null) {
-            return cached;
-        }
+        return CACHED_TYPES.get();
+    }
 
+    private static List<TypeInfo> computeAllTypes() {
         try {
             Class<?> argumentTypesClass = Class.forName(ARGUMENT_TYPES_CLASS);
             Method[] methods = argumentTypesClass.getDeclaredMethods();
@@ -158,11 +159,7 @@ public final class AutoRegistrar {
             }
 
             discovered.sort(Comparator.comparing(TypeInfo::methodName));
-
-            // Atomic cache update
-            List<TypeInfo> immutable = List.copyOf(discovered);
-            CACHED_TYPES.compareAndSet(null, immutable);
-            return immutable;
+            return List.copyOf(discovered);
 
         } catch (ClassNotFoundException ignored) {
             // Paper API not available

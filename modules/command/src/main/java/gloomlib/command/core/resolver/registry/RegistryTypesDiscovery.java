@@ -8,6 +8,8 @@ import org.bukkit.Keyed;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import com.google.common.base.Suppliers;
+
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
@@ -15,7 +17,7 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 /**
  * Discovers and registers Paper Registry types automatically.
@@ -26,14 +28,15 @@ import java.util.concurrent.atomic.AtomicReference;
  * </p>
  *
  * <br>
- * <b>Implementation Note:</b> Thread-safe singleton cache using AtomicReference
- * for lazy initialization.
+ * <b>Implementation Note:</b> Thread-safe lazy initialization via
+ * {@link Suppliers#memoize(com.google.common.base.Supplier)}.
  */
 public final class RegistryTypesDiscovery {
 
     private static final ComponentLogger LOGGER = ComponentLogger.logger(RegistryTypesDiscovery.class);
     private static final String LOG_PREFIX = "[RegistryTypesDiscovery]";
-    private static final AtomicReference<List<RegistryTypeInfo>> CACHED_TYPES = new AtomicReference<>();
+    @SuppressWarnings("UnstableApiUsage")
+    private static final Supplier<List<RegistryTypeInfo>> CACHED_TYPES = Suppliers.memoize(RegistryTypesDiscovery::computeAll);
 
     // Debug log message templates
     private static final String MSG_REGISTERED_SUCCESS = LOG_PREFIX + " registered {} ({})";
@@ -79,11 +82,10 @@ public final class RegistryTypesDiscovery {
      * @return List of discovered Registry type information
      */
     public static List<RegistryTypeInfo> discoverAll() {
-        List<RegistryTypeInfo> cached = CACHED_TYPES.get();
-        if (cached != null) {
-            return cached;
-        }
+        return CACHED_TYPES.get();
+    }
 
+    private static List<RegistryTypeInfo> computeAll() {
         List<RegistryTypeInfo> discovered = new ArrayList<>();
 
         try {
@@ -101,15 +103,12 @@ public final class RegistryTypesDiscovery {
             }
 
             discovered.sort(Comparator.comparing(RegistryTypeInfo::fieldName));
-
-            // Atomic cache update
-            CACHED_TYPES.compareAndSet(null, List.copyOf(discovered));
+            return List.copyOf(discovered);
 
         } catch (Exception ignored) {
             // Silently handle discovery failures
+            return List.of();
         }
-
-        return CACHED_TYPES.get() != null ? CACHED_TYPES.get() : List.of();
     }
 
     /**

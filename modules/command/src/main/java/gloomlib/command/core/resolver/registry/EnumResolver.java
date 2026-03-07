@@ -11,7 +11,9 @@ import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.jetbrains.annotations.NotNull;
 
 import java.lang.reflect.Parameter;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * Enum argument resolver that reads a word argument as a {@link String} and
@@ -54,11 +56,9 @@ public final class EnumResolver<E extends Enum<E>> implements ArgumentResolver<E
                 return constant;
             }
         }
-        StringBuilder valid = new StringBuilder();
-        for (E constant : enumClass.getEnumConstants()) {
-            if (!valid.isEmpty()) valid.append(", ");
-            valid.append(constant.name());
-        }
+        String valid = Arrays.stream(enumClass.getEnumConstants())
+                .map(Enum::name)
+                .collect(Collectors.joining(", "));
         throw CommandSyntaxException.BUILT_IN_EXCEPTIONS
                 .literalIncorrect()
                 .create(value + " (expected one of: " + valid + ")");
