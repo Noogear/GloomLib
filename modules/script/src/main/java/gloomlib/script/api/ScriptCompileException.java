@@ -1,10 +1,6 @@
 package gloomlib.script.api;
 
-import gloomlib.diagnostic.Diagnostic;
-import gloomlib.diagnostic.DiagnosticCategory;
-import gloomlib.diagnostic.DiagnosticException;
-import gloomlib.diagnostic.SourceLocation;
-import gloomlib.diagnostic.SourceView;
+import gloomlib.diagnostic.*;
 import gloomlib.script.core.ScriptIR;
 
 import java.util.Map;
@@ -37,7 +33,6 @@ public class ScriptCompileException extends DiagnosticException {
         super(diagnostic, cause);
     }
 
-    // ======================== 工厂方法 — parse 阶段 ========================
 
     /**
      * 解析阶段错误（handler.parse() 中使用，此时尚无 FlowNode）。
@@ -69,7 +64,6 @@ public class ScriptCompileException extends DiagnosticException {
                 new Diagnostic(SourceLocation.UNKNOWN, DiagnosticCategory.PARSE, message, snippet));
     }
 
-    // ======================== 工厂方法 — emit/validate 阶段 ========================
 
     /**
      * 语义错误（emit/validate 阶段，从节点提取行号）。

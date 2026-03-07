@@ -1,23 +1,19 @@
 package gloomlib.script.core.handler;
 
-import gloomlib.script.core.ParseContext;
+import com.google.common.collect.ImmutableMap;
+import gloomlib.math.api.MathEngine;
+import gloomlib.math.api.MathNode;
+import gloomlib.math.api.MathParser;
+import gloomlib.math.core.MathNodeEmitter;
 import gloomlib.script.core.CompilationContext;
+import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.ScriptIR;
 import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.FlowNodeType;
 import gloomlib.script.core.ScriptIR.NodeCapability;
-import gloomlib.math.api.MathEngine;
-import gloomlib.math.api.MathNode;
-import gloomlib.math.core.MathNodeEmitter;
-import gloomlib.math.api.MathParser;
-import com.google.common.collect.ImmutableMap;
 import org.objectweb.asm.MethodVisitor;
 
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * MATH 节点处理器。
@@ -41,44 +37,6 @@ public class MathNodeHandler implements ScriptIR.FlowNodeHandler, ScriptIR.Varia
     public static void init() {
     }
 
-    @Override
-    public FlowNode parse(ParseContext ctx) {
-        String store = ctx.get("store");
-        String expr = ctx.get("expr");
-
-        if (store == null || expr == null) {
-            throw ctx.error("MATH node requires 'store' and 'expr' fields.");
-        }
-
-        MathNode root = MathParser.parse(expr);
-
-        ImmutableMap<String, Object> nodeAttrs = ImmutableMap.<String, Object>builder()
-                .put("store", store)
-                .put("expr", expr)
-                .put("mathNode", root)
-                .build();
-
-        return new FlowNode(FlowNodeType.valueOf("MATH"), nodeAttrs);
-    }
-
-    @Override
-    public void emit(FlowNode node, MethodVisitor mv, CompilationContext ctx) {
-        MathNode root = node.<MathNode>getRequiredAttr("mathNode");
-
-        // 直接将 MathNode AST 内联发射为 JVM 字节码（零间接调用，最优路径）
-        emitMathNode(root, mv, ctx);
-
-        // If not fused, we store to local variable array
-        String storeVar = node.getAttrOrDefault("store", null);
-        if (storeVar != null) {
-            int slot = ctx.getSlot(storeVar);
-            mv.visitVarInsn(org.objectweb.asm.Opcodes.DSTORE, slot);
-        } else {
-            // Fused path (stripProducedVariable was called), leaving double on stack
-            // Do nothing
-        }
-    }
-
     /**
      * 将 {@link MathNode} AST 发射为 JVM 字节码。
      * 委托给 {@link MathNodeEmitter}（统一实现，含幂整数特化）。
@@ -86,8 +44,6 @@ public class MathNodeHandler implements ScriptIR.FlowNodeHandler, ScriptIR.Varia
     public static void emitMathNode(MathNode node, MethodVisitor mv, CompilationContext ctx) {
         MathNodeEmitter.emit(node, mv, ctx.toVariableEmitter());
     }
-
-    // ======================== 批量预编译（Standalone 场景） ========================
 
     /**
      * 收集脚本中所有 MATH 节点的表达式，通过 {@link MathEngine#compileBatch}
@@ -152,6 +108,45 @@ public class MathNodeHandler implements ScriptIR.FlowNodeHandler, ScriptIR.Varia
         }
     }
 
+
+    @Override
+    public FlowNode parse(ParseContext ctx) {
+        String store = ctx.get("store");
+        String expr = ctx.get("expr");
+
+        if (store == null || expr == null) {
+            throw ctx.error("MATH node requires 'store' and 'expr' fields.");
+        }
+
+        MathNode root = MathParser.parse(expr);
+
+        ImmutableMap<String, Object> nodeAttrs = ImmutableMap.<String, Object>builder()
+                .put("store", store)
+                .put("expr", expr)
+                .put("mathNode", root)
+                .build();
+
+        return new FlowNode(FlowNodeType.valueOf("MATH"), nodeAttrs);
+    }
+
+    @Override
+    public void emit(FlowNode node, MethodVisitor mv, CompilationContext ctx) {
+        MathNode root = node.getRequiredAttr("mathNode");
+
+        // 直接将 MathNode AST 内联发射为 JVM 字节码（零间接调用，最优路径）
+        emitMathNode(root, mv, ctx);
+
+        // If not fused, we store to local variable array
+        String storeVar = node.getAttrOrDefault("store", null);
+        if (storeVar != null) {
+            int slot = ctx.getSlot(storeVar);
+            mv.visitVarInsn(org.objectweb.asm.Opcodes.DSTORE, slot);
+        } else {
+            // Fused path (stripProducedVariable was called), leaving double on stack
+            // Do nothing
+        }
+    }
+
     @Override
     public EnumSet<NodeCapability> capabilities() {
         return EnumSet.of(NodeCapability.SIDE_EFFECT); // Has side effect of storing to local var
@@ -169,13 +164,13 @@ public class MathNodeHandler implements ScriptIR.FlowNodeHandler, ScriptIR.Varia
 
     @Override
     public Object getProducedConstantValue(FlowNode node) {
-        MathNode root = node.<MathNode>getRequiredAttr("mathNode");
-        return root instanceof MathNode.LiteralNode lit ? lit.value() : null;
+        MathNode root = node.getRequiredAttr("mathNode");
+        return root instanceof MathNode.LiteralNode(double value) ? value : null;
     }
 
     @Override
     public List<String> getAllConsumedVariables(FlowNode node) {
-        MathNode root = node.<MathNode>getRequiredAttr("mathNode");
+        MathNode root = node.getRequiredAttr("mathNode");
         return MathNode.collectVarNames(root);
     }
 

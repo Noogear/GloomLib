@@ -5,7 +5,7 @@ import gloomlib.configuration.api.annotation.Header;
 import gloomlib.configuration.api.annotation.PostLoad;
 import gloomlib.configuration.api.annotation.PreLoad;
 import gloomlib.configuration.api.exception.LoadContext;
-import gloomlib.configuration.core.util.ConfigurationLogger;
+import gloomlib.configuration.api.util.ConfigurationLogger;
 import gloomlib.configuration.core.util.ReflectionUtils;
 import gloomlib.configuration.core.util.YamlLineIndex;
 import org.bukkit.configuration.InvalidConfigurationException;

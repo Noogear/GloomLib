@@ -2,9 +2,9 @@ package gloomlib.configuration.api;
 
 import com.google.gson.reflect.TypeToken;
 import gloomlib.configuration.api.exception.SerializationException;
+import gloomlib.configuration.api.util.ConfigurationLogger;
 import gloomlib.configuration.core.registry.AdapterRegistry;
 import gloomlib.configuration.core.service.*;
-import gloomlib.configuration.core.util.ConfigurationLogger;
 import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
 
 import java.io.File;
@@ -19,10 +19,6 @@ public class ConfigurationManager {
 
     private static final AdapterRegistry adapterRegistry = new AdapterRegistry();
     private static final SerializationService serializationService = new SerializationService(adapterRegistry);
-    private static final DeserializationService deserializationService = new DeserializationService(adapterRegistry, () -> ConfigurationManager.synchronizer);
-    private static final VersionManager versionManager = new VersionManager(deserializationService, () -> ConfigurationManager.loader);
-    private static final ConfigurationSynchronizer synchronizer = new ConfigurationSynchronizer(deserializationService, serializationService);
-    private static final ConfigurationLoader loader = new ConfigurationLoader(synchronizer, versionManager);
 
     /**
      * Enables logging for the configuration manager.
@@ -31,7 +27,7 @@ public class ConfigurationManager {
      */
     public static void enableLogging(ComponentLogger componentLogger) {
         ConfigurationLogger.setLogger(componentLogger);
-    }
+    }    private static final DeserializationService deserializationService = new DeserializationService(adapterRegistry, () -> ConfigurationManager.synchronizer);
 
     /**
      * Registers a custom type adapter.
@@ -42,7 +38,7 @@ public class ConfigurationManager {
      */
     public static <T> void registerAdapter(Class<T> type, TypeAdapter<T> adapter) {
         adapterRegistry.registerAdapter(type, adapter);
-    }
+    }    private static final VersionManager versionManager = new VersionManager(deserializationService, () -> ConfigurationManager.loader);
 
     /**
      * Registers a TypeSerializer for a specific TypeToken.
@@ -53,7 +49,7 @@ public class ConfigurationManager {
      */
     public static <T> void registerTypeSerializer(TypeToken<T> typeToken, TypeSerializer<T> serializer) {
         adapterRegistry.registerTypeSerializer(typeToken, serializer);
-    }
+    }    private static final ConfigurationSynchronizer synchronizer = new ConfigurationSynchronizer(deserializationService, serializationService);
 
     /**
      * Deserializes a value using a TypeToken for precise generic type resolution.
@@ -66,7 +62,7 @@ public class ConfigurationManager {
      */
     public static <T> T deserialize(Object raw, TypeToken<T> typeToken) throws SerializationException {
         return deserialize(raw, typeToken, List.of());
-    }
+    }    private static final ConfigurationLoader loader = new ConfigurationLoader(synchronizer, versionManager);
 
     /**
      * Deserializes a value using a TypeToken with path context for error reporting.
@@ -146,5 +142,13 @@ public class ConfigurationManager {
     public static void save(ConfigurationFile instance, File file) throws Exception {
         loader.save(instance, file);
     }
+
+
+
+
+
+
+
+
 }
 

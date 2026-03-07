@@ -227,7 +227,7 @@ public class TypeInferenceTest {
         System.out.println("\n=== Test 10: Edge Cases ===");
 
         // null 类型
-        Class<?> nullType = TypeInference.extractGenericParameter((Type) null, 0);
+        Class<?> nullType = TypeInference.extractGenericParameter(null, 0);
         assertEquals(Object.class, nullType, "null type should return Object.class");
         System.out.println("✓ null → Object.class");
 

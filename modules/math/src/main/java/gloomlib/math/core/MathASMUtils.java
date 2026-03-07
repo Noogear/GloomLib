@@ -12,7 +12,6 @@ public final class MathASMUtils {
     private MathASMUtils() {
     }
 
-    // ======================== 常量加载工具 ========================
 
     public static void emitIntConst(MethodVisitor mv, int value) {
         if (value >= -1 && value <= 5) {
@@ -58,7 +57,6 @@ public final class MathASMUtils {
         }
     }
 
-    // ======================== 跳转取反映射 ========================
 
     /**
      * 将 JVM 条件跳转 opcode 翻转为反义 opcode（如 IFEQ → IFNE, IFLT → IFGE）。

@@ -28,7 +28,6 @@ import org.bukkit.entity.Player;
  */
 public class NavigationExample {
 
-    // ==================== 基础导航模式 ====================
 
     /**
      * 示例 1：简单返回按钮
@@ -146,7 +145,6 @@ public class NavigationExample {
                 .open(player);
     }
 
-    // ==================== 高级导航模式 ====================
 
     /**
      * 示例 4：自动返回（ESC 键）
@@ -322,7 +320,6 @@ public class NavigationExample {
                 .open(player);
     }
 
-    // ==================== 辅助方法 ====================
 
     /**
      * 创建边框组件
@@ -384,7 +381,6 @@ public class NavigationExample {
                 .build();
     }
 
-    // ==================== 示例子菜单 ====================
 
     private void openShopMenu(Player player) {
         GloomGuiBuilder.chest()

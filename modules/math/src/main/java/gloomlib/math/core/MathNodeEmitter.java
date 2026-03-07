@@ -1,6 +1,7 @@
 package gloomlib.math.core;
 
-import gloomlib.math.api.*;
+import gloomlib.math.api.MathNode;
+import gloomlib.math.api.VariableEmitter;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -21,7 +22,6 @@ public final class MathNodeEmitter {
     private MathNodeEmitter() {
     }
 
-    // ======================== 策略工厂 ========================
 
     /**
      * MathEngine 专用策略：根据 {@code varSlots[i]} 决定加载方式。
@@ -43,7 +43,6 @@ public final class MathNodeEmitter {
         };
     }
 
-    // ======================== 统一树遍历 ========================
 
     /**
      * 递归将 {@link MathNode} 发射为 JVM 字节码。
@@ -63,7 +62,7 @@ public final class MathNodeEmitter {
     public static void emit(MathNode node, MethodVisitor mv, VariableEmitter varEmitter) {
         switch (node) {
             case MathNode.LiteralNode lit ->
-                    // 使用 MathASMUtils 确保 0.0/1.0 走 DCONST_0/DCONST_1，其余用 LDC
+                // 使用 MathASMUtils 确保 0.0/1.0 走 DCONST_0/DCONST_1，其余用 LDC
                     MathASMUtils.emitDoubleConst(mv, lit.value());
 
             case MathNode.VariableNode v -> varEmitter.emit(v, mv);
@@ -125,21 +124,20 @@ public final class MathNodeEmitter {
         // 幂整数特化：x^2/3/4 展开为 DUP2+DMUL 链，绕过 Math.pow 的 exp/log 路径。
         // HotSpot 仅对 pow(x,2.0) 做 intrinsic (→ DMUL)；x^3 用 DUP2 约 5 ns，
         // x^4=(x^2)^2 用两次 DUP2;DMUL 约 2.6 ns，均优于 Math.pow 的 ~10 ns。
-        if (b.op() == Operator.POWER && b.right() instanceof MathNode.LiteralNode rlit) {
-            double exp = rlit.value();
-            if (exp == 2.0) {
+        if (b.op() == Operator.POWER && b.right() instanceof MathNode.LiteralNode(double value)) {
+            if (value == 2.0) {
                 emit(b.left(), mv, varEmitter);
                 mv.visitInsn(Opcodes.DUP2);
                 mv.visitInsn(Opcodes.DMUL);
                 return;
-            } else if (exp == 3.0) {
+            } else if (value == 3.0) {
                 emit(b.left(), mv, varEmitter);
                 mv.visitInsn(Opcodes.DUP2);
                 mv.visitInsn(Opcodes.DUP2);
                 mv.visitInsn(Opcodes.DMUL);
                 mv.visitInsn(Opcodes.DMUL);
                 return;
-            } else if (exp == 4.0) {
+            } else if (value == 4.0) {
                 emit(b.left(), mv, varEmitter);
                 mv.visitInsn(Opcodes.DUP2);
                 mv.visitInsn(Opcodes.DMUL);

@@ -5,6 +5,7 @@ import gloomlib.diagnostic.DiagnosticCategory;
 import gloomlib.diagnostic.SourceLocation;
 import gloomlib.diagnostic.SourceView;
 import gloomlib.script.api.ScriptCompileException;
+import gloomlib.script.core.parser.ScriptParser;
 
 import java.util.Map;
 import java.util.Set;
@@ -22,23 +23,14 @@ import java.util.Set;
  * </ol>
  *
  * <h3>创建方式</h3>
- * 通常由 {@link gloomlib.script.core.parser.ScriptParser} 在调用 handler 前构建；
+ * 通常由 {@link ScriptParser} 在调用 handler 前构建；
  * handler 内部若需要递归解析子节点，调用 {@link #withAttrs} 派生子上下文以继承 scriptId。
  *
  * <h3>线程安全</h3>
  * 不可变（{@code attrs} 引用不变），线程安全。
  */
-public final class ParseContext {
+public record ParseContext(Map<String, Object> attrs, String scriptId) {
 
-    private final Map<String, Object> attrs;
-    private final String scriptId;
-
-    public ParseContext(Map<String, Object> attrs, String scriptId) {
-        this.attrs = attrs;
-        this.scriptId = scriptId;
-    }
-
-    // ======================== 属性访问 ========================
 
     /**
      * 读取属性值；不存在时返回 {@code null}。
@@ -67,16 +59,19 @@ public final class ParseContext {
     /**
      * 返回原始属性 Map，供需要整体传递的场景（如 {@link SourceView#mapSnippet}）。
      */
+    @Override
     public Map<String, Object> attrs() {
         return attrs;
     }
 
-    /** 脚本来源标识（文件名等），可为 {@code null}。 */
+    /**
+     * 脚本来源标识（文件名等），可为 {@code null}。
+     */
+    @Override
     public String scriptId() {
         return scriptId;
     }
 
-    // ======================== 子上下文 ========================
 
     /**
      * 派生一个携带不同属性 Map 但相同 {@code scriptId} 的子上下文。
@@ -86,7 +81,6 @@ public final class ParseContext {
         return new ParseContext(newAttrs, scriptId);
     }
 
-    // ======================== 诊断帮助 ========================
 
     /**
      * 创建 parse 阶段编译错误。

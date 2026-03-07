@@ -1,11 +1,11 @@
 package gloomlib.configuration.core.service;
 
+import com.google.common.base.CaseFormat;
 import gloomlib.configuration.api.ConfigurationPart;
 import gloomlib.configuration.api.TypeAdapter;
 import gloomlib.configuration.core.model.FieldMeta;
 import gloomlib.configuration.core.registry.AdapterRegistry;
 import gloomlib.configuration.core.util.ConfigurationCache;
-import com.google.common.base.CaseFormat;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
 
 import java.lang.reflect.RecordComponent;
@@ -81,7 +81,6 @@ public final class SerializationService {
         return ConfigurationCache.hasToString(type) ? val.toString() : val;
     }
 
-    // === Record Serialization ===
 
     /**
      * Serializes a Java record into a map.
@@ -99,7 +98,6 @@ public final class SerializationService {
         return map;
     }
 
-    // === ConfigurationPart Serialization ===
 
     /**
      * Serializes a ConfigurationPart into a map.
@@ -116,7 +114,6 @@ public final class SerializationService {
         return map;
     }
 
-    // === Map Serialization ===
 
     /**
      * Serializes a map with key-value pairs.
@@ -135,7 +132,6 @@ public final class SerializationService {
         return newMap;
     }
 
-    // === Collection Serialization ===
 
     /**
      * Serializes a collection into a list.

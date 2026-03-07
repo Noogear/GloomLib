@@ -1,16 +1,16 @@
 package gloomlib.script.core.handler;
 
-import gloomlib.script.api.action.ActionRegistry;
-import gloomlib.script.core.codegen.ASMUtils;
-import gloomlib.script.core.codegen.BytecodeCompiler;
 import com.google.common.collect.ImmutableList;
-import gloomlib.script.core.ParseContext;
+import com.google.common.collect.ImmutableMap;
+import gloomlib.script.api.action.ActionRegistry;
 import gloomlib.script.core.CompilationContext;
+import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.ScriptIR;
 import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.FlowNodeType;
 import gloomlib.script.core.ScriptIR.NodeCapability;
-import com.google.common.collect.ImmutableMap;
+import gloomlib.script.core.codegen.ASMUtils;
+import gloomlib.script.core.codegen.BytecodeCompiler;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
@@ -36,7 +36,7 @@ import java.util.List;
  *
  * <p>
  * YAML 示例：
- * 
+ *
  * <pre>{@code
  * - return
  * - return: 42
@@ -54,6 +54,159 @@ public final class ReturnNodeHandler implements gloomlib.script.core.ScriptIR.Fl
     }
 
     public static void init() {
+    }
+
+    /**
+     * 根据目标接口确切要求，返回原生类型自适应指令。
+     */
+    private static void emitAdaptiveReturn(MethodVisitor mv, CompilationContext ctx,
+                                           gloomlib.script.core.ScriptIR.IRType varType) {
+        org.objectweb.asm.Type tType = ctx.targetReturnType();
+
+        if (tType.getSort() == org.objectweb.asm.Type.VOID) {
+            if (varType.isPrimitive()) {
+                // 弹出没用的原始值（单字或双字）
+                if (varType.base() == ScriptIR.BaseType.DOUBLE || varType.base() == ScriptIR.BaseType.LONG) {
+                    mv.visitInsn(Opcodes.POP2);
+                } else {
+                    mv.visitInsn(Opcodes.POP);
+                }
+            } else {
+                mv.visitInsn(Opcodes.POP); // 弹出引用
+            }
+            mv.visitInsn(Opcodes.RETURN);
+            return;
+        }
+
+        if (tType.getSort() == org.objectweb.asm.Type.OBJECT || tType.getSort() == org.objectweb.asm.Type.ARRAY) {
+            if (varType.isPrimitive()) {
+                ASMUtils.emitBox(mv, varType);
+            }
+            mv.visitInsn(Opcodes.ARETURN);
+            return;
+        }
+
+        // 否则必定为原生返回目标，且依据校验管道已通过可赋值检验。我们直接以原生的 return opcode 退出。
+        mv.visitInsn(tType.getOpcode(Opcodes.IRETURN));
+    }
+
+    /**
+     * 针对明确的变量发射，如果需要装箱则装，如果是原生则按原始返回。
+     */
+    private static void emitTargetVariableReturn(MethodVisitor mv, CompilationContext ctx, String varName) {
+        org.objectweb.asm.Type tType = ctx.targetReturnType();
+        ScriptIR.IRType varType = ctx.getType(varName);
+        int slot = ctx.getSlot(varName);
+
+        if (tType.getSort() == org.objectweb.asm.Type.OBJECT || tType.getSort() == org.objectweb.asm.Type.ARRAY) {
+            ASMUtils.emitLoadBoxed(mv, slot, varType);
+            mv.visitInsn(Opcodes.ARETURN);
+        } else {
+            // 直接原始指令压栈
+            switch (varType.base()) {
+                case INT:
+                case BOOLEAN:
+                    mv.visitVarInsn(Opcodes.ILOAD, slot);
+                    break;
+                case LONG:
+                    mv.visitVarInsn(Opcodes.LLOAD, slot);
+                    break;
+                case DOUBLE:
+                    mv.visitVarInsn(Opcodes.DLOAD, slot);
+                    break;
+                default:
+                    throw new IllegalStateException("Trying to return Object unboxed natively.");
+            }
+            mv.visitInsn(tType.getOpcode(Opcodes.IRETURN));
+        }
+    }
+
+    // ── 工具方法 ────────────────────────────────────────
+
+    /**
+     * 始终发射变量加载 + 装箱（如 List 元素加载）
+     */
+    private static void emitVariable(MethodVisitor mv, CompilationContext ctx, String varName) {
+        ASMUtils.emitLoadBoxed(mv, ctx.getSlot(varName), ctx.getType(varName));
+    }
+
+    private static void emitNativeLiteral(MethodVisitor mv, Object parsed, org.objectweb.asm.Type tType) {
+        if (tType.getSort() == org.objectweb.asm.Type.BOOLEAN) {
+            mv.visitInsn(((Boolean) parsed) ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
+        } else if (tType.getSort() == org.objectweb.asm.Type.INT || tType.getSort() == org.objectweb.asm.Type.SHORT
+                || tType.getSort() == org.objectweb.asm.Type.BYTE) {
+            ASMUtils.emitIntConst(mv, ((Number) parsed).intValue());
+        } else if (tType.getSort() == org.objectweb.asm.Type.LONG) {
+            ASMUtils.emitLongConst(mv, ((Number) parsed).longValue());
+        } else if (tType.getSort() == org.objectweb.asm.Type.DOUBLE) {
+            ASMUtils.emitDoubleConst(mv, ((Number) parsed).doubleValue());
+        } else if (tType.getSort() == org.objectweb.asm.Type.FLOAT) {
+            ASMUtils.emitFloatConst(mv, ((Number) parsed).floatValue());
+        } else {
+            throw new IllegalArgumentException("emitNativeLiteral unsupported: " + tType);
+        }
+    }
+
+    private static void emitZeroReturn(MethodVisitor mv, CompilationContext ctx) {
+        org.objectweb.asm.Type retType = ctx.targetReturnType();
+        if (retType.getSort() == org.objectweb.asm.Type.VOID) {
+            mv.visitInsn(Opcodes.RETURN);
+        } else if (retType.getSort() == org.objectweb.asm.Type.OBJECT
+                || retType.getSort() == org.objectweb.asm.Type.ARRAY) {
+            mv.visitInsn(Opcodes.ACONST_NULL);
+            mv.visitInsn(Opcodes.ARETURN);
+        } else if (retType.getSort() == org.objectweb.asm.Type.DOUBLE) {
+            mv.visitInsn(Opcodes.DCONST_0);
+            mv.visitInsn(Opcodes.DRETURN);
+        } else if (retType.getSort() == org.objectweb.asm.Type.FLOAT) {
+            mv.visitInsn(Opcodes.FCONST_0);
+            mv.visitInsn(Opcodes.FRETURN);
+        } else if (retType.getSort() == org.objectweb.asm.Type.LONG) {
+            mv.visitInsn(Opcodes.LCONST_0);
+            mv.visitInsn(Opcodes.LRETURN);
+        } else {
+            mv.visitInsn(Opcodes.ICONST_0);
+            mv.visitInsn(Opcodes.IRETURN);
+        }
+    }
+
+    /**
+     * 发射 List 字面量：逐元素按规则发射，末尾调用 {@code List.of(Object...)}。
+     * 每个元素支持：字面量 / 单变量 / 模板字符串。
+     */
+    private static void emitList(MethodVisitor mv, CompilationContext ctx, List<?> list) {
+        // 创建 Object 数组
+        ASMUtils.emitIntConst(mv, list.size());
+        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
+
+        for (int i = 0; i < list.size(); i++) {
+            mv.visitInsn(Opcodes.DUP);
+            ASMUtils.emitIntConst(mv, i);
+            Object elem = list.get(i);
+            emitSingleElement(mv, ctx, elem);
+            mv.visitInsn(Opcodes.AASTORE);
+        }
+
+        // List.of(Object...) varargs
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/List", "of",
+                "([Ljava/lang/Object;)Ljava/util/List;", true);
+    }
+
+    private static void emitSingleElement(MethodVisitor mv, CompilationContext ctx, Object elem) {
+        if (elem instanceof String s) {
+            if (ScriptIR.isSingleVar(s)) {
+                String varName = s.substring(1, s.length() - 1);
+                if (ctx.getSlot(varName) >= 0) {
+                    emitVariable(mv, ctx, varName);
+                    return;
+                }
+            }
+            if (ScriptIR.isTemplate(s)) {
+                BytecodeCompiler.emitStringConcat(mv, s, ctx);
+                return;
+            }
+        }
+        ASMUtils.emitLiteral(mv, elem);
     }
 
     @Override
@@ -161,153 +314,6 @@ public final class ReturnNodeHandler implements gloomlib.script.core.ScriptIR.Fl
         }
     }
 
-    // ── 工具方法 ────────────────────────────────────────
-
-    /** 根据目标接口确切要求，返回原生类型自适应指令。 */
-    private static void emitAdaptiveReturn(MethodVisitor mv, CompilationContext ctx,
-            gloomlib.script.core.ScriptIR.IRType varType) {
-        org.objectweb.asm.Type tType = ctx.targetReturnType();
-
-        if (tType.getSort() == org.objectweb.asm.Type.VOID) {
-            if (varType.isPrimitive()) {
-                // 弹出没用的原始值（单字或双字）
-                if (varType.base() == ScriptIR.BaseType.DOUBLE || varType.base() == ScriptIR.BaseType.LONG) {
-                    mv.visitInsn(Opcodes.POP2);
-                } else {
-                    mv.visitInsn(Opcodes.POP);
-                }
-            } else {
-                mv.visitInsn(Opcodes.POP); // 弹出引用
-            }
-            mv.visitInsn(Opcodes.RETURN);
-            return;
-        }
-
-        if (tType.getSort() == org.objectweb.asm.Type.OBJECT || tType.getSort() == org.objectweb.asm.Type.ARRAY) {
-            if (varType.isPrimitive()) {
-                ASMUtils.emitBox(mv, varType);
-            }
-            mv.visitInsn(Opcodes.ARETURN);
-            return;
-        }
-
-        // 否则必定为原生返回目标，且依据校验管道已通过可赋值检验。我们直接以原生的 return opcode 退出。
-        mv.visitInsn(tType.getOpcode(Opcodes.IRETURN));
-    }
-
-    /** 针对明确的变量发射，如果需要装箱则装，如果是原生则按原始返回。 */
-    private static void emitTargetVariableReturn(MethodVisitor mv, CompilationContext ctx, String varName) {
-        org.objectweb.asm.Type tType = ctx.targetReturnType();
-        ScriptIR.IRType varType = ctx.getType(varName);
-        int slot = ctx.getSlot(varName);
-
-        if (tType.getSort() == org.objectweb.asm.Type.OBJECT || tType.getSort() == org.objectweb.asm.Type.ARRAY) {
-            ASMUtils.emitLoadBoxed(mv, slot, varType);
-            mv.visitInsn(Opcodes.ARETURN);
-        } else {
-            // 直接原始指令压栈
-            switch (varType.base()) {
-                case INT:
-                case BOOLEAN:
-                    mv.visitVarInsn(Opcodes.ILOAD, slot);
-                    break;
-                case LONG:
-                    mv.visitVarInsn(Opcodes.LLOAD, slot);
-                    break;
-                case DOUBLE:
-                    mv.visitVarInsn(Opcodes.DLOAD, slot);
-                    break;
-                default:
-                    throw new IllegalStateException("Trying to return Object unboxed natively.");
-            }
-            mv.visitInsn(tType.getOpcode(Opcodes.IRETURN));
-        }
-    }
-
-    /** 始终发射变量加载 + 装箱（如 List 元素加载） */
-    private static void emitVariable(MethodVisitor mv, CompilationContext ctx, String varName) {
-        ASMUtils.emitLoadBoxed(mv, ctx.getSlot(varName), ctx.getType(varName));
-    }
-
-    private static void emitNativeLiteral(MethodVisitor mv, Object parsed, org.objectweb.asm.Type tType) {
-        if (tType.getSort() == org.objectweb.asm.Type.BOOLEAN) {
-            mv.visitInsn(((Boolean) parsed) ? Opcodes.ICONST_1 : Opcodes.ICONST_0);
-        } else if (tType.getSort() == org.objectweb.asm.Type.INT || tType.getSort() == org.objectweb.asm.Type.SHORT
-                || tType.getSort() == org.objectweb.asm.Type.BYTE) {
-            ASMUtils.emitIntConst(mv, ((Number) parsed).intValue());
-        } else if (tType.getSort() == org.objectweb.asm.Type.LONG) {
-            ASMUtils.emitLongConst(mv, ((Number) parsed).longValue());
-        } else if (tType.getSort() == org.objectweb.asm.Type.DOUBLE) {
-            ASMUtils.emitDoubleConst(mv, ((Number) parsed).doubleValue());
-        } else if (tType.getSort() == org.objectweb.asm.Type.FLOAT) {
-            ASMUtils.emitFloatConst(mv, ((Number) parsed).floatValue());
-        } else {
-            throw new IllegalArgumentException("emitNativeLiteral unsupported: " + tType);
-        }
-    }
-
-    private static void emitZeroReturn(MethodVisitor mv, CompilationContext ctx) {
-        org.objectweb.asm.Type retType = ctx.targetReturnType();
-        if (retType.getSort() == org.objectweb.asm.Type.VOID) {
-            mv.visitInsn(Opcodes.RETURN);
-        } else if (retType.getSort() == org.objectweb.asm.Type.OBJECT
-                || retType.getSort() == org.objectweb.asm.Type.ARRAY) {
-            mv.visitInsn(Opcodes.ACONST_NULL);
-            mv.visitInsn(Opcodes.ARETURN);
-        } else if (retType.getSort() == org.objectweb.asm.Type.DOUBLE) {
-            mv.visitInsn(Opcodes.DCONST_0);
-            mv.visitInsn(Opcodes.DRETURN);
-        } else if (retType.getSort() == org.objectweb.asm.Type.FLOAT) {
-            mv.visitInsn(Opcodes.FCONST_0);
-            mv.visitInsn(Opcodes.FRETURN);
-        } else if (retType.getSort() == org.objectweb.asm.Type.LONG) {
-            mv.visitInsn(Opcodes.LCONST_0);
-            mv.visitInsn(Opcodes.LRETURN);
-        } else {
-            mv.visitInsn(Opcodes.ICONST_0);
-            mv.visitInsn(Opcodes.IRETURN);
-        }
-    }
-
-    /**
-     * 发射 List 字面量：逐元素按规则发射，末尾调用 {@code List.of(Object...)}。
-     * 每个元素支持：字面量 / 单变量 / 模板字符串。
-     */
-    private static void emitList(MethodVisitor mv, CompilationContext ctx, List<?> list) {
-        // 创建 Object 数组
-        ASMUtils.emitIntConst(mv, list.size());
-        mv.visitTypeInsn(Opcodes.ANEWARRAY, "java/lang/Object");
-
-        for (int i = 0; i < list.size(); i++) {
-            mv.visitInsn(Opcodes.DUP);
-            ASMUtils.emitIntConst(mv, i);
-            Object elem = list.get(i);
-            emitSingleElement(mv, ctx, elem);
-            mv.visitInsn(Opcodes.AASTORE);
-        }
-
-        // List.of(Object...) varargs
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/List", "of",
-                "([Ljava/lang/Object;)Ljava/util/List;", true);
-    }
-
-    private static void emitSingleElement(MethodVisitor mv, CompilationContext ctx, Object elem) {
-        if (elem instanceof String s) {
-            if (ScriptIR.isSingleVar(s)) {
-                String varName = s.substring(1, s.length() - 1);
-                if (ctx.getSlot(varName) >= 0) {
-                    emitVariable(mv, ctx, varName);
-                    return;
-                }
-            }
-            if (ScriptIR.isTemplate(s)) {
-                BytecodeCompiler.emitStringConcat(mv, s, ctx);
-                return;
-            }
-        }
-        ASMUtils.emitLiteral(mv, elem);
-    }
-
     @Override
     public EnumSet<NodeCapability> capabilities() {
         return EnumSet.of(NodeCapability.TERMINATES_FLOW);
@@ -323,8 +329,8 @@ public final class ReturnNodeHandler implements gloomlib.script.core.ScriptIR.Fl
     @Override
     public FlowNode inlineAction(FlowNode node, FlowNode inlineHook) {
         return node.withoutAttr("variable")
-                   .withoutAttr("value")        // 消除 value="{singleVar}" 残留
-                   .withAttr("conditionAction", inlineHook);
+                .withoutAttr("value")        // 消除 value="{singleVar}" 残留
+                .withAttr("conditionAction", inlineHook);
     }
 
     @Override

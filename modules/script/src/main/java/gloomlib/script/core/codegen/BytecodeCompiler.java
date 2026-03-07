@@ -1,28 +1,25 @@
 package gloomlib.script.core.codegen;
 
+import com.google.common.collect.ImmutableList;
+import gloomlib.script.api.ScriptErrorHandler;
 import gloomlib.script.core.CompilationContext;
 import gloomlib.script.core.CompilationContext.ConstantDef;
-import gloomlib.script.api.ScriptErrorHandler;
 import gloomlib.script.core.ScriptIR;
 import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.ScriptUnit;
 import gloomlib.script.core.ScriptIR.VarDecl;
 import gloomlib.script.core.parser.ScriptParser;
-import com.google.common.collect.ImmutableList;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-import static gloomlib.script.core.codegen.ASMUtils.*;
 
 import java.lang.invoke.CallSite;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+
+import static gloomlib.script.core.codegen.ASMUtils.emitVoidReturn;
 
 /**
  * ASM 字节码编译器。
@@ -40,18 +37,6 @@ import java.util.Set;
  */
 public final class BytecodeCompiler implements Opcodes {
 
-    private static final String OBJECT_INTERNAL = "java/lang/Object";
-
-    /** StringConcatFactory bootstrap handle */
-    private static final Handle STRING_CONCAT_HANDLE = new Handle(
-            H_INVOKESTATIC,
-            "java/lang/invoke/StringConcatFactory",
-            "makeConcatWithConstants",
-            MethodType.methodType(
-                    CallSite.class, MethodHandles.Lookup.class, String.class,
-                    MethodType.class, String.class, Object[].class).toMethodDescriptorString(),
-            false);
-
     /**
      * 外置常量池 bootstrap handle，指向 {@link ScriptConstantBootstrap#bootstrap}。
      * <p>
@@ -65,6 +50,205 @@ public final class BytecodeCompiler implements Opcodes {
                     CallSite.class, MethodHandles.Lookup.class, String.class,
                     MethodType.class, String.class).toMethodDescriptorString(),
             false);
+    private static final String OBJECT_INTERNAL = "java/lang/Object";
+    /**
+     * StringConcatFactory bootstrap handle
+     */
+    private static final Handle STRING_CONCAT_HANDLE = new Handle(
+            H_INVOKESTATIC,
+            "java/lang/invoke/StringConcatFactory",
+            "makeConcatWithConstants",
+            MethodType.methodType(
+                    CallSite.class, MethodHandles.Lookup.class, String.class,
+                    MethodType.class, String.class, Object[].class).toMethodDescriptorString(),
+            false);
+
+    /**
+     * 递归计算 Trie 子树的叶节点（VarDecl）总数。
+     */
+    private static int cseDescendantCount(SegNode node) {
+        int count = node.terminals.size();
+        for (SegNode child : node.children.values())
+            count += cseDescendantCount(child);
+        return count;
+    }
+
+
+    /**
+     * 在单后代子树中找到唯一的 VarDecl 叶节点。
+     */
+    private static VarDecl cseFindSingleDescendant(SegNode node) {
+        if (!node.terminals.isEmpty())
+            return node.terminals.get(0);
+        for (SegNode child : node.children.values()) {
+            VarDecl found = cseFindSingleDescendant(child);
+            if (found != null)
+                return found;
+        }
+        return null;
+    }
+
+
+    /**
+     * 从属性路径中去掉前 {@code count} 个 {@code '.'} 分隔的段，返回剩余后缀。
+     * <p>
+     * 例：{@code cseDropPrefixSegments("a.b.c", 1)} → {@code "b.c"}
+     */
+    private static String cseDropPrefixSegments(String property, int count) {
+        int idx = 0;
+        for (int i = 0; i < count; i++) {
+            int dot = property.indexOf('.', idx);
+            if (dot == -1)
+                return "";
+            idx = dot + 1;
+        }
+        return property.substring(idx);
+    }
+
+    /**
+     * 使用 {@code invokedynamic StringConcatFactory.makeConcatWithConstants} 发射字符串拼接。
+     * <p>
+     * 支持普通变量占位符 {@code {hp}} 和窄化点链 {@code {entity.name}}。
+     * 窄化点链要求目标变量已经通过 {@code check: instanceof} 完成窄化。
+     */
+    public static void emitStringConcat(MethodVisitor mv, String template, CompilationContext ctx) {
+        List<String> parts = ScriptIR.parseTemplate(template);
+        StringBuilder recipe = new StringBuilder();
+        StringBuilder descriptor = new StringBuilder("(");
+
+        for (String part : parts) {
+            // ---- 纯文本段：转义 recipe 保留字符后原样追加 ----
+            if (!isTemplatePart(template, part)) {
+                for (char c : part.toCharArray()) {
+                    if (c == '\u0001' || c == '\u0002') recipe.append('\u0002');
+                    recipe.append(c);
+                }
+                continue;
+            }
+
+            // ---- 占位符段：发射 LOAD + 追加描述符 ----
+            recipe.append('\u0001');
+            if (ScriptIR.isDottedPart(part)) {
+                // 窄化点链：ALOAD slot + CHECKCAST + accessor 链，返回末端类型
+                Class<?> propRaw = emitNarrowedPropertyLoad(mv, ctx, part).getRawType();
+                descriptor.append(concatDescriptorOf(propRaw));
+            } else {
+                // 普通变量槽：类型感知 LOAD
+                descriptor.append(emitSlotLoad(mv, ctx.getSlot(part), ctx.getType(part)));
+            }
+        }
+
+        descriptor.append(")Ljava/lang/String;");
+        mv.visitInvokeDynamicInsn(
+                "makeConcatWithConstants",
+                descriptor.toString(),
+                STRING_CONCAT_HANDLE,
+                recipe.toString());
+    }
+
+    /**
+     * 返回 invokedynamic MethodType 参数中对应原生类型的描述符片段。
+     * 非原生类型统一用 {@code Ljava/lang/Object;}。
+     * int 与 boolean 均映射至 {@code I}（与 JVM 局部变量槽类型一致）。
+     */
+    private static String concatDescriptorOf(Class<?> raw) {
+        if (raw == int.class) return "I";
+        if (raw == boolean.class) return "Z"; // StringConcatFactory 用 Z 才输出 true/false
+        if (raw == long.class) return "J";
+        if (raw == double.class) return "D";
+        if (raw == float.class) return "F";
+        return "Ljava/lang/Object;";
+    }
+
+    /**
+     * 针对给定槽和 IR 类型发射类型正确的 LOAD 指令，返回对应描述符片段。
+     * 将"发射指令"与"生成描述符"合二为一，消除原有两路并行的 switch。
+     */
+    private static String emitSlotLoad(MethodVisitor mv, int slot, ScriptIR.IRType type) {
+        return switch (type.base()) {
+            case INT -> {
+                mv.visitVarInsn(ILOAD, slot);
+                yield "I";
+            }
+            case BOOLEAN -> {
+                mv.visitVarInsn(ILOAD, slot);
+                yield "Z";
+            } // 槽类型同 int，但描述符用 Z
+            case LONG -> {
+                mv.visitVarInsn(LLOAD, slot);
+                yield "J";
+            }
+            case DOUBLE -> {
+                mv.visitVarInsn(DLOAD, slot);
+                yield "D";
+            }
+            default -> {
+                mv.visitVarInsn(ALOAD, slot);
+                yield "Ljava/lang/Object;";
+            }
+        };
+    }
+
+    // ---- 多级 CSE Trie 内部数据结构与辅助方法 ----
+
+    /**
+     * 发射窄化点链属性读取，并返回最终 accessor 的真实返回类型（供调用方决定 invokedynamic 描述符）。
+     *
+     * @return 末端 accessor 的 {@code TypeToken}；若无 accessor 则返回 {@code TypeToken.of(narrowed)}
+     */
+    public static com.google.common.reflect.TypeToken<?> emitNarrowedPropertyLoad(
+            MethodVisitor mv, CompilationContext ctx, String part) {
+        String[] kv = ScriptIR.splitDotted(part);
+        String varName = kv[0];
+        String propPath = kv[1];
+
+        Class<?> narrowed = ctx.getNarrowedClass(varName);
+        if (narrowed == null) {
+            throw gloomlib.script.api.ScriptCompileException.parse(
+                    "Dotted template {" + part + "}: variable '" + varName +
+                            "' has no narrowed type. Add 'check: op: instanceof' before this action.");
+        }
+
+        int slot = ctx.getSlot(varName);
+        mv.visitVarInsn(ALOAD, slot);
+        mv.visitTypeInsn(CHECKCAST, org.objectweb.asm.Type.getInternalName(narrowed));
+
+        List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
+                ScriptParser.PropertyResolver.resolveAccessors(
+                        com.google.common.reflect.TypeToken.of(narrowed), propPath);
+        for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : accessors) {
+            acr.emitLoad(mv);
+        }
+        return accessors.isEmpty()
+                ? com.google.common.reflect.TypeToken.of(narrowed)
+                : accessors.get(accessors.size() - 1).returnType();
+    }
+
+    private static boolean isTemplatePart(String fullTemplate, String part) {
+        return fullTemplate.contains("{" + part + "}");
+    }
+
+    /**
+     * 发射属性下沉加载序列：ALOAD 1 + PropertyAccessor 链。
+     * 桥接 PropertyResolver 解析与 ASM 字节码发射，与 {@link #emitStringConcat} 同级。
+     *
+     * @param mv          方法访问器
+     * @param ctx         编译上下文
+     * @param sinkingProp 下沉的属性表达式 (e.g. "health")
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static void emitSunkPropertyLoad(MethodVisitor mv, CompilationContext ctx,
+                                            String sinkingProp) {
+        mv.visitVarInsn(Opcodes.ALOAD, 1);
+
+        List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors = ScriptParser.PropertyResolver
+                .resolveAccessors(
+                        com.google.common.reflect.TypeToken.of((Class) ctx.payloadClass()), sinkingProp);
+
+        for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : accessors) {
+            acr.emitLoad(mv);
+        }
+    }
 
     public byte[] compile(ScriptUnit unit, CompilationContext ctx) {
         // 生成类名必须与 GeneratedScriptHost.LOOKUP 同包，通过其暴露的包前缀常量构造
@@ -79,7 +263,7 @@ public final class BytecodeCompiler implements Opcodes {
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
         cw.visit(Opcodes.V21, ACC_PUBLIC | ACC_FINAL | ACC_SUPER,
                 className, null, OBJECT_INTERNAL,
-                new String[] { ctx.targetInterfaceInternalName() });
+                new String[]{ctx.targetInterfaceInternalName()});
 
         // 常量外置到 ScriptConstantBootstrap，无需 static final 字段和 <clinit>
         ScriptConstantBootstrap.registerAll(constants);
@@ -93,7 +277,6 @@ public final class BytecodeCompiler implements Opcodes {
         return cw.toByteArray();
     }
 
-    // ======================== 构造器 ========================
 
     private void emitConstructor(ClassWriter cw, String className) {
         MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "<init>", "(Ljava/lang/String;)V", null, null);
@@ -110,8 +293,6 @@ public final class BytecodeCompiler implements Opcodes {
         mv.visitEnd();
     }
 
-    // ======================== 目标方法生成 ========================
-
     /**
      * 生成实现周期方法的主体。
      * <p>
@@ -120,8 +301,8 @@ public final class BytecodeCompiler implements Opcodes {
      * 同时消除了 bridge 方法本身（节省 150–250B 元空间/类）。
      */
     private void emitTargetMethod(ClassWriter cw, String className,
-            ScriptUnit unit, CompilationContext ctx,
-            Set<String> liveVars, String payloadInternal, String methodDescriptor) {
+                                  ScriptUnit unit, CompilationContext ctx,
+                                  Set<String> liveVars, String payloadInternal, String methodDescriptor) {
 
         MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, ctx.targetMethodName(), methodDescriptor, null, null);
         mv.visitCode();
@@ -210,6 +391,18 @@ public final class BytecodeCompiler implements Opcodes {
     }
 
     /**
+     * 发射窄化点链属性读取： ALOAD slot + CHECKCAST narrowedClass + 属性链 emitLoad。
+     * <p>
+     * 例：{@code entity.playerListName} →
+     * {@code ALOAD slot; CHECKCAST Player; INVOKEVIRTUAL Player.getPlayerListName}。
+     *
+     * @param mv   MethodVisitor
+     * @param ctx  编译上下文
+     * @param part 点链引用，如 {@code "entity.name"}
+     * @throws gloomlib.script.api.ScriptCompileException 若变量未窄化
+     */
+
+    /**
      * 多级 CSE 变量提取。
      * <p>
      * 将属性路径按 {@code '.'} 分段构建 Trie 前缀树，自动识别任意深度的公共前缀，
@@ -224,10 +417,10 @@ public final class BytecodeCompiler implements Opcodes {
      *   <li>单后代路径直接内联发射，零临时 slot 开销</li>
      * </ul>
      */
-    @SuppressWarnings({ "unchecked", "rawtypes" })
+    @SuppressWarnings({"unchecked", "rawtypes"})
     private void emitVarExtractionWithCSE(MethodVisitor mv, ImmutableList<VarDecl> vars,
-            CompilationContext ctx, String payloadInternal,
-            Set<String> liveVars) {
+                                          CompilationContext ctx, String payloadInternal,
+                                          Set<String> liveVars) {
 
         // 过滤活跃的非别名变量
         List<VarDecl> live = new ArrayList<>();
@@ -252,7 +445,7 @@ public final class BytecodeCompiler implements Opcodes {
         }
 
         // DFS 发射：多级中间结果缓存
-        int[] nextTemp = { ctx.nextSlot() };
+        int[] nextTemp = {ctx.nextSlot()};
         cseTrieDFS(mv, root, 0, 1,
                 com.google.common.reflect.TypeToken.of((Class) ctx.payloadClass()), ctx, nextTemp);
     }
@@ -271,8 +464,8 @@ public final class BytecodeCompiler implements Opcodes {
      * @param sourceType 该 slot 的 TypeToken（用于解析下一段 Accessor）
      */
     private void cseTrieDFS(MethodVisitor mv, SegNode node, int depth, int sourceSlot,
-            com.google.common.reflect.TypeToken<?> sourceType,
-            CompilationContext ctx, int[] nextTemp) {
+                            com.google.common.reflect.TypeToken<?> sourceType,
+                            CompilationContext ctx, int[] nextTemp) {
 
         for (Map.Entry<String, SegNode> entry : node.children.entrySet()) {
             String segment = entry.getKey();
@@ -319,191 +512,13 @@ public final class BytecodeCompiler implements Opcodes {
         }
     }
 
-    // ---- 多级 CSE Trie 内部数据结构与辅助方法 ----
 
-    /** 属性段 Trie 节点：每个节点代表一个 '.' 分隔的属性段。 */
+    /**
+     * 属性段 Trie 节点：每个节点代表一个 '.' 分隔的属性段。
+     */
     private static final class SegNode {
         final Map<String, SegNode> children = new LinkedHashMap<>();
         final List<VarDecl> terminals = new ArrayList<>();
-    }
-
-    /** 递归计算 Trie 子树的叶节点（VarDecl）总数。 */
-    private static int cseDescendantCount(SegNode node) {
-        int count = node.terminals.size();
-        for (SegNode child : node.children.values())
-            count += cseDescendantCount(child);
-        return count;
-    }
-
-    /** 在单后代子树中找到唯一的 VarDecl 叶节点。 */
-    private static VarDecl cseFindSingleDescendant(SegNode node) {
-        if (!node.terminals.isEmpty())
-            return node.terminals.get(0);
-        for (SegNode child : node.children.values()) {
-            VarDecl found = cseFindSingleDescendant(child);
-            if (found != null)
-                return found;
-        }
-        return null;
-    }
-
-    /**
-     * 从属性路径中去掉前 {@code count} 个 {@code '.'} 分隔的段，返回剩余后缀。
-     * <p>
-     * 例：{@code cseDropPrefixSegments("a.b.c", 1)} → {@code "b.c"}
-     */
-    private static String cseDropPrefixSegments(String property, int count) {
-        int idx = 0;
-        for (int i = 0; i < count; i++) {
-            int dot = property.indexOf('.', idx);
-            if (dot == -1)
-                return "";
-            idx = dot + 1;
-        }
-        return property.substring(idx);
-    }
-
-    // ======================== invokedynamic 字符串拼接 ========================
-
-    /**
-     * 使用 {@code invokedynamic StringConcatFactory.makeConcatWithConstants} 发射字符串拼接。
-     * <p>
-     * 支持普通变量占位符 {@code {hp}} 和窄化点链 {@code {entity.name}}。
-     * 窄化点链要求目标变量已经通过 {@code check: instanceof} 完成窄化。
-     */
-    public static void emitStringConcat(MethodVisitor mv, String template, CompilationContext ctx) {
-        List<String> parts = ScriptIR.parseTemplate(template);
-        StringBuilder recipe     = new StringBuilder();
-        StringBuilder descriptor = new StringBuilder("(");
-
-        for (String part : parts) {
-            // ---- 纯文本段：转义 recipe 保留字符后原样追加 ----
-            if (!isTemplatePart(template, part)) {
-                for (char c : part.toCharArray()) {
-                    if (c == '\u0001' || c == '\u0002') recipe.append('\u0002');
-                    recipe.append(c);
-                }
-                continue;
-            }
-
-            // ---- 占位符段：发射 LOAD + 追加描述符 ----
-            recipe.append('\u0001');
-            if (ScriptIR.isDottedPart(part)) {
-                // 窄化点链：ALOAD slot + CHECKCAST + accessor 链，返回末端类型
-                Class<?> propRaw = emitNarrowedPropertyLoad(mv, ctx, part).getRawType();
-                descriptor.append(concatDescriptorOf(propRaw));
-            } else {
-                // 普通变量槽：类型感知 LOAD
-                descriptor.append(emitSlotLoad(mv, ctx.getSlot(part), ctx.getType(part)));
-            }
-        }
-
-        descriptor.append(")Ljava/lang/String;");
-        mv.visitInvokeDynamicInsn(
-                "makeConcatWithConstants",
-                descriptor.toString(),
-                STRING_CONCAT_HANDLE,
-                recipe.toString());
-    }
-
-    /**
-     * 返回 invokedynamic MethodType 参数中对应原生类型的描述符片段。
-     * 非原生类型统一用 {@code Ljava/lang/Object;}。
-     * int 与 boolean 均映射至 {@code I}（与 JVM 局部变量槽类型一致）。
-     */
-    private static String concatDescriptorOf(Class<?> raw) {
-        if (raw == int.class)     return "I";
-        if (raw == boolean.class) return "Z"; // StringConcatFactory 用 Z 才输出 true/false
-        if (raw == long.class)    return "J";
-        if (raw == double.class)  return "D";
-        if (raw == float.class)   return "F";
-        return "Ljava/lang/Object;";
-    }
-
-    /**
-     * 针对给定槽和 IR 类型发射类型正确的 LOAD 指令，返回对应描述符片段。
-     * 将"发射指令"与"生成描述符"合二为一，消除原有两路并行的 switch。
-     */
-    private static String emitSlotLoad(MethodVisitor mv, int slot, ScriptIR.IRType type) {
-        return switch (type.base()) {
-            case INT     -> { mv.visitVarInsn(ILOAD, slot); yield "I"; }
-            case BOOLEAN -> { mv.visitVarInsn(ILOAD, slot); yield "Z"; } // 槽类型同 int，但描述符用 Z
-            case LONG    -> { mv.visitVarInsn(LLOAD, slot); yield "J"; }
-            case DOUBLE  -> { mv.visitVarInsn(DLOAD, slot); yield "D"; }
-            default      -> { mv.visitVarInsn(ALOAD, slot); yield "Ljava/lang/Object;"; }
-        };
-    }
-
-    /**
-     * 发射窄化点链属性读取： ALOAD slot + CHECKCAST narrowedClass + 属性链 emitLoad。
-     * <p>
-     * 例：{@code entity.playerListName} →
-     * {@code ALOAD slot; CHECKCAST Player; INVOKEVIRTUAL Player.getPlayerListName}。
-     *
-     * @param mv   MethodVisitor
-     * @param ctx  编译上下文
-     * @param part 点链引用，如 {@code "entity.name"}
-     * @throws gloomlib.script.api.ScriptCompileException 若变量未窄化
-     */
-    /**
-     * 发射窄化点链属性读取，并返回最终 accessor 的真实返回类型（供调用方决定 invokedynamic 描述符）。
-     *
-     * @return 末端 accessor 的 {@code TypeToken}；若无 accessor 则返回 {@code TypeToken.of(narrowed)}
-     */
-    public static com.google.common.reflect.TypeToken<?> emitNarrowedPropertyLoad(
-            MethodVisitor mv, CompilationContext ctx, String part) {
-        String[] kv = ScriptIR.splitDotted(part);
-        String varName = kv[0];
-        String propPath = kv[1];
-
-        Class<?> narrowed = ctx.getNarrowedClass(varName);
-        if (narrowed == null) {
-            throw gloomlib.script.api.ScriptCompileException.parse(
-                    "Dotted template {" + part + "}: variable '" + varName +
-                    "' has no narrowed type. Add 'check: op: instanceof' before this action.");
-        }
-
-        int slot = ctx.getSlot(varName);
-        mv.visitVarInsn(ALOAD, slot);
-        mv.visitTypeInsn(CHECKCAST, org.objectweb.asm.Type.getInternalName(narrowed));
-
-        List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
-                ScriptParser.PropertyResolver.resolveAccessors(
-                        com.google.common.reflect.TypeToken.of(narrowed), propPath);
-        for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : accessors) {
-            acr.emitLoad(mv);
-        }
-        return accessors.isEmpty()
-                ? com.google.common.reflect.TypeToken.of(narrowed)
-                : accessors.get(accessors.size() - 1).returnType();
-    }
-
-    private static boolean isTemplatePart(String fullTemplate, String part) {
-        return fullTemplate.contains("{" + part + "}");
-    }
-
-    // ======================== 属性下沉发射 ========================
-
-    /**
-     * 发射属性下沉加载序列：ALOAD 1 + PropertyAccessor 链。
-     * 桥接 PropertyResolver 解析与 ASM 字节码发射，与 {@link #emitStringConcat} 同级。
-     *
-     * @param mv          方法访问器
-     * @param ctx         编译上下文
-     * @param sinkingProp 下沉的属性表达式 (e.g. "health")
-     */
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    public static void emitSunkPropertyLoad(MethodVisitor mv, CompilationContext ctx,
-            String sinkingProp) {
-        mv.visitVarInsn(Opcodes.ALOAD, 1);
-
-        List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors = ScriptParser.PropertyResolver
-                .resolveAccessors(
-                        com.google.common.reflect.TypeToken.of((Class) ctx.payloadClass()), sinkingProp);
-
-        for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : accessors) {
-            acr.emitLoad(mv);
-        }
     }
 
 }

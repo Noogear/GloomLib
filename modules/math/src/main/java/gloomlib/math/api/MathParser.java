@@ -27,11 +27,13 @@ import static java.util.Map.entry;
  */
 public class MathParser {
 
-    /** 预定义常量名称 → 值映射（在标识符识别时优先匹配）。 */
+    /**
+     * 预定义常量名称 → 值映射（在标识符识别时优先匹配）。
+     */
     private static final Map<String, Double> NAMED_CONSTANTS = Map.ofEntries(
-            entry("pi",    Math.PI),
-            entry("e",     Math.E),
-            entry("true",  1.0),
+            entry("pi", Math.PI),
+            entry("e", Math.E),
+            entry("true", 1.0),
             entry("false", 0.0)
     );
 
@@ -39,39 +41,13 @@ public class MathParser {
     private int pos = 0;
     private Token prevToken = null;
 
-    private enum TokenType {
-        NUMBER, VARIABLE, FUNCTION, OPERATOR, LPAREN, RPAREN, COMMA
-    }
-
-    private record Token(TokenType type, Object value) {
-    }
-
-    /** 自定义函数在操作符栈中的标记。 */
+    /**
+     * 自定义函数在操作符栈中的标记。
+     */
 
 
     public MathParser(String input) {
         this.input = input;
-    }
-
-    // ======================== 诊断工具 ========================
-
-    /**
-     * 构造带位置信息和源码上下文片段的解析错误，并立即抛出。
-     * 统一替代原有的裸 {@code IllegalArgumentException}，使所有
-     * MathParser 错误都携带精确列号和 {@code ↑} 指示符。
-     */
-    private DiagnosticException parseError(String message) {
-        return parseError(message, this.pos);
-    }
-
-    private DiagnosticException parseError(String message, int offset) {
-        return new DiagnosticException(
-                Diagnostic.of(input, offset, DiagnosticCategory.PARSE, message));
-    }
-
-    private DiagnosticException semanticError(String message, int offset) {
-        return new DiagnosticException(
-                Diagnostic.of(input, offset, DiagnosticCategory.SEMANTIC, message));
     }
 
     /**
@@ -93,7 +69,267 @@ public class MathParser {
         return bindIndex(root, varIndex);
     }
 
-    // ======================== 内部解析 ========================
+
+    /**
+     * 代数恒等式化简（一侧为字面量时尝试消除冗余节点）。
+     *
+     * <ul>
+     * <li>{@code x*0} / {@code 0*x} → {@code 0}</li>
+     * <li>{@code x*1} / {@code 1*x} → {@code x}</li>
+     * <li>{@code x+0} / {@code 0+x} → {@code x}</li>
+     * <li>{@code x-0} → {@code x}，{@code 0-x} → {@code -x}</li>
+     * <li>{@code x/1} → {@code x}</li>
+     * <li>{@code x^0} → {@code 1}，{@code x^1} → {@code x}</li>
+     * <li>{@code -1*x} / {@code x*-1} → {@code -x}（DNEG 替代 DMUL）</li>
+     * <li>{@code x*x}（同变量）→ {@code x^2}，触发 DUP2+DMUL 特化</li>
+     * <li>{@code false&&expr} / {@code expr&&false} → {@code false}</li>
+     * <li>{@code true||expr} / {@code expr||true} → {@code true}</li>
+     * </ul>
+     *
+     * @return 化简后的节点；若无法化简则返回 {@code null}
+     */
+    private static MathNode tryFoldIdentity(MathNode left, MathNode right, Operator op) {
+        return switch (op) {
+            case ADD -> {
+                if (isZero(left)) yield right;
+                if (isZero(right)) yield left;
+                yield null;
+            }
+            case SUBTRACT -> {
+                if (isZero(right)) yield left;
+                // 0 - x → -x（消除加减节点，换为取负指令）
+                if (isZero(left)) yield new MathNode.UnaryNode(right, true);
+                yield null;
+            }
+            case MULTIPLY -> {
+                if (isZero(left) || isZero(right)) yield new MathNode.LiteralNode(0.0);
+                if (isOne(left)) yield right;
+                if (isOne(right)) yield left;
+                // -1 * x / x * -1 → -x（单条 DNEG 替代 DMUL）
+                if (isNegOne(left)) yield new MathNode.UnaryNode(right, true);
+                if (isNegOne(right)) yield new MathNode.UnaryNode(left, true);
+                // x * x（同变量）→ x^2，触发 MathNodeEmitter 的 DUP2+DMUL 特化路径
+                if (sameVar(left, right))
+                    yield new MathNode.BinaryNode(left, new MathNode.LiteralNode(2.0), Operator.POWER);
+                // x^n * x → x^(n+1)：累积幂次，使 x*x*x 最终触发 DUP2×n 特化
+                if (left instanceof MathNode.BinaryNode(MathNode left1, MathNode right1, Operator op1) && op1 == Operator.POWER
+                        && right1 instanceof MathNode.LiteralNode(double value) && sameVar(left1, right))
+                    yield new MathNode.BinaryNode(left1, new MathNode.LiteralNode(value + 1.0), Operator.POWER);
+                // x * x^n → x^(n+1)
+                if (right instanceof MathNode.BinaryNode(MathNode left1, MathNode right1, Operator op1) && op1 == Operator.POWER
+                        && right1 instanceof MathNode.LiteralNode(double value) && sameVar(left, left1))
+                    yield new MathNode.BinaryNode(left1, new MathNode.LiteralNode(value + 1.0), Operator.POWER);
+                // x^n * x^m → x^(n+m)
+                if (left instanceof MathNode.BinaryNode(MathNode lBase, MathNode lExp, Operator lOp) && lOp == Operator.POWER
+                        && lExp instanceof MathNode.LiteralNode(double n)
+                        && right instanceof MathNode.BinaryNode(MathNode rBase, MathNode rExp, Operator rOp) && rOp == Operator.POWER
+                        && rExp instanceof MathNode.LiteralNode(double m)
+                        && sameVar(lBase, rBase))
+                    yield new MathNode.BinaryNode(lBase, new MathNode.LiteralNode(n + m), Operator.POWER);
+                yield null;
+            }
+            case DIVIDE -> {
+                if (isOne(right)) yield left;
+                yield null;
+            }
+            case POWER -> {
+                if (isZero(right)) yield new MathNode.LiteralNode(1.0);
+                if (isOne(right)) yield left;
+                yield null;
+            }
+            case AND -> {
+                // false && expr → false（右侧死代码消除）
+                if (isZero(left)) yield new MathNode.LiteralNode(0.0);
+                if (isZero(right)) yield new MathNode.LiteralNode(0.0);
+                yield null;
+            }
+            case OR -> {
+                // true || expr → true（右侧死代码消除）
+                if (isNonZeroLiteral(left)) yield new MathNode.LiteralNode(1.0);
+                if (isNonZeroLiteral(right)) yield new MathNode.LiteralNode(1.0);
+                yield null;
+            }
+            default -> null;
+        };
+    }
+
+    private static boolean isZero(MathNode n) {
+        return n instanceof MathNode.LiteralNode(double value) && value == 0.0;
+    }
+
+    private static boolean isOne(MathNode n) {
+        return n instanceof MathNode.LiteralNode(double value) && value == 1.0;
+    }
+
+    private static boolean isNegOne(MathNode n) {
+        return n instanceof MathNode.LiteralNode(double value) && value == -1.0;
+    }
+
+    /**
+     * 字面量且值非零（用于 OR 短路：非零即为真）。
+     */
+    private static boolean isNonZeroLiteral(MathNode n) {
+        return n instanceof MathNode.LiteralNode(double value) && value != 0.0;
+    }
+
+
+    /**
+     * 两个节点是否为同名/同下标变量（用于 x*x → x^2 归约）。
+     */
+    private static boolean sameVar(MathNode a, MathNode b) {
+        if (a instanceof MathNode.VariableNode va && b instanceof MathNode.VariableNode vb) {
+            // 独立 API 路径（index >= 0）按下标比较；脚本 IR 路径按名称比较
+            return va.index() >= 0 ? va.index() == vb.index() : va.name().equals(vb.name());
+        }
+        return false;
+    }
+
+    /**
+     * 对整棵 AST 做一次后序（自底向上）递归折叠。
+     *
+     * <p>本方法是<b>单一权威优化入口</b>：所有常量折叠、恒等式化简、双重取负消除、
+     * 幂次累积和 AND/OR 短路均在此完成，不分散到其他地方。
+     *
+     * <p>关键：当 {@link #tryFoldIdentity} 产生新节点时对产物再调用 {@code foldNode}，
+     * 使得一次后序 pass 就能递归处理任意层深的复合折叠（如 0-(0-x)→x）。
+     */
+    private static MathNode foldNode(MathNode node) {
+        return switch (node) {
+            case MathNode.LiteralNode lit -> lit;
+            case MathNode.VariableNode v -> v;
+
+            case MathNode.UnaryNode u -> {
+                MathNode operand = foldNode(u.operand());
+                if (!u.isNegation()) yield operand;                    // +x = x
+                if (operand instanceof MathNode.LiteralNode(double value))
+                    yield new MathNode.LiteralNode(-value);       // -literal → 折叠
+                if (operand instanceof MathNode.UnaryNode(MathNode operand1, boolean isNegation) && isNegation)
+                    yield operand1;                              // --x → x
+                yield operand == u.operand() ? u : new MathNode.UnaryNode(operand, true);
+            }
+
+            case MathNode.FunctionNode f -> {
+                // 先对全部子节点折叠，再尝试函数霪开（无论子节点是否改变）
+                List<MathNode> newArgs = new ArrayList<>(f.arguments().size());
+                for (MathNode arg : f.arguments()) newArgs.add(foldNode(arg));
+                if (f.function().isFoldable()
+                        && newArgs.stream().allMatch(a -> a instanceof MathNode.LiteralNode)) {
+                    double[] vals = newArgs.stream()
+                            .mapToDouble(a -> ((MathNode.LiteralNode) a).value()).toArray();
+                    yield new MathNode.LiteralNode(f.function().apply(vals));
+                }
+                boolean changed = false;
+                for (int i = 0; i < newArgs.size(); i++)
+                    if (newArgs.get(i) != f.arguments().get(i)) {
+                        changed = true;
+                        break;
+                    }
+                yield changed ? new MathNode.FunctionNode(f.function(), newArgs) : f;
+            }
+
+            case MathNode.BinaryNode b -> {
+                MathNode left = foldNode(b.left());
+                MathNode right = foldNode(b.right());
+                // 两侧均为字面量——直接计算
+                if (left instanceof MathNode.LiteralNode(double lVal) && right instanceof MathNode.LiteralNode(double rVal))
+                    yield new MathNode.LiteralNode(b.op().apply(lVal, rVal));
+                // 代数恒等式 + 结构化简（对产物再折以处理复合情况）
+                MathNode folded = tryFoldIdentity(left, right, b.op());
+                if (folded != null) yield foldNode(folded);
+                yield (left == b.left() && right == b.right()) ? b
+                        : new MathNode.BinaryNode(left, right, b.op());
+            }
+
+            case MathNode.TernaryNode t -> {
+                MathNode cond = foldNode(t.condition());
+                MathNode trueE = foldNode(t.trueExpr());
+                MathNode falseE = foldNode(t.falseExpr());
+                // 条件为字面量时直接折叠：消除运行期分支
+                if (cond instanceof MathNode.LiteralNode(double value))
+                    yield value != 0.0 ? trueE : falseE;
+                yield (cond == t.condition() && trueE == t.trueExpr() && falseE == t.falseExpr())
+                        ? t : new MathNode.TernaryNode(cond, trueE, falseE);
+            }
+
+            case MathNode.CustomFunctionNode cf -> {
+                List<MathNode> newArgs = new ArrayList<>(cf.arguments().size());
+                for (MathNode arg : cf.arguments()) newArgs.add(foldNode(arg));
+                // 常量折叠：全部参数均为字面量且函数可折叠
+                if (cf.foldable()
+                        && newArgs.stream().allMatch(a -> a instanceof MathNode.LiteralNode)) {
+                    double[] vals = newArgs.stream()
+                            .mapToDouble(a -> ((MathNode.LiteralNode) a).value()).toArray();
+                    MathFunction.RegisteredFunction reg = MathFunction.lookupCustom(cf.name());
+                    if (reg != null)
+                        yield new MathNode.LiteralNode(reg.evaluator().apply(vals));
+                }
+                boolean changed = false;
+                for (int i = 0; i < newArgs.size(); i++)
+                    if (newArgs.get(i) != cf.arguments().get(i)) {
+                        changed = true;
+                        break;
+                    }
+                yield changed ? new MathNode.CustomFunctionNode(cf.name(), newArgs, cf.foldable()) : cf;
+            }
+        };
+    }
+
+    /**
+     * 将 AST 中所有 {@link MathNode.VariableNode} 的名称替换为数组下标，
+     * 用于 {@code double[]} 路径（零装箱评估）。
+     */
+    private static MathNode bindIndex(MathNode node, Map<String, Integer> varIndex) {
+        return switch (node) {
+            case MathNode.LiteralNode lit -> lit;
+            case MathNode.VariableNode v -> {
+                Integer idx = varIndex.get(v.name());
+                if (idx == null)
+                    throw new DiagnosticException(
+                            new Diagnostic(gloomlib.diagnostic.SourceLocation.UNKNOWN,
+                                    DiagnosticCategory.SEMANTIC,
+                                    "Unknown variable in expression: " + v.name()));
+                yield new MathNode.VariableNode(v.name(), idx, v.defaultVal());
+            }
+            case MathNode.UnaryNode u -> new MathNode.UnaryNode(bindIndex(u.operand(), varIndex), u.isNegation());
+            case MathNode.BinaryNode b ->
+                    new MathNode.BinaryNode(bindIndex(b.left(), varIndex), bindIndex(b.right(), varIndex), b.op());
+            case MathNode.FunctionNode f -> {
+                List<MathNode> newArgs = new ArrayList<>(f.arguments().size());
+                for (MathNode arg : f.arguments())
+                    newArgs.add(bindIndex(arg, varIndex));
+                yield new MathNode.FunctionNode(f.function(), newArgs);
+            }
+            case MathNode.TernaryNode t -> new MathNode.TernaryNode(
+                    bindIndex(t.condition(), varIndex),
+                    bindIndex(t.trueExpr(), varIndex),
+                    bindIndex(t.falseExpr(), varIndex));
+            case MathNode.CustomFunctionNode cf -> {
+                List<MathNode> newArgs = new ArrayList<>(cf.arguments().size());
+                for (MathNode arg : cf.arguments())
+                    newArgs.add(bindIndex(arg, varIndex));
+                yield new MathNode.CustomFunctionNode(cf.name(), newArgs, cf.foldable());
+            }
+        };
+    }
+
+    /**
+     * 构造带位置信息和源码上下文片段的解析错误，并立即抛出。
+     * 统一替代原有的裸 {@code IllegalArgumentException}，使所有
+     * MathParser 错误都携带精确列号和 {@code ↑} 指示符。
+     */
+    private DiagnosticException parseError(String message) {
+        return parseError(message, this.pos);
+    }
+
+    private DiagnosticException parseError(String message, int offset) {
+        return new DiagnosticException(
+                Diagnostic.of(input, offset, DiagnosticCategory.PARSE, message));
+    }
+
+    private DiagnosticException semanticError(String message, int offset) {
+        return new DiagnosticException(
+                Diagnostic.of(input, offset, DiagnosticCategory.SEMANTIC, message));
+    }
 
     private MathNode parseExpression() {
         MathNode result = parseShuntingYard();
@@ -361,207 +597,15 @@ public class MathParser {
             if (nodes.size() < 2)
                 throw parseError("Missing operands for operator " + opObj);
             MathNode right = nodes.pop();
-            MathNode left  = nodes.pop();
+            MathNode left = nodes.pop();
             nodes.push(new MathNode.BinaryNode(left, right, op));
         }
     }
 
-    /**
-     * 代数恒等式化简（一侧为字面量时尝试消除冗余节点）。
-     *
-     * <ul>
-     * <li>{@code x*0} / {@code 0*x} → {@code 0}</li>
-     * <li>{@code x*1} / {@code 1*x} → {@code x}</li>
-     * <li>{@code x+0} / {@code 0+x} → {@code x}</li>
-     * <li>{@code x-0} → {@code x}，{@code 0-x} → {@code -x}</li>
-     * <li>{@code x/1} → {@code x}</li>
-     * <li>{@code x^0} → {@code 1}，{@code x^1} → {@code x}</li>
-     * <li>{@code -1*x} / {@code x*-1} → {@code -x}（DNEG 替代 DMUL）</li>
-     * <li>{@code x*x}（同变量）→ {@code x^2}，触发 DUP2+DMUL 特化</li>
-     * <li>{@code false&&expr} / {@code expr&&false} → {@code false}</li>
-     * <li>{@code true||expr} / {@code expr||true} → {@code true}</li>
-     * </ul>
-     *
-     * @return 化简后的节点；若无法化简则返回 {@code null}
-     */
-    private static MathNode tryFoldIdentity(MathNode left, MathNode right, Operator op) {
-        return switch (op) {
-            case ADD -> {
-                if (isZero(left)) yield right;
-                if (isZero(right)) yield left;
-                yield null;
-            }
-            case SUBTRACT -> {
-                if (isZero(right)) yield left;
-                // 0 - x → -x（消除加减节点，换为取负指令）
-                if (isZero(left)) yield new MathNode.UnaryNode(right, true);
-                yield null;
-            }
-            case MULTIPLY -> {
-                if (isZero(left) || isZero(right)) yield new MathNode.LiteralNode(0.0);
-                if (isOne(left)) yield right;
-                if (isOne(right)) yield left;
-                // -1 * x / x * -1 → -x（单条 DNEG 替代 DMUL）
-                if (isNegOne(left)) yield new MathNode.UnaryNode(right, true);
-                if (isNegOne(right)) yield new MathNode.UnaryNode(left, true);
-                // x * x（同变量）→ x^2，触发 MathNodeEmitter 的 DUP2+DMUL 特化路径
-                if (sameVar(left, right))
-                    yield new MathNode.BinaryNode(left, new MathNode.LiteralNode(2.0), Operator.POWER);
-                // x^n * x → x^(n+1)：累积幂次，使 x*x*x 最终触发 DUP2×n 特化
-                if (left instanceof MathNode.BinaryNode bl && bl.op() == Operator.POWER
-                        && bl.right() instanceof MathNode.LiteralNode exp && sameVar(bl.left(), right))
-                    yield new MathNode.BinaryNode(bl.left(), new MathNode.LiteralNode(exp.value() + 1.0), Operator.POWER);
-                // x * x^n → x^(n+1)
-                if (right instanceof MathNode.BinaryNode br && br.op() == Operator.POWER
-                        && br.right() instanceof MathNode.LiteralNode exp && sameVar(left, br.left()))
-                    yield new MathNode.BinaryNode(br.left(), new MathNode.LiteralNode(exp.value() + 1.0), Operator.POWER);
-                // x^n * x^m → x^(n+m)
-                if (left instanceof MathNode.BinaryNode bl2 && bl2.op() == Operator.POWER
-                        && bl2.right() instanceof MathNode.LiteralNode el
-                        && right instanceof MathNode.BinaryNode br2 && br2.op() == Operator.POWER
-                        && br2.right() instanceof MathNode.LiteralNode er
-                        && sameVar(bl2.left(), br2.left()))
-                    yield new MathNode.BinaryNode(bl2.left(), new MathNode.LiteralNode(el.value() + er.value()), Operator.POWER);
-                yield null;
-            }
-            case DIVIDE -> {
-                if (isOne(right)) yield left;
-                yield null;
-            }
-            case POWER -> {
-                if (isZero(right)) yield new MathNode.LiteralNode(1.0);
-                if (isOne(right)) yield left;
-                yield null;
-            }
-            case AND -> {
-                // false && expr → false（右侧死代码消除）
-                if (isZero(left)) yield new MathNode.LiteralNode(0.0);
-                if (isZero(right)) yield new MathNode.LiteralNode(0.0);
-                yield null;
-            }
-            case OR -> {
-                // true || expr → true（右侧死代码消除）
-                if (isNonZeroLiteral(left)) yield new MathNode.LiteralNode(1.0);
-                if (isNonZeroLiteral(right)) yield new MathNode.LiteralNode(1.0);
-                yield null;
-            }
-            default -> null;
-        };
-    }
-
-    private static boolean isZero(MathNode n) {
-        return n instanceof MathNode.LiteralNode l && l.value() == 0.0;
-    }
-
-    private static boolean isOne(MathNode n) {
-        return n instanceof MathNode.LiteralNode l && l.value() == 1.0;
-    }
-
-    private static boolean isNegOne(MathNode n) {
-        return n instanceof MathNode.LiteralNode l && l.value() == -1.0;
-    }
-
-    /** 字面量且值非零（用于 OR 短路：非零即为真）。 */
-    private static boolean isNonZeroLiteral(MathNode n) {
-        return n instanceof MathNode.LiteralNode l && l.value() != 0.0;
-    }
-
-    /** 两个节点是否为同名/同下标变量（用于 x*x → x^2 归约）。 */
-    private static boolean sameVar(MathNode a, MathNode b) {
-        if (a instanceof MathNode.VariableNode va && b instanceof MathNode.VariableNode vb) {
-            // 独立 API 路径（index >= 0）按下标比较；脚本 IR 路径按名称比较
-            return va.index() >= 0 ? va.index() == vb.index() : va.name().equals(vb.name());
-        }
-        return false;
-    }
-
-    // ======================== 后序折叠 pass ========================
 
     /**
-     * 对整棵 AST 做一次后序（自底向上）递归折叠。
-     *
-     * <p>本方法是<b>单一权威优化入口</b>：所有常量折叠、恒等式化简、双重取负消除、
-     * 幂次累积和 AND/OR 短路均在此完成，不分散到其他地方。
-     *
-     * <p>关键：当 {@link #tryFoldIdentity} 产生新节点时对产物再调用 {@code foldNode}，
-     * 使得一次后序 pass 就能递归处理任意层深的复合折叠（如 0-(0-x)→x）。
+     * 判断字符是否可能是运算符的起始字符（含双字符运算符的首字符）。
      */
-    private static MathNode foldNode(MathNode node) {
-        return switch (node) {
-            case MathNode.LiteralNode lit  -> lit;
-            case MathNode.VariableNode v   -> v;
-
-            case MathNode.UnaryNode u -> {
-                MathNode operand = foldNode(u.operand());
-                if (!u.isNegation()) yield operand;                    // +x = x
-                if (operand instanceof MathNode.LiteralNode lit)
-                    yield new MathNode.LiteralNode(-lit.value());       // -literal → 折叠
-                if (operand instanceof MathNode.UnaryNode inner && inner.isNegation())
-                    yield inner.operand();                              // --x → x
-                yield operand == u.operand() ? u : new MathNode.UnaryNode(operand, true);
-            }
-
-            case MathNode.FunctionNode f -> {
-                // 先对全部子节点折叠，再尝试函数霪开（无论子节点是否改变）
-                List<MathNode> newArgs = new ArrayList<>(f.arguments().size());
-                for (MathNode arg : f.arguments()) newArgs.add(foldNode(arg));
-                if (f.function().isFoldable()
-                        && newArgs.stream().allMatch(a -> a instanceof MathNode.LiteralNode)) {
-                    double[] vals = newArgs.stream()
-                            .mapToDouble(a -> ((MathNode.LiteralNode) a).value()).toArray();
-                    yield new MathNode.LiteralNode(f.function().apply(vals));
-                }
-                boolean changed = false;
-                for (int i = 0; i < newArgs.size(); i++)
-                    if (newArgs.get(i) != f.arguments().get(i)) { changed = true; break; }
-                yield changed ? new MathNode.FunctionNode(f.function(), newArgs) : f;
-            }
-
-            case MathNode.BinaryNode b -> {
-                MathNode left  = foldNode(b.left());
-                MathNode right = foldNode(b.right());
-                // 两侧均为字面量——直接计算
-                if (left instanceof MathNode.LiteralNode l && right instanceof MathNode.LiteralNode r)
-                    yield new MathNode.LiteralNode(b.op().apply(l.value(), r.value()));
-                // 代数恒等式 + 结构化简（对产物再折以处理复合情况）
-                MathNode folded = tryFoldIdentity(left, right, b.op());
-                if (folded != null) yield foldNode(folded);
-                yield (left == b.left() && right == b.right()) ? b
-                        : new MathNode.BinaryNode(left, right, b.op());
-            }
-
-            case MathNode.TernaryNode t -> {
-                MathNode cond = foldNode(t.condition());
-                MathNode trueE = foldNode(t.trueExpr());
-                MathNode falseE = foldNode(t.falseExpr());
-                // 条件为字面量时直接折叠：消除运行期分支
-                if (cond instanceof MathNode.LiteralNode lit)
-                    yield lit.value() != 0.0 ? trueE : falseE;
-                yield (cond == t.condition() && trueE == t.trueExpr() && falseE == t.falseExpr())
-                        ? t : new MathNode.TernaryNode(cond, trueE, falseE);
-            }
-
-            case MathNode.CustomFunctionNode cf -> {
-                List<MathNode> newArgs = new ArrayList<>(cf.arguments().size());
-                for (MathNode arg : cf.arguments()) newArgs.add(foldNode(arg));
-                // 常量折叠：全部参数均为字面量且函数可折叠
-                if (cf.foldable()
-                        && newArgs.stream().allMatch(a -> a instanceof MathNode.LiteralNode)) {
-                    double[] vals = newArgs.stream()
-                            .mapToDouble(a -> ((MathNode.LiteralNode) a).value()).toArray();
-                    MathFunction.RegisteredFunction reg = MathFunction.lookupCustom(cf.name());
-                    if (reg != null)
-                        yield new MathNode.LiteralNode(reg.evaluator().apply(vals));
-                }
-                boolean changed = false;
-                for (int i = 0; i < newArgs.size(); i++)
-                    if (newArgs.get(i) != cf.arguments().get(i)) { changed = true; break; }
-                yield changed ? new MathNode.CustomFunctionNode(cf.name(), newArgs, cf.foldable()) : cf;
-            }
-        };
-    }
-
-    /** 判断字符是否可能是运算符的起始字符（含双字符运算符的首字符）。 */
     private boolean isOperatorStartChar(char c) {
         return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^'
                 || c == '=' || c == '!' || c == '>' || c == '<' || c == '|' || c == '&';
@@ -593,43 +637,11 @@ public class MathParser {
         operators.push(op);
     }
 
-    // ======================== 编译期变量索引绑定 ========================
+    private enum TokenType {
+        NUMBER, VARIABLE, FUNCTION, OPERATOR, LPAREN, RPAREN, COMMA
+    }
 
-    /**
-     * 将 AST 中所有 {@link MathNode.VariableNode} 的名称替换为数组下标，
-     * 用于 {@code double[]} 路径（零装箱评估）。
-     */
-    private static MathNode bindIndex(MathNode node, Map<String, Integer> varIndex) {
-        return switch (node) {
-            case MathNode.LiteralNode lit -> lit;
-            case MathNode.VariableNode v -> {
-                Integer idx = varIndex.get(v.name());
-                if (idx == null)
-                    throw new DiagnosticException(
-                            new Diagnostic(gloomlib.diagnostic.SourceLocation.UNKNOWN,
-                                    DiagnosticCategory.SEMANTIC,
-                                    "Unknown variable in expression: " + v.name()));
-                yield new MathNode.VariableNode(v.name(), idx, v.defaultVal());
-            }
-            case MathNode.UnaryNode u -> new MathNode.UnaryNode(bindIndex(u.operand(), varIndex), u.isNegation());
-            case MathNode.BinaryNode b ->
-                new MathNode.BinaryNode(bindIndex(b.left(), varIndex), bindIndex(b.right(), varIndex), b.op());
-            case MathNode.FunctionNode f -> {
-                List<MathNode> newArgs = new ArrayList<>(f.arguments().size());
-                for (MathNode arg : f.arguments())
-                    newArgs.add(bindIndex(arg, varIndex));
-                yield new MathNode.FunctionNode(f.function(), newArgs);
-            }
-            case MathNode.TernaryNode t -> new MathNode.TernaryNode(
-                    bindIndex(t.condition(), varIndex),
-                    bindIndex(t.trueExpr(), varIndex),
-                    bindIndex(t.falseExpr(), varIndex));
-            case MathNode.CustomFunctionNode cf -> {
-                List<MathNode> newArgs = new ArrayList<>(cf.arguments().size());
-                for (MathNode arg : cf.arguments())
-                    newArgs.add(bindIndex(arg, varIndex));
-                yield new MathNode.CustomFunctionNode(cf.name(), newArgs, cf.foldable());
-            }
-        };
+
+    private record Token(TokenType type, Object value) {
     }
 }

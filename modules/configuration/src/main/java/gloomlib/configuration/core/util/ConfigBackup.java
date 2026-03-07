@@ -1,4 +1,6 @@
 package gloomlib.configuration.core.util;
+
+import gloomlib.configuration.api.util.ConfigurationLogger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 

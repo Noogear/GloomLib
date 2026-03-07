@@ -1,19 +1,18 @@
 package gloomlib.script.core.handler;
 
-import gloomlib.script.core.codegen.ASMUtils;
-
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import gloomlib.script.api.action.ActionRegistry;
-import gloomlib.script.core.codegen.BytecodeCompiler;
-import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.CompilationContext;
+import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.ScriptIR;
 import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.FlowNodeType;
-import gloomlib.script.core.ScriptIR.NodeCapability;
 import gloomlib.script.core.ScriptIR.IRType;
+import gloomlib.script.core.ScriptIR.NodeCapability;
+import gloomlib.script.core.codegen.ASMUtils;
+import gloomlib.script.core.codegen.BytecodeCompiler;
 import gloomlib.script.core.parser.ScriptParser;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
@@ -42,6 +41,60 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
 
     public static ActionRegistry registry() {
         return REGISTRY;
+    }
+
+    /**
+     * 从 {@code \{var\}} 或 {@code \{entity.name\}} 形式的括号参数提取基础变量名。
+     * 点链引用取头部：{@code \{entity.health\}} → {@code entity}。
+     */
+    private static String baseVarOf(String bracketedArg) {
+        String inner = bracketedArg.substring(1, bracketedArg.length() - 1);
+        return ScriptIR.isDottedPart(inner) ? ScriptIR.splitDotted(inner)[0] : inner;
+    }
+
+    private static void validateVarArgType(String action, int paramIndex, String argStr,
+                                           IRType expected, CompilationContext ctx, FlowNode node) {
+        String varName = argStr.substring(1, argStr.length() - 1);
+        // payload 及其别名（slot 1）：用 payload 具体类参与类型检查，而非泛化的 OBJECT
+        IRType actual = (ctx.getSlot(varName) == 1)
+                ? IRType.fromClass(ctx.payloadClass())
+                : ctx.getType(varName);
+        if (expected.isAssignableFrom(actual))
+            return;
+
+        // 如果变量已经过 instanceof 窄化，检查窄化类型是否能满足期望类型
+        Class<?> narrowed = ctx.getNarrowedClass(varName);
+        if (narrowed != null && expected.isAssignableFrom(IRType.fromClass(narrowed)))
+            return;
+
+        throw gloomlib.script.api.ScriptCompileException.type(node, String.format(
+                "Action '%s' expects %s at argument %d, but variable '{%s}' is of type %s.",
+                action, expected, paramIndex, varName, actual));
+    }
+
+    private static void validateTemplateArgType(String action, int paramIndex, String argStr,
+                                                IRType expected, FlowNode node) {
+        if (expected == IRType.STRING || expected == IRType.OBJECT)
+            return;
+
+        throw gloomlib.script.api.ScriptCompileException.type(node, String.format(
+                "Action '%s' expects %s at argument %d, but a string template '%s' was provided.",
+                action, expected, paramIndex, argStr));
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void validateLiteralArgType(String action, int paramIndex, String argStr,
+                                               Class<?> expectedJavaType, FlowNode node) {
+        if (!expectedJavaType.isEnum())
+            return;
+
+        try {
+            Enum.valueOf((Class<Enum>) expectedJavaType, argStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw gloomlib.script.api.ScriptCompileException.type(node, String.format(
+                    "Invalid enum value '%s' for action '%s' at argument %d. Expected enum type %s",
+                    argStr, action, paramIndex, expectedJavaType.getSimpleName()));
+        }
     }
 
     @Override
@@ -101,7 +154,7 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
                 }
             } else if (reqIRType == IRType.ENUM) {
                 try {
-                    @SuppressWarnings({ "unchecked", "rawtypes", "unused" })
+                    @SuppressWarnings({"unchecked", "rawtypes", "unused"})
                     Object ignored = Enum.valueOf((Class<Enum>) reqType, argStr);
                 } catch (IllegalArgumentException e) {
                     throw ctx.error(
@@ -155,8 +208,8 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
                 } catch (gloomlib.diagnostic.DiagnosticException e) {
                     throw gloomlib.script.api.ScriptCompileException.create(node,
                             String.format("Undefined store variable '%s' for action '%s'. "
-                                    + "If using ScriptBuilder.actionStore(), this is likely an internal error — "
-                                    + "the variable should have been auto-declared.",
+                                            + "If using ScriptBuilder.actionStore(), this is likely an internal error — "
+                                            + "the variable should have been auto-declared.",
                                     store, node.getAttrOrDefault("action", "?")));
                 }
                 int storeOpcode = org.objectweb.asm.Type.getType(retClass).getOpcode(Opcodes.ISTORE);
@@ -180,7 +233,7 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
      * @param node 已剥离 {@code store} 属性的 ACTION FlowNode
      */
     void emitActionCallLeaveOnStack(MethodVisitor mv, ActionRegistry.ActionDef def,
-            ImmutableList<String> args, CompilationContext ctx, FlowNode node) {
+                                    ImmutableList<String> args, CompilationContext ctx, FlowNode node) {
         // emitActionCall 只负责 ALOAD 1 + arg loading + INVOKESTATIC，
         // 不含任何 STORE / POP 逻辑（那部分在 emit() 中处理）。
         // 因此直接调用即可让返回值停留在操作数栈顶。
@@ -194,7 +247,7 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
      * 字符串模板使用 invokedynamic StringConcatFactory。
      */
     void emitActionCall(MethodVisitor mv, ActionRegistry.ActionDef def,
-            ImmutableList<String> args, CompilationContext ctx, FlowNode node) {
+                        ImmutableList<String> args, CompilationContext ctx, FlowNode node) {
         // 根据 consumesPayload 决定是否自动注入 payload（slot 1）作为第一个方法参数
         if (def.consumesPayload()) {
             mv.visitVarInsn(Opcodes.ALOAD, 1);
@@ -379,15 +432,6 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
         return foundVar;
     }
 
-    /**
-     * 从 {@code \{var\}} 或 {@code \{entity.name\}} 形式的括号参数提取基础变量名。
-     * 点链引用取头部：{@code \{entity.health\}} → {@code entity}。
-     */
-    private static String baseVarOf(String bracketedArg) {
-        String inner = bracketedArg.substring(1, bracketedArg.length() - 1);
-        return ScriptIR.isDottedPart(inner) ? ScriptIR.splitDotted(inner)[0] : inner;
-    }
-
     @Override
     public FlowNode inlineAction(FlowNode node, FlowNode inlineHook) {
         // Find which arg needs replacing
@@ -477,51 +521,6 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
             } else {
                 validateLiteralArgType(actionName, paramIndex, argStr, expectedToken.getRawType(), node);
             }
-        }
-    }
-
-    private static void validateVarArgType(String action, int paramIndex, String argStr,
-            IRType expected, CompilationContext ctx, FlowNode node) {
-        String varName = argStr.substring(1, argStr.length() - 1);
-        // payload 及其别名（slot 1）：用 payload 具体类参与类型检查，而非泛化的 OBJECT
-        IRType actual = (ctx.getSlot(varName) == 1)
-                ? IRType.fromClass(ctx.payloadClass())
-                : ctx.getType(varName);
-        if (expected.isAssignableFrom(actual))
-            return;
-
-        // 如果变量已经过 instanceof 窄化，检查窄化类型是否能满足期望类型
-        Class<?> narrowed = ctx.getNarrowedClass(varName);
-        if (narrowed != null && expected.isAssignableFrom(IRType.fromClass(narrowed)))
-            return;
-
-        throw gloomlib.script.api.ScriptCompileException.type(node, String.format(
-                "Action '%s' expects %s at argument %d, but variable '{%s}' is of type %s.",
-                action, expected, paramIndex, varName, actual));
-    }
-
-    private static void validateTemplateArgType(String action, int paramIndex, String argStr,
-            IRType expected, FlowNode node) {
-        if (expected == IRType.STRING || expected == IRType.OBJECT)
-            return;
-
-        throw gloomlib.script.api.ScriptCompileException.type(node, String.format(
-                "Action '%s' expects %s at argument %d, but a string template '%s' was provided.",
-                action, expected, paramIndex, argStr));
-    }
-
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    private static void validateLiteralArgType(String action, int paramIndex, String argStr,
-            Class<?> expectedJavaType, FlowNode node) {
-        if (!expectedJavaType.isEnum())
-            return;
-
-        try {
-            Enum.valueOf((Class<Enum>) expectedJavaType, argStr.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw gloomlib.script.api.ScriptCompileException.type(node, String.format(
-                    "Invalid enum value '%s' for action '%s' at argument %d. Expected enum type %s",
-                    argStr, action, paramIndex, expectedJavaType.getSimpleName()));
         }
     }
 }

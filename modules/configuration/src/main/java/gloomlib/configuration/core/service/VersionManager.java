@@ -1,11 +1,11 @@
 package gloomlib.configuration.core.service;
 
-import gloomlib.configuration.api.ConfigurationFile;
-import gloomlib.configuration.core.model.FieldMeta;
 import com.google.common.base.CaseFormat;
+import gloomlib.configuration.api.ConfigurationFile;
+import gloomlib.configuration.api.util.ConfigurationLogger;
+import gloomlib.configuration.core.model.FieldMeta;
 import gloomlib.configuration.core.util.ConfigBackup;
 import gloomlib.configuration.core.util.ConfigurationCache;
-import gloomlib.configuration.core.util.ConfigurationLogger;
 import gloomlib.configuration.core.util.ReflectionUtils;
 import org.bukkit.configuration.file.YamlConfiguration;
 
@@ -171,7 +171,7 @@ public final class VersionManager {
      * @param migrate         whether to migrate data during upgrade
      */
     record VersionCheckResult(Field versionField, int expectedVersion, int actualVersion, boolean autoBackup,
-                                     boolean migrate) {
+                              boolean migrate) {
         /**
          * Checks if an upgrade is needed.
          *

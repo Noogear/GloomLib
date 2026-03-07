@@ -1,8 +1,8 @@
 package gloomlib.script.core;
 
+import gloomlib.script.api.ScriptCompileException;
 import gloomlib.script.core.ScriptIR.BaseType;
 import gloomlib.script.core.ScriptIR.IRType;
-import gloomlib.script.api.ScriptCompileException;
 import org.objectweb.asm.Opcodes;
 
 import java.util.EnumSet;
@@ -48,28 +48,71 @@ public enum CheckOp {
     // ──────── 范围 ────────
     BETWEEN("between", Category.NUMERIC, EnumSet.of(BaseType.INT, BaseType.LONG, BaseType.DOUBLE));
 
-    // ======================== 字段 ========================
+
+    /**
+     * {@code in} 操作符的列表展开阈值：列表项数 &le; 此值时展开为多路比较，否则提升为 {@code static final Set}。
+     */
+    public static final int IN_SET_THRESHOLD = 3;
+    /**
+     * 所有合法 symbol 的逗号分隔字符串（用于错误消息）。
+     */
+    public static final String ALL_SYMBOLS;
+    /**
+     * symbol → CheckOp 快速查找表。
+     */
+    private static final Map<String, CheckOp> SYMBOL_MAP;
+    /**
+     * 常见拼写错误 → 正确 symbol 的映射。
+     */
+    private static final Map<String, String> TYPO_MAP = Map.ofEntries(
+            Map.entry("startswith", "starts_with"),
+            Map.entry("startsWith", "starts_with"),
+            Map.entry("start_with", "starts_with"),
+            Map.entry("endswith", "ends_with"),
+            Map.entry("endsWith", "ends_with"),
+            Map.entry("end_with", "ends_with"),
+            Map.entry("match", "matches"),
+            Map.entry("regex", "matches"),
+            Map.entry("include", "contains"),
+            Map.entry("includes", "contains"),
+            Map.entry("has", "contains"),
+            Map.entry("eq", "=="),
+            Map.entry("ne", "!="),
+            Map.entry("neq", "!="),
+            Map.entry("gt", ">"),
+            Map.entry("lt", "<"),
+            Map.entry("gte", ">="),
+            Map.entry("lte", "<="),
+            Map.entry("is", "=="),
+            Map.entry("not", "!="),
+            Map.entry("equal", "=="),
+            Map.entry("equals", "==")
+    );
+
+
+    static {
+        Map<String, CheckOp> map = new java.util.HashMap<>();
+        for (CheckOp op : values()) {
+            map.put(op.symbol, op);
+        }
+        SYMBOL_MAP = Map.copyOf(map);
+        ALL_SYMBOLS = java.util.Arrays.stream(values())
+                .map(CheckOp::symbol)
+                .collect(Collectors.joining(", "));
+    }
+
 
     private final String symbol;
     private final Category category;
+
     private final EnumSet<BaseType> supportedTypes;
+
 
     CheckOp(String symbol, Category category, EnumSet<BaseType> supportedTypes) {
         this.symbol = symbol;
         this.category = category;
         this.supportedTypes = supportedTypes;
     }
-
-    // ======================== 分类枚举 ========================
-
-    /**
-     * 操作符分类——用于分组行为特性（数值/字符串/空值/成员判定等）。
-     */
-    public enum Category {
-        NULL_CHECK, TYPE_CHECK, EQUALITY, NUMERIC, STRING_OP, MEMBERSHIP
-    }
-
-    // ======================== 解析 ========================
 
     /**
      * 从原始字符串解析操作符（支持 {@code !} 前缀取反）。
@@ -116,6 +159,7 @@ public enum CheckOp {
                         rawOp, ALL_SYMBOLS));
     }
 
+
     /**
      * 仅按 symbol 查表，不做取反解析也不抛异常。
      *
@@ -125,29 +169,13 @@ public enum CheckOp {
         return SYMBOL_MAP.get(symbol);
     }
 
-    // ======================== 解析结果 ========================
-
-    /**
-     * 操作符解析结果，包含枚举实例和取反标志。
-     * <p>
-     * 替代原来的 {@code OpInfo(String op, boolean negate)} record。
-     */
-    public record Resolved(CheckOp op, boolean negate) {
-
-        /** 取反后的 symbol（便于日志/错误消息）。 */
-        public String toSymbol() {
-            return negate ? "!" + op.symbol : op.symbol;
-        }
-    }
-
-    // ======================== 类型兼容性 ========================
-
     /**
      * 检查该操作符是否支持给定 IRType。通过 BaseType 进行比较，避免 TypeToken 实例不等问题。
      */
     public boolean supportsType(IRType type) {
         return supportedTypes.contains(type.base());
     }
+
 
     /**
      * AOT 类型兼容性验证。不兼容时抛出编译异常并附带提示。
@@ -176,8 +204,6 @@ public enum CheckOp {
                         symbol, describeExpectedTypes(), variable, type, hint));
     }
 
-    // ======================== 跳转指令映射 ========================
-
     /**
      * DCMPG/LCMP 后的单值比较跳转 opcode（double/long 共用）。
      *
@@ -185,12 +211,12 @@ public enum CheckOp {
      */
     public int cmpJump() {
         return switch (this) {
-            case GT  -> Opcodes.IFGT;
+            case GT -> Opcodes.IFGT;
             case GTE -> Opcodes.IFGE;
-            case LT  -> Opcodes.IFLT;
+            case LT -> Opcodes.IFLT;
             case LTE -> Opcodes.IFLE;
-            case EQ  -> Opcodes.IFEQ;
-            default  -> throw new IllegalArgumentException("Unsupported comparison op: " + symbol);
+            case EQ -> Opcodes.IFEQ;
+            default -> throw new IllegalArgumentException("Unsupported comparison op: " + symbol);
         };
     }
 
@@ -201,18 +227,18 @@ public enum CheckOp {
      */
     public int intCmpJump() {
         return switch (this) {
-            case GT  -> Opcodes.IF_ICMPGT;
+            case GT -> Opcodes.IF_ICMPGT;
             case GTE -> Opcodes.IF_ICMPGE;
-            case LT  -> Opcodes.IF_ICMPLT;
+            case LT -> Opcodes.IF_ICMPLT;
             case LTE -> Opcodes.IF_ICMPLE;
-            case EQ  -> Opcodes.IF_ICMPEQ;
-            default  -> throw new IllegalArgumentException("Unsupported comparison op for int: " + symbol);
+            case EQ -> Opcodes.IF_ICMPEQ;
+            default -> throw new IllegalArgumentException("Unsupported comparison op for int: " + symbol);
         };
     }
 
-    // ======================== 分类查询 ========================
-
-    /** 操作符是否为数值类比较（决定 value 字段是否可尝试作为数学表达式解析）。 */
+    /**
+     * 操作符是否为数值类比较（决定 value 字段是否可尝试作为数学表达式解析）。
+     */
     public boolean isNumeric() {
         return category == Category.NUMERIC || this == EQ;
     }
@@ -248,9 +274,9 @@ public enum CheckOp {
     public String javaStringMethodName() {
         return switch (this) {
             case STARTS_WITH -> "startsWith";
-            case ENDS_WITH   -> "endsWith";
-            case MATCHES     -> "matches";
-            case CONTAINS    -> "contains";
+            case ENDS_WITH -> "endsWith";
+            case MATCHES -> "matches";
+            case CONTAINS -> "contains";
             default -> throw new IllegalStateException("No Java String method name for op: " + symbol);
         };
     }
@@ -266,28 +292,34 @@ public enum CheckOp {
      */
     public int afterEqualsJump() {
         return switch (this) {
-            case EQ  -> Opcodes.IFNE;
+            case EQ -> Opcodes.IFNE;
             case NEQ -> Opcodes.IFEQ;
-            default  -> throw new IllegalArgumentException("afterEqualsJump not applicable for op: " + symbol);
+            default -> throw new IllegalArgumentException("afterEqualsJump not applicable for op: " + symbol);
         };
     }
 
-    /** 操作符分类。 */
+
+    /**
+     * 操作符分类。
+     */
     public Category category() {
         return category;
     }
 
-    /** 操作符 YAML 符号字符串（如 "==", "contains"）。 */
+    /**
+     * 操作符 YAML 符号字符串（如 "==", "contains"）。
+     */
     public String symbol() {
         return symbol;
     }
 
-    /** 该操作符支持的所有 BaseType 集合（不可变视图）。 */
+    /**
+     * 该操作符支持的所有 BaseType 集合（不可变视图）。
+     */
     public Set<BaseType> supportedTypes() {
         return java.util.Collections.unmodifiableSet(supportedTypes);
     }
 
-    // ======================== 常量折叠支持 ========================
 
     /**
      * 编译期常量折叠：对两个数值执行比较。
@@ -296,12 +328,12 @@ public enum CheckOp {
      */
     public Boolean foldNumeric(double varValue, double cmpValue) {
         return switch (this) {
-            case GT  -> varValue > cmpValue;
+            case GT -> varValue > cmpValue;
             case GTE -> varValue >= cmpValue;
-            case LT  -> varValue < cmpValue;
+            case LT -> varValue < cmpValue;
             case LTE -> varValue <= cmpValue;
-            case EQ  -> varValue == cmpValue;
-            default  -> null;
+            case EQ -> varValue == cmpValue;
+            default -> null;
         };
     }
 
@@ -316,11 +348,12 @@ public enum CheckOp {
     public Boolean foldObject(Object varValue, Object cmpValue) {
         if (varValue == null || cmpValue == null) return null;
         return switch (this) {
-            case EQ  -> varValue.equals(cmpValue);
+            case EQ -> varValue.equals(cmpValue);
             case NEQ -> !varValue.equals(cmpValue);
-            case CONTAINS   -> varValue instanceof String s && cmpValue instanceof String sub ? s.contains(sub) : null;
-            case STARTS_WITH -> varValue instanceof String s && cmpValue instanceof String sub ? s.startsWith(sub) : null;
-            case ENDS_WITH   -> varValue instanceof String s && cmpValue instanceof String sub ? s.endsWith(sub) : null;
+            case CONTAINS -> varValue instanceof String s && cmpValue instanceof String sub ? s.contains(sub) : null;
+            case STARTS_WITH ->
+                    varValue instanceof String s && cmpValue instanceof String sub ? s.startsWith(sub) : null;
+            case ENDS_WITH -> varValue instanceof String s && cmpValue instanceof String sub ? s.endsWith(sub) : null;
             default -> null;
         };
     }
@@ -332,11 +365,11 @@ public enum CheckOp {
      */
     public Boolean foldRange(double min, double max, double cmpValue, Object exactValue) {
         return switch (this) {
-            case GT  -> min > cmpValue ? Boolean.TRUE : max <= cmpValue ? Boolean.FALSE : null;
+            case GT -> min > cmpValue ? Boolean.TRUE : max <= cmpValue ? Boolean.FALSE : null;
             case GTE -> min >= cmpValue ? Boolean.TRUE : max < cmpValue ? Boolean.FALSE : null;
-            case LT  -> max < cmpValue ? Boolean.TRUE : min >= cmpValue ? Boolean.FALSE : null;
+            case LT -> max < cmpValue ? Boolean.TRUE : min >= cmpValue ? Boolean.FALSE : null;
             case LTE -> max <= cmpValue ? Boolean.TRUE : min > cmpValue ? Boolean.FALSE : null;
-            case EQ  -> {
+            case EQ -> {
                 if (exactValue != null) {
                     yield exactValue.equals(cmpValue)
                             || (exactValue instanceof Number n && n.doubleValue() == cmpValue)
@@ -348,38 +381,18 @@ public enum CheckOp {
         };
     }
 
-    // ======================== 常量提升 ========================
-
-    /**
-     * {@code in} 操作符的列表展开阈值：列表项数 &le; 此值时展开为多路比较，否则提升为 {@code static final Set}。
-     */
-    public static final int IN_SET_THRESHOLD = 3;
-
-    /**
-     * 描述节点在编译期需要提升为 {@code static final} 的常量类型。
-     */
-    public enum HoistKind {
-        /** 无需提升。 */
-        NONE,
-        /** {@code matches} → {@code java.util.regex.Pattern} 预编译字段。 */
-        PATTERN,
-        /** {@code in} 列表超阈值 → {@code Set} 常量字段。 */
-        IN_SET,
-        /** {@code between} → {@code double[]} 范围数组字段。 */
-        RANGE_ARRAY
-    }
-
     /**
      * 该操作符的编译期常量提升策略。
      */
     public HoistKind hoistKind() {
         return switch (this) {
             case MATCHES -> HoistKind.PATTERN;
-            case IN      -> HoistKind.IN_SET;
+            case IN -> HoistKind.IN_SET;
             case BETWEEN -> HoistKind.RANGE_ARRAY;
-            default      -> HoistKind.NONE;
+            default -> HoistKind.NONE;
         };
     }
+
 
     /**
      * 提升字段名前缀（仅 {@link #hoistKind()} != {@code NONE} 时有意义）。
@@ -391,58 +404,11 @@ public enum CheckOp {
     public String hoistFieldPrefix() {
         return switch (this) {
             case MATCHES -> "PATTERN_";
-            case IN      -> "SET_";
+            case IN -> "SET_";
             case BETWEEN -> "RANGE_";
-            default      -> throw new IllegalStateException("No hoist field prefix for op: " + symbol);
+            default -> throw new IllegalStateException("No hoist field prefix for op: " + symbol);
         };
     }
-
-    // ======================== 内部常量 ========================
-
-    /** symbol → CheckOp 快速查找表。 */
-    private static final Map<String, CheckOp> SYMBOL_MAP;
-
-    /** 所有合法 symbol 的逗号分隔字符串（用于错误消息）。 */
-    static final String ALL_SYMBOLS;
-
-    /** 常见拼写错误 → 正确 symbol 的映射。 */
-    private static final Map<String, String> TYPO_MAP = Map.ofEntries(
-            Map.entry("startswith", "starts_with"),
-            Map.entry("startsWith", "starts_with"),
-            Map.entry("start_with", "starts_with"),
-            Map.entry("endswith", "ends_with"),
-            Map.entry("endsWith", "ends_with"),
-            Map.entry("end_with", "ends_with"),
-            Map.entry("match", "matches"),
-            Map.entry("regex", "matches"),
-            Map.entry("include", "contains"),
-            Map.entry("includes", "contains"),
-            Map.entry("has", "contains"),
-            Map.entry("eq", "=="),
-            Map.entry("ne", "!="),
-            Map.entry("neq", "!="),
-            Map.entry("gt", ">"),
-            Map.entry("lt", "<"),
-            Map.entry("gte", ">="),
-            Map.entry("lte", "<="),
-            Map.entry("is", "=="),
-            Map.entry("not", "!="),
-            Map.entry("equal", "=="),
-            Map.entry("equals", "==")
-    );
-
-    static {
-        Map<String, CheckOp> map = new java.util.HashMap<>();
-        for (CheckOp op : values()) {
-            map.put(op.symbol, op);
-        }
-        SYMBOL_MAP = Map.copyOf(map);
-        ALL_SYMBOLS = java.util.Arrays.stream(values())
-                .map(CheckOp::symbol)
-                .collect(Collectors.joining(", "));
-    }
-
-    // ======================== 辅助方法 ========================
 
     private String describeExpectedTypes() {
         return supportedTypes.stream()
@@ -453,12 +419,9 @@ public enum CheckOp {
     private String buildTypeHint(IRType type) {
         // 根据操作符类别和实际类型给出更有针对性的提示
         return switch (this) {
-            case GT, GTE, LT, LTE, BETWEEN ->
-                    "Hint: use '==' for equality or 'contains' for collection membership.";
-            case STARTS_WITH, ENDS_WITH, MATCHES ->
-                    "Hint: use '==' for non-string equality checks.";
-            case CONTAINS ->
-                    "Hint: for numeric ranges, use 'between'; for set membership, use 'in'.";
+            case GT, GTE, LT, LTE, BETWEEN -> "Hint: use '==' for equality or 'contains' for collection membership.";
+            case STARTS_WITH, ENDS_WITH, MATCHES -> "Hint: use '==' for non-string equality checks.";
+            case CONTAINS -> "Hint: for numeric ranges, use 'between'; for set membership, use 'in'.";
             case IN -> {
                 if (type == IRType.DOUBLE || type == IRType.LONG)
                     yield "Hint: use 'between' for numeric range checks, or '==' for exact equality.";
@@ -468,5 +431,50 @@ public enum CheckOp {
             }
             default -> "";
         };
+    }
+
+    /**
+     * 操作符分类——用于分组行为特性（数值/字符串/空值/成员判定等）。
+     */
+    public enum Category {
+        NULL_CHECK, TYPE_CHECK, EQUALITY, NUMERIC, STRING_OP, MEMBERSHIP
+    }
+
+
+    /**
+     * 描述节点在编译期需要提升为 {@code static final} 的常量类型。
+     */
+    public enum HoistKind {
+        /**
+         * 无需提升。
+         */
+        NONE,
+        /**
+         * {@code matches} → {@code java.util.regex.Pattern} 预编译字段。
+         */
+        PATTERN,
+        /**
+         * {@code in} 列表超阈值 → {@code Set} 常量字段。
+         */
+        IN_SET,
+        /**
+         * {@code between} → {@code double[]} 范围数组字段。
+         */
+        RANGE_ARRAY
+    }
+
+    /**
+     * 操作符解析结果，包含枚举实例和取反标志。
+     * <p>
+     * 替代原来的 {@code OpInfo(String op, boolean negate)} record。
+     */
+    public record Resolved(CheckOp op, boolean negate) {
+
+        /**
+         * 取反后的 symbol（便于日志/错误消息）。
+         */
+        public String toSymbol() {
+            return negate ? "!" + op.symbol : op.symbol;
+        }
     }
 }

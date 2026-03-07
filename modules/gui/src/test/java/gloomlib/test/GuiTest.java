@@ -46,7 +46,6 @@ class GuiTest {
         inventory = server.createInventory(null, 27);
     }
 
-    // ==================== 组件测试 ====================
 
     @Test
     @DisplayName("静态组件应该正确渲染")
@@ -88,7 +87,6 @@ class GuiTest {
         assertEquals(Material.DIAMOND_SWORD, cloned.render(0).getType());
     }
 
-    // ==================== 交互测试 ====================
 
     @Test
     @DisplayName("InteractionContext应该正确识别点击类型")
@@ -111,7 +109,6 @@ class GuiTest {
         assertTrue(shiftClick.isShiftClick());
     }
 
-    // ==================== 背包操作测试 ====================
 
     @Test
     @DisplayName("物品应该能正确放入背包")
@@ -124,7 +121,6 @@ class GuiTest {
         assertEquals(10, inventory.getItem(0).getAmount());
     }
 
-    // ==================== 工具类测试 ====================
 
     @Test
     @DisplayName("GuiItemUtils应该正确判断空物品")
@@ -169,7 +165,6 @@ class GuiTest {
         assertEquals(0, slot); // 第一个可堆叠的槽位
     }
 
-    // ==================== 状态管理测试 ====================
 
     @Test
     @DisplayName("ReactiveState应该正确存储和更新值")
@@ -194,7 +189,6 @@ class GuiTest {
         assertFalse(boolState.get());
     }
 
-    // ==================== 性能测试 ====================
 
     @Test
     @DisplayName("大量组件渲染应该在合理时间内完成")

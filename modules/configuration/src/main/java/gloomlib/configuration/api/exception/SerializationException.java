@@ -1,10 +1,6 @@
 package gloomlib.configuration.api.exception;
 
-import gloomlib.diagnostic.Diagnostic;
-import gloomlib.diagnostic.DiagnosticCategory;
-import gloomlib.diagnostic.DiagnosticException;
-import gloomlib.diagnostic.SourceLocation;
-import gloomlib.diagnostic.SourceView;
+import gloomlib.diagnostic.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -52,7 +48,6 @@ public class SerializationException extends DiagnosticException {
         this.actualValue = actualValue;
     }
 
-    // ======================== 工厂方法 ========================
 
     /**
      * YAML 值类型与 Java 类型不匹配（例如字符串写入了 int 字段）。
@@ -124,7 +119,6 @@ public class SerializationException extends DiagnosticException {
         return new SerializationException(d, path, null, null, null);
     }
 
-    // ======================== Internal helpers ========================
 
     private static SourceLocation pathLocation(List<String> path) {
         if (path == null || path.isEmpty()) return SourceLocation.UNKNOWN;
@@ -151,27 +145,34 @@ public class SerializationException extends DiagnosticException {
         return full;
     }
 
-    // ======================== Accessors ========================
 
-    /** YAML 键路径，例如 {@code ["classes", "warrior", "health"]}。 */
+    /**
+     * YAML 键路径，例如 {@code ["classes", "warrior", "health"]}。
+     */
     @NotNull
     public List<String> getNodePath() {
         return nodePath;
     }
 
-    /** 期望的 Java 类型，可为 null。 */
+    /**
+     * 期望的 Java 类型，可为 null。
+     */
     @Nullable
     public Class<?> getExpectedType() {
         return expectedType;
     }
 
-    /** YAML 中读取到的实际值，可为 null。 */
+    /**
+     * YAML 中读取到的实际值，可为 null。
+     */
     @Nullable
     public Object getActualValue() {
         return actualValue;
     }
 
-    /** 路径的点分隔形式，根路径返回 {@code "<root>"}。 */
+    /**
+     * 路径的点分隔形式，根路径返回 {@code "<root>"}。
+     */
     @NotNull
     public String getPathString() {
         return nodePath.isEmpty() ? "<root>" : String.join(".", nodePath);

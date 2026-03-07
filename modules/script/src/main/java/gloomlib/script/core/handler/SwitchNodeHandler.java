@@ -1,14 +1,14 @@
 package gloomlib.script.core.handler;
 
-import gloomlib.script.core.ParseContext;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import gloomlib.script.core.CompilationContext;
+import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.ScriptIR;
 import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.FlowNodeType;
 import gloomlib.script.core.ScriptIR.IRType;
 import gloomlib.script.core.ScriptIR.NodeCapability;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -35,6 +35,21 @@ public final class SwitchNodeHandler
     }
 
     public static void init() {
+    }
+
+    /**
+     * 检查 case key 是否像合法的枚举常量名（Java 标识符规则）。
+     */
+    private static boolean isValidEnumName(String name) {
+        if (name == null || name.isEmpty())
+            return false;
+        if (!Character.isJavaIdentifierStart(name.charAt(0)))
+            return false;
+        for (int i = 1; i < name.length(); i++) {
+            if (!Character.isJavaIdentifierPart(name.charAt(i)))
+                return false;
+        }
+        return true;
     }
 
     @Override
@@ -169,8 +184,8 @@ public final class SwitchNodeHandler
     }
 
     private void emitLookupSwitch(MethodVisitor mv, int slot,
-            ImmutableMap<String, ImmutableList<FlowNode>> cases,
-            CompilationContext ctx) {
+                                  ImmutableMap<String, ImmutableList<FlowNode>> cases,
+                                  CompilationContext ctx) {
         Label defaultLabel = new Label();
         Label endLabel = new Label();
 
@@ -223,8 +238,8 @@ public final class SwitchNodeHandler
     }
 
     private void emitTableIntSwitch(MethodVisitor mv, int slot,
-            ImmutableMap<String, ImmutableList<FlowNode>> cases,
-            CompilationContext ctx) {
+                                    ImmutableMap<String, ImmutableList<FlowNode>> cases,
+                                    CompilationContext ctx) {
         Label defaultLabel = new Label();
         Label endLabel = new Label();
 
@@ -269,8 +284,8 @@ public final class SwitchNodeHandler
     }
 
     private void emitCascadeIfElseSwitch(MethodVisitor mv, int slot, IRType type,
-            ImmutableMap<String, ImmutableList<FlowNode>> cases,
-            CompilationContext ctx) {
+                                         ImmutableMap<String, ImmutableList<FlowNode>> cases,
+                                         CompilationContext ctx) {
         Label endLabel = new Label();
         Label defaultLabel = new Label(); // 如果没有写 default 则指向 end
 
@@ -374,20 +389,5 @@ public final class SwitchNodeHandler
             return node.withAttr("cases", sorted.build());
         }
         return node;
-    }
-
-    /**
-     * 检查 case key 是否像合法的枚举常量名（Java 标识符规则）。
-     */
-    private static boolean isValidEnumName(String name) {
-        if (name == null || name.isEmpty())
-            return false;
-        if (!Character.isJavaIdentifierStart(name.charAt(0)))
-            return false;
-        for (int i = 1; i < name.length(); i++) {
-            if (!Character.isJavaIdentifierPart(name.charAt(i)))
-                return false;
-        }
-        return true;
     }
 }

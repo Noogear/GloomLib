@@ -1,14 +1,9 @@
 package gloomlib.script.api.injection;
 
+import com.google.common.base.Preconditions;
 import gloomlib.script.api.ScriptHost;
 import gloomlib.script.core.CompilationPipeline;
-import gloomlib.script.core.handler.ActionNodeHandler;
-import gloomlib.script.core.handler.CheckNodeHandler;
-import gloomlib.script.core.handler.CompositeCheckHandler;
-import gloomlib.script.core.handler.ReturnNodeHandler;
-import gloomlib.script.core.handler.SwitchNodeHandler;
-import gloomlib.script.core.handler.MathNodeHandler;
-import com.google.common.base.Preconditions;
+import gloomlib.script.core.handler.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,10 +17,6 @@ import java.util.function.Consumer;
  */
 public final class ScriptInjector {
 
-    private final ScriptHost host;
-    private final CompilationPipeline pipeline;
-    private final List<RegisteredScript> registered = new ArrayList<>();
-
     // 确保 Handler 注册（类加载触发 static 块）
     static {
         CheckNodeHandler.init();
@@ -35,6 +26,10 @@ public final class ScriptInjector {
         MathNodeHandler.init();
         CompositeCheckHandler.init();
     }
+
+    private final ScriptHost host;
+    private final CompilationPipeline pipeline;
+    private final List<RegisteredScript> registered = new ArrayList<>();
 
     public ScriptInjector(ScriptHost host) {
         this.host = Preconditions.checkNotNull(host, "host");
@@ -58,7 +53,7 @@ public final class ScriptInjector {
                     "Payload class not found: " + compiled.ir().payloadClass());
         }
 
-        Consumer<Object> handler = (Consumer<Object>) compiled.newHandler();
+        Consumer<Object> handler = compiled.newHandler();
         int priority = compiled.ir().priority();
 
         Object token = host.registerEvent(payloadClass, priority, handler);

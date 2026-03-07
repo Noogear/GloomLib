@@ -14,13 +14,11 @@ import gloomlib.configuration.api.annotation.*;
 })
 public class EnhancedTestConfig extends ConfigurationFile {
 
-    // ============ Version Management ============
 
     @Version(value = 2, autoBackup = true, migrate = true)
     @Comment("Configuration version (do not modify manually)")
     public int version = 2;
 
-    // ============ API Keys ============
 
     @Comment("API key")
     public String apiKey = "secret-key-12345";
@@ -28,7 +26,6 @@ public class EnhancedTestConfig extends ConfigurationFile {
     @Comment("Database password")
     public String databasePassword = "password123";
 
-    // ============ Regular Configuration ============
 
     @Comment("Server name")
     public String serverName = "MyServer";
@@ -40,12 +37,10 @@ public class EnhancedTestConfig extends ConfigurationFile {
     @Comment("Debug mode")
     public boolean debugMode = false;
 
-    // ============ Nested Configuration ============
 
     @Comment("Database settings")
     public DatabaseConfig database = new DatabaseConfig();
 
-    // ============ Validation Methods ============
 
     private static int validateMaxPlayers(int value) {
         if (value < 1) return 1;
@@ -53,7 +48,6 @@ public class EnhancedTestConfig extends ConfigurationFile {
         return value;
     }
 
-    // ============ Lifecycle Hooks ============
 
     @PostLoad
     public void onConfigLoaded() {
@@ -63,7 +57,6 @@ public class EnhancedTestConfig extends ConfigurationFile {
         }
     }
 
-    // ============ Nested Classes ============
 
     public static class DatabaseConfig extends gloomlib.configuration.api.ConfigurationPart {
 

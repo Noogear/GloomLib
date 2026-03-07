@@ -1,4 +1,4 @@
-package gloomlib.configuration.core.util;
+package gloomlib.configuration.api.util;
 
 import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
 import org.jetbrains.annotations.Nullable;
@@ -8,11 +8,14 @@ import org.slf4j.LoggerFactory;
 /**
  * Centralized logging utility for the configuration system.
  * Uses ComponentLogger when available, falls back to SLF4J.
+ * <p>
+ * Call {@link #setLogger(ComponentLogger)} once during plugin initialization;
+ * the fallback SLF4J logger will automatically adopt the plugin's own name.
  */
 public final class ConfigurationLogger {
 
-    private static final Logger SLF4J_LOGGER = LoggerFactory.getLogger("GloomLib-Config");
-    private static ComponentLogger logger;
+    private static volatile Logger fallbackLogger = LoggerFactory.getLogger(ConfigurationLogger.class);
+    private static volatile ComponentLogger logger;
 
     private ConfigurationLogger() {
         throw new UnsupportedOperationException("Utility class");
@@ -20,11 +23,14 @@ public final class ConfigurationLogger {
 
     /**
      * Enables logging with the provided ComponentLogger.
+     * Also updates the SLF4J fallback to use the same plugin name,
+     * so pre-init log lines are namespaced consistently.
      *
      * @param componentLogger the plugin's ComponentLogger
      */
     public static void setLogger(ComponentLogger componentLogger) {
         logger = componentLogger;
+        fallbackLogger = LoggerFactory.getLogger(componentLogger.getName());
     }
 
     /**
@@ -37,7 +43,7 @@ public final class ConfigurationLogger {
         if (logger != null) {
             logger.error(message, throwable);
         } else {
-            SLF4J_LOGGER.error(message, throwable);
+            fallbackLogger.error(message, throwable);
         }
     }
 
@@ -50,7 +56,7 @@ public final class ConfigurationLogger {
         if (logger != null) {
             logger.warn(message);
         } else {
-            SLF4J_LOGGER.warn(message);
+            fallbackLogger.warn(message);
         }
     }
 
@@ -63,7 +69,7 @@ public final class ConfigurationLogger {
         if (logger != null) {
             logger.info(message);
         } else {
-            SLF4J_LOGGER.info(message);
+            fallbackLogger.info(message);
         }
     }
 }

@@ -1,5 +1,6 @@
 package gloomlib.configuration.core.util;
 
+import com.google.common.base.CaseFormat;
 import gloomlib.configuration.api.annotation.Check;
 import gloomlib.configuration.api.annotation.Comment;
 import gloomlib.configuration.api.annotation.Ignore;
@@ -14,8 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
-
-import com.google.common.base.CaseFormat;
 
 /**
  * Cache manager for configuration metadata and reflection results.

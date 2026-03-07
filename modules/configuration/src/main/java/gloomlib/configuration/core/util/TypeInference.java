@@ -4,7 +4,10 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.*;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -18,7 +21,7 @@ public final class TypeInference {
     /**
      * Extracts generic parameter at index.
      *
-     * @param type generic type
+     * @param type  generic type
      * @param index parameter index (0-based)
      * @return resolved class, or Object.class if fails
      */
@@ -147,7 +150,6 @@ public final class TypeInference {
         return result;
     }
 
-    // === Type Resolution ===
 
     private static void resolveInheritanceChainRecursive(
             Class<?> current,
@@ -194,7 +196,6 @@ public final class TypeInference {
         }
     }
 
-    // === Field Type Inference ===
 
     /**
      * Infers the value type from a field (e.g., Map value type, List element type).
@@ -248,7 +249,6 @@ public final class TypeInference {
         return result;
     }
 
-    // === Cache Management ===
 
     /**
      * Clears all caches.
@@ -270,7 +270,7 @@ public final class TypeInference {
                 INHERITANCE_CACHE.size());
     }
 
-    // === Cache Keys (Records) ===
 
-    private record TypeCacheKey(Type type, int index) { }
+    private record TypeCacheKey(Type type, int index) {
+    }
 }

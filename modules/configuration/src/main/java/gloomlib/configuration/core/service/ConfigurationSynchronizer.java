@@ -2,13 +2,13 @@ package gloomlib.configuration.core.service;
 
 import gloomlib.configuration.api.ConfigurationPart;
 import gloomlib.configuration.api.annotation.Check;
-import gloomlib.configuration.api.exception.SerializationException;
 import gloomlib.configuration.api.annotation.Comment;
 import gloomlib.configuration.api.annotation.Inline;
 import gloomlib.configuration.api.annotation.Template;
+import gloomlib.configuration.api.exception.SerializationException;
+import gloomlib.configuration.api.util.ConfigurationLogger;
 import gloomlib.configuration.core.model.FieldMeta;
 import gloomlib.configuration.core.util.ConfigurationCache;
-import gloomlib.configuration.core.util.ConfigurationLogger;
 import gloomlib.configuration.core.util.ReflectionUtils;
 import gloomlib.configuration.core.util.TypeInference;
 import org.bukkit.configuration.ConfigurationSection;
@@ -274,7 +274,6 @@ public final class ConfigurationSynchronizer {
         return v.validate(val);
     }
 
-    // === Template Processing ===
 
     /**
      * Processes @Template annotations for map fields.

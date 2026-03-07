@@ -4,8 +4,14 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableBiMap;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import gloomlib.math.api.MathNode;
+import gloomlib.math.api.VariableEmitter;
+import gloomlib.script.api.ScriptCompileException;
+import org.objectweb.asm.MethodVisitor;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -15,12 +21,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import org.objectweb.asm.MethodVisitor;
-import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.Type;
-import gloomlib.math.api.MathNode;
-import gloomlib.math.api.VariableEmitter;
-import gloomlib.script.api.ScriptCompileException;
 
 /**
  * 编译上下文，管理变量槽位分配、类型信息传播、常量池和反射缓存。
@@ -30,25 +30,9 @@ import gloomlib.script.api.ScriptCompileException;
 @SuppressWarnings("null")
 public final class CompilationContext {
 
-    /** 脚本标识（如文件名），用于诊断信息定位 */
-    private final String scriptId;
-
-    /** 变量名 ↔ 局部变量槽位（双向映射） */
-    private final ImmutableBiMap<String, Integer> varSlots;
-
-    /** payload 别名 → slot 1（别名与 payload 共享同一槽位，不能放入 BiMap） */
-    private final ImmutableMap<String, Integer> aliasSlots;
-
-    /** 变量名 → IR 类型 */
-    private final ImmutableMap<String, ScriptIR.IRType> typeTable;
-
-    /** 编译时已知常量 */
-    private final ImmutableMap<String, Object> constants;
-
-    /** 载荷类（如 Event） */
-    private final Class<?> payloadClass;
-
-    /** getter 方法反射缓存（跨编译复用） */
+    /**
+     * getter 方法反射缓存（跨编译复用）
+     */
     private static final LoadingCache<String, MethodHandle> METHOD_CACHE = CacheBuilder.newBuilder()
             .maximumSize(256)
             .expireAfterAccess(10, TimeUnit.MINUTES)
@@ -64,8 +48,33 @@ public final class CompilationContext {
                     return MethodHandles.lookup().unreflect(method);
                 }
             });
-
-    /** PGO 分支权重数据（可选） */
+    /**
+     * 脚本标识（如文件名），用于诊断信息定位
+     */
+    private final String scriptId;
+    /**
+     * 变量名 ↔ 局部变量槽位（双向映射）
+     */
+    private final ImmutableBiMap<String, Integer> varSlots;
+    /**
+     * payload 别名 → slot 1（别名与 payload 共享同一槽位，不能放入 BiMap）
+     */
+    private final ImmutableMap<String, Integer> aliasSlots;
+    /**
+     * 变量名 → IR 类型
+     */
+    private final ImmutableMap<String, ScriptIR.IRType> typeTable;
+    /**
+     * 编译时已知常量
+     */
+    private final ImmutableMap<String, Object> constants;
+    /**
+     * 载荷类（如 Event）
+     */
+    private final Class<?> payloadClass;
+    /**
+     * PGO 分支权重数据（可选）
+     */
     private final Map<String, double[]> branchWeights = new HashMap<>();
 
     /**
@@ -76,27 +85,34 @@ public final class CompilationContext {
      * 使用 {@link #snapshotNarrowed()} / {@link #restoreNarrowed} 在 any/all 分支边界做快照隔离。
      */
     private final Map<String, Class<?>> narrowedClasses = new HashMap<>();
-
-    /** 常量提升定义（由 ScriptOptimizer 填充） */
-    private ImmutableList<ConstantDef> hoistedConstants = ImmutableList.of();
-
-    /** 活跃变量集合（由 ScriptOptimizer 填充） */
-    private Set<String> liveVars = new HashSet<>();
-
-    /** 目标接口的内部名称（如 java/util/function/ToIntFunction） */
+    /**
+     * 目标接口的内部名称（如 java/util/function/ToIntFunction）
+     */
     private final String targetInterfaceInternalName;
-
-    /** 目标接口的方法名（如 applyAsInt） */
+    /**
+     * 目标接口的方法名（如 applyAsInt）
+     */
     private final String targetMethodName;
-
-    /** 目标接口的方法字节码描述符（如 (Ljava/lang/Object;)I） */
+    /**
+     * 目标接口的方法字节码描述符（如 (Ljava/lang/Object;)I）
+     */
     private final String targetMethodDescriptor;
-
-    /** 目标接口的返回类型 (ASM) */
+    /**
+     * 目标接口的返回类型 (ASM)
+     */
     private final Type targetReturnType;
-
-    /** 下一个可用的局部变量槽位（正确计算了 double/long 各占 2 个 slot） */
+    /**
+     * 下一个可用的局部变量槽位（正确计算了 double/long 各占 2 个 slot）
+     */
     private final int nextSlot;
+    /**
+     * 常量提升定义（由 ScriptOptimizer 填充）
+     */
+    private ImmutableList<ConstantDef> hoistedConstants = ImmutableList.of();
+    /**
+     * 活跃变量集合（由 ScriptOptimizer 填充）
+     */
+    private Set<String> liveVars = new HashSet<>();
 
     private CompilationContext(Builder builder) {
         this.scriptId = builder.scriptId;
@@ -111,6 +127,29 @@ public final class CompilationContext {
         this.targetReturnType = builder.targetReturnType;
         // 使用 Builder 中精确维护的 slotCounter，确保 double/long 各占 2 个 slot 的情况被正确计算。
         this.nextSlot = builder.slotCounter;
+    }
+
+    /**
+     * 从缓存获取 MethodHandle。
+     */
+    public static MethodHandle resolveMethod(Class<?> owner, String methodName) {
+        try {
+            return METHOD_CACHE.get(owner.getName() + "#" + methodName);
+        } catch (Exception e) {
+            throw new IllegalStateException("Cannot resolve method: " + owner.getName() + "#" + methodName, e);
+        }
+    }
+
+    /**
+     * 获取方法的返回类型。
+     */
+    public static Class<?> resolveReturnType(Class<?> owner, String methodName) {
+        MethodHandle mh = resolveMethod(owner, methodName);
+        return mh.type().returnType();
+    }
+
+    public static Builder builder(Class<?> payloadClass) {
+        return new Builder(payloadClass);
     }
 
     public String scriptId() {
@@ -195,34 +234,14 @@ public final class CompilationContext {
         return nextSlot;
     }
 
-    /**
-     * 从缓存获取 MethodHandle。
-     */
-    public static MethodHandle resolveMethod(Class<?> owner, String methodName) {
-        try {
-            return METHOD_CACHE.get(owner.getName() + "#" + methodName);
-        } catch (Exception e) {
-            throw new IllegalStateException("Cannot resolve method: " + owner.getName() + "#" + methodName, e);
-        }
-    }
-
-    /**
-     * 获取方法的返回类型。
-     */
-    public static Class<?> resolveReturnType(Class<?> owner, String methodName) {
-        MethodHandle mh = resolveMethod(owner, methodName);
-        return mh.type().returnType();
-    }
-
     public void putBranchWeights(String switchId, double[] weights) {
         branchWeights.put(switchId, weights);
     }
 
+
     public double[] getBranchWeights(String switchId) {
         return branchWeights.get(switchId);
     }
-
-    // ======================== 类型窄化 ========================
 
     /**
      * 注册变量的窄化类型。在 {@code check: instanceof} 成功路径后调用。
@@ -251,6 +270,7 @@ public final class CompilationContext {
         return new HashMap<>(narrowedClasses);
     }
 
+
     /**
      * 从快照恢复窄化表，用于 any/all 分支退出时还原作用域。
      *
@@ -259,16 +279,6 @@ public final class CompilationContext {
     public void restoreNarrowed(Map<String, Class<?>> snapshot) {
         narrowedClasses.clear();
         narrowedClasses.putAll(snapshot);
-    }
-
-    // ======================== 优化器产出 ========================
-
-    /** 编译期需提升到外置常量池的常量。 */
-    public record ConstantDef(String key, ConstantKind kind, Object value) {
-    }
-
-    public enum ConstantKind {
-        PATTERN, STRING_SET, INT_ARRAY, DOUBLE_ARRAY
     }
 
     public void setHoistedConstants(ImmutableList<ConstantDef> constants) {
@@ -287,19 +297,24 @@ public final class CompilationContext {
         return liveVars;
     }
 
-    // ======================== Builder ========================
+    public enum ConstantKind {
+        PATTERN, STRING_SET, INT_ARRAY, DOUBLE_ARRAY
+    }
 
-    public static Builder builder(Class<?> payloadClass) {
-        return new Builder(payloadClass);
+
+    /**
+     * 编译期需提升到外置常量池的常量。
+     */
+    public record ConstantDef(String key, ConstantKind kind, Object value) {
     }
 
     public static final class Builder {
         private final Class<?> payloadClass;
-        private String scriptId;
         private final ImmutableBiMap.Builder<String, Integer> varSlots = ImmutableBiMap.builder();
         private final ImmutableMap.Builder<String, Integer> aliasSlots = ImmutableMap.builder();
         private final ImmutableMap.Builder<String, ScriptIR.IRType> typeTable = ImmutableMap.builder();
         private final ImmutableMap.Builder<String, Object> constants = ImmutableMap.builder();
+        private String scriptId;
         private int slotCounter = 2; // 0=this, 1=payload
 
         // Defaults to Action Handler via Function<Object, Object>

@@ -1,18 +1,15 @@
 package gloomlib.script.api;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import gloomlib.script.api.action.ActionRegistry;
 import gloomlib.script.api.action.ActionRegistry.ActionDef;
 import gloomlib.script.core.CheckOp;
 import gloomlib.script.core.CompilationPipeline;
 import gloomlib.script.core.CompilationPipeline.CompiledScript;
-import gloomlib.script.core.ScriptIR.FlowNode;
-import gloomlib.script.core.ScriptIR.FlowNodeType;
-import gloomlib.script.core.ScriptIR.IRType;
-import gloomlib.script.core.ScriptIR.ScriptUnit;
-import gloomlib.script.core.ScriptIR.VarDecl;
+import gloomlib.script.core.ScriptIR.*;
+import gloomlib.script.core.handler.CheckNodeHandler;
 import gloomlib.script.core.parser.ScriptParser;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -25,22 +22,14 @@ import java.util.function.Function;
 public final class ScriptBuilder {
 
     private final Class<?> payloadClazz;
+    private final ImmutableList.Builder<VarDecl> vars = ImmutableList.builder();
+    private final ImmutableList.Builder<FlowNode> flow = ImmutableList.builder();
     private String scriptId;
-    private final ImmutableList.Builder<VarDecl> vars = ImmutableList.<VarDecl>builder();
-    private final ImmutableList.Builder<FlowNode> flow = ImmutableList.<FlowNode>builder();
     private ActionRegistry actionRegistry;
 
     private ScriptBuilder(Class<?> payloadClass) {
         this.payloadClazz = payloadClass;
         this.scriptId = "Builder-" + java.util.UUID.randomUUID().toString().substring(0, 8);
-    }
-
-    /**
-     * 手动指定本脚本的来源标识，用于运行期报错追踪。
-     */
-    public ScriptBuilder id(String id) {
-        this.scriptId = id;
-        return this;
     }
 
     /**
@@ -50,6 +39,80 @@ public final class ScriptBuilder {
      */
     public static ScriptBuilder on(Class<?> payloadClass) {
         return new ScriptBuilder(payloadClass);
+    }
+
+    private static FlowNode buildCheckNodeInternal(String variable, String op, Object value) {
+        // 前置校验：strip '!' 前缀后检查操作符合法性
+        validateOperator(op);
+
+        ImmutableMap.Builder<String, Object> attrs = ImmutableMap.builder();
+        attrs.put("variable", variable);
+        attrs.put("op", op);
+
+        double numericValue = 0.0;
+        if (value != null) {
+            Object normalizedValue = value;
+            if (value instanceof String s) {
+                Object parsed = ScriptParser.ValueParser.parseNumber(s);
+                if (parsed instanceof Number) {
+                    normalizedValue = parsed;
+                }
+            }
+            attrs.put("value", normalizedValue);
+            attrs.put("valueType", ScriptParser.ValueParser.inferType(normalizedValue));
+            if (normalizedValue instanceof Number n) {
+                numericValue = n.doubleValue();
+            }
+        }
+        return new FlowNode(FlowNodeType.CHECK, attrs.build(), numericValue, 0);
+    }
+
+    /**
+     * 将 Object 可变参数统一转为 String 列表，以对齐 ActionNodeHandler.emit 的期望类型。
+     */
+    private static ImmutableList<String> toStringArgs(Object... args) {
+        ImmutableList.Builder<String> builder = ImmutableList.builder();
+        for (Object arg : args) {
+            builder.add(String.valueOf(arg));
+        }
+        return builder.build();
+    }
+
+    /**
+     * 校验参数个数（与 ActionNodeHandler.parse 保持一致）。
+     */
+    private static void validateActionArgs(String actionName, ActionDef def, ImmutableList<String> args) {
+        int expectedArgs = def.consumesPayload()
+                ? Math.max(0, def.paramCount() - 1)
+                : def.paramCount();
+        if (args.size() != expectedArgs) {
+            throw gloomlib.script.api.ScriptCompileException.create(
+                    null, null,
+                    gloomlib.diagnostic.DiagnosticCategory.SEMANTIC,
+                    String.format("Action '%s' expects %d %s, but got %d.",
+                            actionName, expectedArgs,
+                            def.consumesPayload()
+                                    ? "user argument(s) (payload is auto-injected as first param)"
+                                    : "argument(s)",
+                            args.size()));
+        }
+    }
+
+    /**
+     * 前置校验操作符合法性。委托给 {@link CheckOp#resolve(String)} 统一处理。
+     */
+    private static void validateOperator(String op) {
+        // CheckOp.resolve 会在操作符不合法时抛出 ScriptCompileException（含拼写建议）
+        CheckOp.resolve(op);
+    }
+
+
+    /**
+     * 手动指定本脚本的来源标识，用于运行期报错追踪。
+     */
+    public ScriptBuilder id(String id) {
+        this.scriptId = id;
+        return this;
     }
 
     /**
@@ -67,7 +130,7 @@ public final class ScriptBuilder {
 
     /**
      * 定义一个允许脚本中操作和提取的底层变量。
-     * 
+     *
      * @param varName    暴露给脚本内部计算的变量别名（例如 "hp"）
      * @param property   底层类的真实属性取值链（例如 "health" 会映射为 getHealth()）
      * @param returnType 该属性推定的真实返回类型
@@ -88,8 +151,6 @@ public final class ScriptBuilder {
         IRType inferredType = ScriptParser.PropertyResolver.resolveType(payloadClazz, property);
         return defineVar(varName, property, inferredType);
     }
-
-    // ======================== CHECK 节点 ========================
 
     /**
      * 追加一个判断限制节点（如果此条件不符合，底层的执行器会在该位置停止，类似 Kotlin 的 takeIf）。
@@ -132,6 +193,7 @@ public final class ScriptBuilder {
         flow.add(buildCheckNode(variable, op, value, onFail));
         return this;
     }
+
 
     /**
      * 追加一个 {@code in} 操作的判断节点，检查变量值是否在给定的候选列表中。
@@ -190,34 +252,6 @@ public final class ScriptBuilder {
         return new FlowNode(FlowNodeType.CHECK, attrs.build(), baseNode.numericValue(), 0);
     }
 
-    private static FlowNode buildCheckNodeInternal(String variable, String op, Object value) {
-        // 前置校验：strip '!' 前缀后检查操作符合法性
-        validateOperator(op);
-
-        ImmutableMap.Builder<String, Object> attrs = ImmutableMap.builder();
-        attrs.put("variable", variable);
-        attrs.put("op", op);
-
-        double numericValue = 0.0;
-        if (value != null) {
-            Object normalizedValue = value;
-            if (value instanceof String s) {
-                Object parsed = ScriptParser.ValueParser.parseNumber(s);
-                if (parsed instanceof Number) {
-                    normalizedValue = parsed;
-                }
-            }
-            attrs.put("value", normalizedValue);
-            attrs.put("valueType", ScriptParser.ValueParser.inferType(normalizedValue));
-            if (normalizedValue instanceof Number n) {
-                numericValue = n.doubleValue();
-            }
-        }
-        return new FlowNode(FlowNodeType.CHECK, attrs.build(), numericValue, 0);
-    }
-
-    // ======================== COMPOSITE CHECK 节点 ========================
-
     /**
      * 追加一个 ANY (OR) 复合判断节点。子条件任一成立即通过。
      */
@@ -239,13 +273,14 @@ public final class ScriptBuilder {
         return this;
     }
 
+
     public ScriptBuilder checkAll(Consumer<ConditionBuilder> allBuilder, Consumer<ScriptBuilder> onFail) {
         flow.add(buildCompositeNode(FlowNodeType.ALL, allBuilder, onFail));
         return this;
     }
 
     private FlowNode buildCompositeNode(FlowNodeType type, Consumer<ConditionBuilder> builderOpt,
-            Consumer<ScriptBuilder> onFail) {
+                                        Consumer<ScriptBuilder> onFail) {
         ConditionBuilder cb = new ConditionBuilder();
         builderOpt.accept(cb);
 
@@ -263,41 +298,6 @@ public final class ScriptBuilder {
         return new FlowNode(type, attrs.build());
     }
 
-    /**
-     * 用于构建复合条件子项的建造器。
-     */
-    public static final class ConditionBuilder {
-        private final ImmutableList.Builder<FlowNode> children = ImmutableList.builder();
-
-        private ConditionBuilder() {
-        }
-
-        public ConditionBuilder check(String variable, String op, Object value) {
-            children.add(buildCheckNodeInternal(variable, op, value));
-            return this;
-        }
-
-        public ConditionBuilder check(String variable, String op) {
-            children.add(buildCheckNodeInternal(variable, op, null));
-            return this;
-        }
-
-        public ConditionBuilder any(Consumer<ConditionBuilder> anyBuilder) {
-            ConditionBuilder cb = new ConditionBuilder();
-            anyBuilder.accept(cb);
-            children.add(new FlowNode(FlowNodeType.ANY, ImmutableMap.of("children", cb.children.build())));
-            return this;
-        }
-
-        public ConditionBuilder all(Consumer<ConditionBuilder> allBuilder) {
-            ConditionBuilder cb = new ConditionBuilder();
-            allBuilder.accept(cb);
-            children.add(new FlowNode(FlowNodeType.ALL, ImmutableMap.of("children", cb.children.build())));
-            return this;
-        }
-    }
-
-    // ======================== ACTION 节点 ========================
 
     /**
      * 追加一个要触发的动作节点（Action）。
@@ -351,8 +351,6 @@ public final class ScriptBuilder {
         return this;
     }
 
-    // ======================== RETURN 节点 ========================
-
     /**
      * 流程提前终止，等价于 {@code return null}。
      */
@@ -374,23 +372,30 @@ public final class ScriptBuilder {
         return this;
     }
 
-    /** 返回整数字面量。 */
+    /**
+     * 返回整数字面量。
+     */
     public ScriptBuilder returnValue(int value) {
         flow.add(new FlowNode(FlowNodeType.RETURN, ImmutableMap.of("value", value)));
         return this;
     }
 
-    /** 返回浮点字面量。 */
+    /**
+     * 返回浮点字面量。
+     */
     public ScriptBuilder returnValue(double value) {
         flow.add(new FlowNode(FlowNodeType.RETURN, ImmutableMap.of("value", value)));
         return this;
     }
 
-    /** 返回布尔字面量。 */
+    /**
+     * 返回布尔字面量。
+     */
     public ScriptBuilder returnValue(boolean value) {
         flow.add(new FlowNode(FlowNodeType.RETURN, ImmutableMap.of("value", value)));
         return this;
     }
+
 
     /**
      * 直接返回变量的原始值（零开销路径）。
@@ -419,7 +424,6 @@ public final class ScriptBuilder {
         return this;
     }
 
-    // ======================== SWITCH 节点 ========================
 
     /**
      * 追加一个多分支选择节点（Switch）。
@@ -438,41 +442,6 @@ public final class ScriptBuilder {
     }
 
     /**
-     * Switch 分支的内部构造器
-     */
-    public static final class SwitchBuilder {
-        private final Class<?> payloadClazz;
-        private final ActionRegistry actionRegistry;
-        private final ImmutableMap.Builder<String, ImmutableList<FlowNode>> cases = ImmutableMap.builder();
-
-        private SwitchBuilder(Class<?> payloadClazz, ActionRegistry actionRegistry) {
-            this.payloadClazz = payloadClazz;
-            this.actionRegistry = actionRegistry;
-        }
-
-        /**
-         * 构造一个 Case 分支区块（支持 String、Enum 或 Number 自动转字符串底层表示）。
-         *
-         * @param caseKey       匹配的确切键
-         * @param branchBuilder 分支内的脚本流程配置
-         */
-        public SwitchBuilder caseOf(Object caseKey, Consumer<ScriptBuilder> branchBuilder) {
-            ScriptBuilder subBuilder = new ScriptBuilder(payloadClazz);
-            subBuilder.id("SwitchCase-" + caseKey);
-            subBuilder.actionRegistry = this.actionRegistry;
-            branchBuilder.accept(subBuilder);
-            cases.put(String.valueOf(caseKey), subBuilder.flow.build());
-            return this;
-        }
-
-        private ImmutableMap<String, ImmutableList<FlowNode>> buildCases() {
-            return cases.build();
-        }
-    }
-
-    // ======================== 编译 ========================
-
-    /**
      * 编译为副作用型处理器（无返回值场景）。
      *
      * @return 运行速度等同于原生硬编码 Java 代码的回调函数
@@ -485,7 +454,7 @@ public final class ScriptBuilder {
      * 编译为计算函数（脚本包含 {@link FlowNodeType#RETURN} 节点时使用）。
      *
      * @return Function&lt;Object, Object&gt;，入参为 payload 对象，返回值为 RETURN
-     *         指定变量的装箱值
+     * 指定变量的装箱值
      */
     public Function<Object, Object> compileAsFunction() {
         return buildCompiledScript(Object.class).newFunction();
@@ -522,23 +491,15 @@ public final class ScriptBuilder {
         return new CompilationPipeline().compileInterface(unit, expectedInterfaceType);
     }
 
+
     private CompiledScript buildCompiledScript(Class<?> expectedReturnType) {
         ScriptUnit unit = new ScriptUnit(scriptId, payloadClazz.getName(), 0, vars.build(), flow.build());
         return new CompilationPipeline().compile(unit, expectedReturnType);
     }
 
-    // ======================== 内部辅助 ========================
-
-    /** 将 Object 可变参数统一转为 String 列表，以对齐 ActionNodeHandler.emit 的期望类型。 */
-    private static ImmutableList<String> toStringArgs(Object... args) {
-        ImmutableList.Builder<String> builder = ImmutableList.builder();
-        for (Object arg : args) {
-            builder.add(String.valueOf(arg));
-        }
-        return builder.build();
-    }
-
-    /** 获取已绑定的 ActionRegistry，未绑定则抛异常。 */
+    /**
+     * 获取已绑定的 ActionRegistry，未绑定则抛异常。
+     */
     private ActionRegistry requireRegistry() {
         if (actionRegistry == null) {
             throw new IllegalStateException(
@@ -547,29 +508,70 @@ public final class ScriptBuilder {
         return actionRegistry;
     }
 
-    /** 校验参数个数（与 ActionNodeHandler.parse 保持一致）。 */
-    private static void validateActionArgs(String actionName, ActionDef def, ImmutableList<String> args) {
-        int expectedArgs = def.consumesPayload()
-                ? Math.max(0, def.paramCount() - 1)
-                : def.paramCount();
-        if (args.size() != expectedArgs) {
-            throw gloomlib.script.api.ScriptCompileException.create(
-                    null, null,
-                    gloomlib.diagnostic.DiagnosticCategory.SEMANTIC,
-                    String.format("Action '%s' expects %d %s, but got %d.",
-                            actionName, expectedArgs,
-                            def.consumesPayload()
-                                    ? "user argument(s) (payload is auto-injected as first param)"
-                                    : "argument(s)",
-                            args.size()));
+    /**
+     * 用于构建复合条件子项的建造器。
+     */
+    public static final class ConditionBuilder {
+        private final ImmutableList.Builder<FlowNode> children = ImmutableList.builder();
+
+        private ConditionBuilder() {
+        }
+
+        public ConditionBuilder check(String variable, String op, Object value) {
+            children.add(buildCheckNodeInternal(variable, op, value));
+            return this;
+        }
+
+        public ConditionBuilder check(String variable, String op) {
+            children.add(buildCheckNodeInternal(variable, op, null));
+            return this;
+        }
+
+        public ConditionBuilder any(Consumer<ConditionBuilder> anyBuilder) {
+            ConditionBuilder cb = new ConditionBuilder();
+            anyBuilder.accept(cb);
+            children.add(new FlowNode(FlowNodeType.ANY, ImmutableMap.of("children", cb.children.build())));
+            return this;
+        }
+
+        public ConditionBuilder all(Consumer<ConditionBuilder> allBuilder) {
+            ConditionBuilder cb = new ConditionBuilder();
+            allBuilder.accept(cb);
+            children.add(new FlowNode(FlowNodeType.ALL, ImmutableMap.of("children", cb.children.build())));
+            return this;
         }
     }
 
     /**
-     * 前置校验操作符合法性。委托给 {@link CheckOp#resolve(String)} 统一处理。
+     * Switch 分支的内部构造器
      */
-    private static void validateOperator(String op) {
-        // CheckOp.resolve 会在操作符不合法时抛出 ScriptCompileException（含拼写建议）
-        CheckOp.resolve(op);
+    public static final class SwitchBuilder {
+        private final Class<?> payloadClazz;
+        private final ActionRegistry actionRegistry;
+        private final ImmutableMap.Builder<String, ImmutableList<FlowNode>> cases = ImmutableMap.builder();
+
+        private SwitchBuilder(Class<?> payloadClazz, ActionRegistry actionRegistry) {
+            this.payloadClazz = payloadClazz;
+            this.actionRegistry = actionRegistry;
+        }
+
+        /**
+         * 构造一个 Case 分支区块（支持 String、Enum 或 Number 自动转字符串底层表示）。
+         *
+         * @param caseKey       匹配的确切键
+         * @param branchBuilder 分支内的脚本流程配置
+         */
+        public SwitchBuilder caseOf(Object caseKey, Consumer<ScriptBuilder> branchBuilder) {
+            ScriptBuilder subBuilder = new ScriptBuilder(payloadClazz);
+            subBuilder.id("SwitchCase-" + caseKey);
+            subBuilder.actionRegistry = this.actionRegistry;
+            branchBuilder.accept(subBuilder);
+            cases.put(String.valueOf(caseKey), subBuilder.flow.build());
+            return this;
+        }
+
+        private ImmutableMap<String, ImmutableList<FlowNode>> buildCases() {
+            return cases.build();
+        }
     }
 }

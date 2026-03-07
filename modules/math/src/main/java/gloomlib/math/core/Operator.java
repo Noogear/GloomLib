@@ -31,7 +31,9 @@ public enum Operator {
     DIVIDE("/", 2, true, (l, r) -> l / r, Opcodes.DDIV),
     MODULO("%", 2, true, (l, r) -> l % r, Opcodes.DREM),
 
-    /** 右结合，ASM 通过 {@code Math.pow} 实现，无对应单条指令。 */
+    /**
+     * 右结合，ASM 通过 {@code Math.pow} 实现，无对应单条指令。
+     */
     POWER("^", 3, false, Math::pow, -1) {
         @Override
         public void emit(MethodVisitor mv) {
@@ -41,42 +43,54 @@ public enum Operator {
 
     // ── 比较运算符（优先级 0；结果为 0.0 / 1.0）──────────────────────────────
 
-    /** {@code a == b} → 1.0 if equal, 0.0 otherwise */
+    /**
+     * {@code a == b} → 1.0 if equal, 0.0 otherwise
+     */
     EQ("==", 0, true, (l, r) -> l == r ? 1.0 : 0.0, -1) {
         @Override
         public void emit(MethodVisitor mv) {
             MathNodeEmitter.emitCompare(mv, Opcodes.IFEQ);
         }
     },
-    /** {@code a != b} */
+    /**
+     * {@code a != b}
+     */
     NEQ("!=", 0, true, (l, r) -> l != r ? 1.0 : 0.0, -1) {
         @Override
         public void emit(MethodVisitor mv) {
             MathNodeEmitter.emitCompare(mv, Opcodes.IFNE);
         }
     },
-    /** {@code a > b} */
+    /**
+     * {@code a > b}
+     */
     GT(">", 0, true, (l, r) -> l > r ? 1.0 : 0.0, -1) {
         @Override
         public void emit(MethodVisitor mv) {
             MathNodeEmitter.emitCompare(mv, Opcodes.IFGT);
         }
     },
-    /** {@code a < b} */
+    /**
+     * {@code a < b}
+     */
     LT("<", 0, true, (l, r) -> l < r ? 1.0 : 0.0, -1) {
         @Override
         public void emit(MethodVisitor mv) {
             MathNodeEmitter.emitCompare(mv, Opcodes.IFLT);
         }
     },
-    /** {@code a >= b} */
+    /**
+     * {@code a >= b}
+     */
     GTE(">=", 0, true, (l, r) -> l >= r ? 1.0 : 0.0, -1) {
         @Override
         public void emit(MethodVisitor mv) {
             MathNodeEmitter.emitCompare(mv, Opcodes.IFGE);
         }
     },
-    /** {@code a <= b} */
+    /**
+     * {@code a <= b}
+     */
     LTE("<=", 0, true, (l, r) -> l <= r ? 1.0 : 0.0, -1) {
         @Override
         public void emit(MethodVisitor mv) {
@@ -121,7 +135,7 @@ public enum Operator {
     private final int opcode;
 
     Operator(String symbol, int precedence, boolean leftAssociative,
-            DoubleBinaryOperator evaluator, int opcode) {
+             DoubleBinaryOperator evaluator, int opcode) {
         this.symbol = symbol;
         this.precedence = precedence;
         this.leftAssociative = leftAssociative;
@@ -130,40 +144,6 @@ public enum Operator {
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
-
-    /** 返回运算符符号字符串（如 {@code "+"}, {@code "=="}）。 */
-    public String getSymbol() {
-        return symbol;
-    }
-
-    public int getPrecedence() {
-        return precedence;
-    }
-
-    public boolean isLeftAssociative() {
-        return leftAssociative;
-    }
-
-    /**
-     * 运行时 / 编译期常量折叠求值。
-     *
-     * @param l 左操作数
-     * @param r 右操作数
-     * @return 计算结果
-     */
-    public double apply(double l, double r) {
-        return evaluator.applyAsDouble(l, r);
-    }
-
-    /**
-     * 发射对应的 JVM 字节码（两操作数已在操作数栈顶）。
-     * 默认发射单条算术指令；特殊运算符（POWER/比较/布尔）需覆盖此方法。
-     */
-    public void emit(MethodVisitor mv) {
-        mv.visitInsn(opcode);
-    }
-
-    // ── Lookup ───────────────────────────────────────────────────────────────
 
     /**
      * 按字符串符号查找运算符（主方法，支持多字符如 {@code "=="}）。
@@ -185,5 +165,41 @@ public enum Operator {
      */
     public static Operator fromSymbol(char c) {
         return fromSymbol(String.valueOf(c));
+    }
+
+    /**
+     * 返回运算符符号字符串（如 {@code "+"}, {@code "=="}）。
+     */
+    public String getSymbol() {
+        return symbol;
+    }
+
+    public int getPrecedence() {
+        return precedence;
+    }
+
+    public boolean isLeftAssociative() {
+        return leftAssociative;
+    }
+
+    // ── Lookup ───────────────────────────────────────────────────────────────
+
+    /**
+     * 运行时 / 编译期常量折叠求值。
+     *
+     * @param l 左操作数
+     * @param r 右操作数
+     * @return 计算结果
+     */
+    public double apply(double l, double r) {
+        return evaluator.applyAsDouble(l, r);
+    }
+
+    /**
+     * 发射对应的 JVM 字节码（两操作数已在操作数栈顶）。
+     * 默认发射单条算术指令；特殊运算符（POWER/比较/布尔）需覆盖此方法。
+     */
+    public void emit(MethodVisitor mv) {
+        mv.visitInsn(opcode);
     }
 }

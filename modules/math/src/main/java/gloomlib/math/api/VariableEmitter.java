@@ -1,5 +1,6 @@
 package gloomlib.math.api;
 
+import gloomlib.math.core.MathNodeEmitter;
 import org.objectweb.asm.MethodVisitor;
 
 /**

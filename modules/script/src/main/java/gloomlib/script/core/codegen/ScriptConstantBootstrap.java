@@ -24,10 +24,13 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class ScriptConstantBootstrap {
 
-    private ScriptConstantBootstrap() {}
-
-    /** 全局常量注册表：内容哈希键 → 常量实例（Pattern / Set / 数组） */
+    /**
+     * 全局常量注册表：内容哈希键 → 常量实例（Pattern / Set / 数组）
+     */
     private static final ConcurrentHashMap<String, Object> REGISTRY = new ConcurrentHashMap<>();
+
+    private ScriptConstantBootstrap() {
+    }
 
     /**
      * 批量注册提升后的常量列表。由 {@link BytecodeCompiler} 在生成字节码前调用。
@@ -56,7 +59,7 @@ public final class ScriptConstantBootstrap {
     /**
      * 注册单个常量（仅供测试使用）。生产代码统一走 {@link #registerAll}。
      */
-    static void register(String key, Object value) {
+    public static void register(String key, Object value) {
         REGISTRY.putIfAbsent(key, value);
     }
 
@@ -82,19 +85,21 @@ public final class ScriptConstantBootstrap {
         return new ConstantCallSite(MethodHandles.constant(type.returnType(), constant));
     }
 
-    // ======================== 测试钩子（包可见） ========================
 
-    /** 返回当前注册表条目数，供单元测试断言跨脚本共享行为。 */
-    static int registrySizeForTest() {
+    /**
+     * 返回当前注册表条目数，供单元测试断言跨脚本共享行为。
+     */
+    public static int registrySizeForTest() {
         return REGISTRY.size();
     }
 
-    /** 清空注册表，供单元测试隔离。 */
-    static void clearForTest() {
+    /**
+     * 清空注册表，供单元测试隔离。
+     */
+    public static void clearForTest() {
         REGISTRY.clear();
     }
 
-    // ======================== 生命周期管理（公开 API） ========================
 
     /**
      * 返回当前注册表中的常量条目数。

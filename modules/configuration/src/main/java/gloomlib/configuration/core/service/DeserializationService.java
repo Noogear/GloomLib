@@ -1,9 +1,9 @@
 package gloomlib.configuration.core.service;
 
+import com.google.common.base.CaseFormat;
 import gloomlib.configuration.api.ConfigurationPart;
 import gloomlib.configuration.api.exception.SerializationException;
 import gloomlib.configuration.core.registry.AdapterRegistry;
-import com.google.common.base.CaseFormat;
 import gloomlib.configuration.core.util.ReflectionUtils;
 import gloomlib.configuration.core.util.TypeConverter;
 import gloomlib.configuration.core.util.TypeInference;

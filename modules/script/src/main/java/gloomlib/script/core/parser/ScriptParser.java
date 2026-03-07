@@ -1,18 +1,5 @@
 package gloomlib.script.core.parser;
 
-import gloomlib.script.core.ParseContext;
-import gloomlib.script.api.ScriptCompileException;
-import gloomlib.script.core.ScriptIR;
-import gloomlib.script.core.ScriptIR.FlowNode;
-import gloomlib.script.core.ScriptIR.FlowNodeType;
-import gloomlib.script.core.ScriptIR.IRType;
-import gloomlib.script.core.ScriptIR.ScriptUnit;
-import gloomlib.script.core.ScriptIR.VarDecl;
-import gloomlib.diagnostic.Diagnostic;
-import gloomlib.diagnostic.DiagnosticCategory;
-import gloomlib.diagnostic.DiagnosticException;
-import gloomlib.diagnostic.SourceLocation;
-import gloomlib.script.core.parser.accessor.PropertyAccessor;
 import com.google.common.base.CaseFormat;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
@@ -20,6 +7,15 @@ import com.google.common.primitives.Doubles;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
 import com.google.common.reflect.TypeToken;
+import gloomlib.diagnostic.Diagnostic;
+import gloomlib.diagnostic.DiagnosticCategory;
+import gloomlib.diagnostic.DiagnosticException;
+import gloomlib.diagnostic.SourceLocation;
+import gloomlib.script.api.ScriptCompileException;
+import gloomlib.script.core.ParseContext;
+import gloomlib.script.core.ScriptIR;
+import gloomlib.script.core.ScriptIR.*;
+import gloomlib.script.core.parser.accessor.PropertyAccessor;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -214,7 +210,6 @@ public final class ScriptParser {
         return flow.build();
     }
 
-    // ======================== 值解析 ========================
 
     /**
      * 值类型解析工具。
@@ -274,7 +269,6 @@ public final class ScriptParser {
         }
     }
 
-    // ======================== 属性解析 ========================
 
     /**
      * 事件属性路径解析器。

@@ -115,7 +115,6 @@ public final class SourceView {
           .append(numStr).append(" | ");
     }
 
-    // ======================== YAML 伪片段 ========================
 
     /** 紧凑 YAML 片段最大键值对数量。 */
     private static final int MAX_YAML_ENTRIES = 8;

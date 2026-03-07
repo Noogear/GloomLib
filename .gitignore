@@ -136,3 +136,5 @@ dependency-check-report.xml
 *.py
 *.md
 *.sh
+/modules/script/src/test
+*.gz

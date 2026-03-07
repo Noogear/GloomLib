@@ -1,11 +1,11 @@
 package gloomlib.script.core;
 
-import gloomlib.script.core.codegen.BytecodeCompiler;
-import gloomlib.diagnostic.DiagnosticCategory;
-import gloomlib.script.core.optimizer.ScriptOptimizer;
-import gloomlib.script.api.ScriptCompileException;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import gloomlib.diagnostic.DiagnosticCategory;
+import gloomlib.script.api.ScriptCompileException;
+import gloomlib.script.core.codegen.BytecodeCompiler;
+import gloomlib.script.core.optimizer.ScriptOptimizer;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
@@ -24,7 +24,7 @@ import java.util.function.Function;
  * 跳过 Parser→Optimizer→ASM→defineClass 整条管线。
  * <p>
  * 使用方式：
- * 
+ *
  * <pre>{@code
  * CompilationPipeline pipeline = new CompilationPipeline();
  * CompiledScript script = pipeline.compile(yamlInput);
@@ -57,6 +57,233 @@ public final class CompilationPipeline {
         this.compiler = new BytecodeCompiler();
     }
 
+    /**
+     * 清除指定脚本的编译缓存。
+     */
+    public static void invalidate(ScriptIR.ScriptUnit unit) {
+        CACHE.remove(deepHash(unit));
+    }
+
+    /**
+     * 清空全部编译缓存（用于配置热重载场景）。
+     */
+    public static void clearCache() {
+        CACHE.clear();
+        TEMPLATE_CACHE.clear();
+    }
+
+    /**
+     * 返回当前缓存条目数（调试用）。
+     */
+    public static int cacheSize() {
+        return CACHE.size();
+    }
+
+    /**
+     * 返回结构模板缓存条目数（调试用）。
+     */
+    public static int templateCacheSize() {
+        return TEMPLATE_CACHE.size();
+    }
+
+    private static int deepHash(ScriptIR.ScriptUnit unit) {
+        int h = unit.payloadClass().hashCode();
+        h = 31 * h + unit.vars().hashCode();
+        h = 31 * h + unit.flow().hashCode();
+        return h;
+    }
+
+    /**
+     * 计算脚本的"结构哈希"——只哈希节点类型、变量名、操作符等结构信息，
+     * 忽略字面量值（numericValue、attrs 中的 value/args）。
+     * <p>
+     * 结构哈希相同的脚本可以通过常量替换复用已优化的 IR。
+     */
+    public static int structuralHash(ScriptIR.ScriptUnit unit) {
+        int h = unit.payloadClass().hashCode();
+        // vars 的结构部分：名字 + 属性链 + 类型
+        for (ScriptIR.VarDecl v : unit.vars()) {
+            h = 31 * h + v.name().hashCode();
+            h = 31 * h + v.property().hashCode();
+            h = 31 * h + v.type().hashCode();
+        }
+        // flow 的结构部分
+        for (ScriptIR.FlowNode node : unit.flow()) {
+            h = 31 * h + structuralHashNode(node);
+        }
+        return h;
+    }
+
+    /**
+     * 递归计算单个节点的结构哈希。
+     * 忽略: numericValue, attrs["value"], attrs["args"], attrs["valueList"],
+     * attrs["__line__"]
+     */
+    private static int structuralHashNode(ScriptIR.FlowNode node) {
+        int h = node.type().hashCode();
+        for (Map.Entry<String, Object> entry : node.attrs().entrySet()) {
+            String key = entry.getKey();
+            // 跳过字面量值和行号——这些不影响结构
+            if ("value".equals(key) || "args".equals(key) || "valueList".equals(key)
+                    || "__line__".equals(key) || "valueType".equals(key)) {
+                continue;
+            }
+            h = 31 * h + key.hashCode();
+            Object val = entry.getValue();
+            // 递归处理子节点列表（如 onFailNodes, children, cases）
+            if (val instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof ScriptIR.FlowNode) {
+                for (Object item : list) {
+                    h = 31 * h + structuralHashNode((ScriptIR.FlowNode) item);
+                }
+            } else if (val instanceof ScriptIR.FlowNode childNode) {
+                h = 31 * h + structuralHashNode(childNode);
+            } else if (val != null) {
+                h = 31 * h + val.hashCode();
+            }
+        }
+        return h;
+    }
+
+    /**
+     * 将 newUnit 的常量值替换进 templateOptimized 的对应位置。
+     * <p>
+     * 使用值映射策略（old value → new value）而非节点键匹配，
+     * 使得替换不受优化器变换（variableInlining 移除 variable 属性等）的影响。
+     */
+    private static ScriptIR.ScriptUnit substituteConstants(
+            ScriptIR.ScriptUnit templateOptimized,
+            ScriptIR.ScriptUnit templateOriginal,
+            ScriptIR.ScriptUnit newUnit) {
+
+        ImmutableList<ScriptIR.FlowNode> origFlow = templateOriginal.flow();
+        ImmutableList<ScriptIR.FlowNode> newFlow = newUnit.flow();
+        ImmutableList<ScriptIR.FlowNode> optFlow = templateOptimized.flow();
+
+        if (origFlow.size() != newFlow.size()) {
+            throw new IllegalStateException("Structural mismatch: flow size differs");
+        }
+
+        // 1. 构建值映射：oldValue → newValue
+        Map<Double, Double> numericSubs = new java.util.LinkedHashMap<>();
+        // key: attrKey, value: oldVal→newVal
+        Map<String, Map<Object, Object>> attrSubs = new java.util.HashMap<>();
+
+        for (int i = 0; i < origFlow.size(); i++) {
+            ScriptIR.FlowNode orig = origFlow.get(i);
+            ScriptIR.FlowNode repl = newFlow.get(i);
+
+            // 数值映射
+            if (Double.compare(orig.numericValue(), repl.numericValue()) != 0
+                    && orig.numericValue() != 0.0) { // 跳过默认0值，避免误替换
+                numericSubs.put(orig.numericValue(), repl.numericValue());
+            }
+
+            // 属性值映射
+            for (String key : new String[]{"value", "args", "valueList"}) {
+                Object origVal = orig.attrs().get(key);
+                Object newVal = repl.attrs().get(key);
+                if (origVal != null && newVal != null && !newVal.equals(origVal)) {
+                    attrSubs.computeIfAbsent(key, k -> new java.util.LinkedHashMap<>())
+                            .put(origVal, newVal);
+                }
+            }
+        }
+
+        if (numericSubs.isEmpty() && attrSubs.isEmpty()) {
+            return templateOptimized;
+        }
+
+        // 2. 对优化后 IR 的每个节点应用值映射
+        ImmutableList.Builder<ScriptIR.FlowNode> builder = ImmutableList.builder();
+        for (ScriptIR.FlowNode node : optFlow) {
+            if (node.hasFlag(ScriptIR.FlowNode.FLAG_OPTIMIZER_INJECTED)
+                    || node.hasFlag(ScriptIR.FlowNode.FLAG_FOLDED)) {
+                builder.add(node);
+                continue;
+            }
+
+            // 替换 numericValue
+            Double newNum = numericSubs.get(node.numericValue());
+            if (newNum != null) {
+                node = node.withNumericValue(newNum);
+            }
+
+            // 替换属性值
+            for (Map.Entry<String, Map<Object, Object>> sub : attrSubs.entrySet()) {
+                String attrKey = sub.getKey();
+                Object currentVal = node.attrs().get(attrKey);
+                if (currentVal != null) {
+                    Object replacement = sub.getValue().get(currentVal);
+                    if (replacement != null) {
+                        node = node.withAttr(attrKey, replacement);
+                    }
+                }
+            }
+
+            builder.add(node);
+        }
+
+        return templateOptimized.withFlow(builder.build());
+    }
+
+
+    private static Method findSAM(Class<?> interfaceClass) {
+        Method sam = null;
+        for (Method m : interfaceClass.getMethods()) {
+            if (java.lang.reflect.Modifier.isAbstract(m.getModifiers())
+                    && !m.isDefault()
+                    && !isObjectMethod(m)) {
+                if (sam != null) {
+                    throw ScriptCompileException.parse("Target interface " + interfaceClass.getName()
+                            + " is not a single abstract method (SAM) interface.");
+                }
+                sam = m;
+            }
+        }
+        if (sam == null) {
+            throw ScriptCompileException.parse(
+                    "Target interface " + interfaceClass.getName() + " has no abstract method.");
+        }
+        return sam;
+    }
+
+    private static boolean isObjectMethod(Method m) {
+        try {
+            Object.class.getMethod(m.getName(), m.getParameterTypes());
+            return true;
+        } catch (NoSuchMethodException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 断言变量在编译上下文中存在，否则抛出友好的编译异常。
+     */
+    private static void assertVarExists(String varName, ScriptIR.FlowNode node,
+                                        CompilationContext ctx, String scriptId) {
+        if ("payload".equals(varName))
+            return;
+        try {
+            ctx.getSlot(varName);
+        } catch (gloomlib.diagnostic.DiagnosticException e) {
+            Object nodeValue = node.getAttrOrDefault("value", null);
+            String context = (nodeValue instanceof String s && !s.isEmpty())
+                    ? " (in: \"" + s + "\")"
+                    : "";
+            throw ScriptCompileException.create(scriptId, node,
+                    String.format("Undefined variable '%s' referenced in %s node%s.",
+                            varName, node.type(), context));
+        }
+    }
+
+    /**
+     * 委托 {@link gloomlib.script.core.codegen.generated.GeneratedScriptHost#defineHidden}
+     * 在 {@code codegen.generated} 包内定义隐藏类。
+     */
+    private static Class<?> defineHidden(byte[] bytecode) {
+        return gloomlib.script.core.codegen.generated.GeneratedScriptHost.defineHidden(bytecode);
+    }
+
     public CompiledScript compile(ScriptIR.ScriptUnit unit) {
         return compile(unit, Object.class);
     }
@@ -81,14 +308,12 @@ public final class CompilationPipeline {
         }
 
         try {
-            // ===== 快速路径：结构模板命中 =====
             int structKey = structuralHash(unit) * 31 + expectedReturnType.hashCode();
             TemplateRecord template = TEMPLATE_CACHE.get(structKey);
             if (template != null) {
                 return compileFromTemplate(unit, template, key);
             }
 
-            // ===== 完整路径：首次编译 =====
             CompilationContext ctx = buildContext(unit, expectedReturnType);
 
             primeNarrowings(unit, ctx);
@@ -164,107 +389,6 @@ public final class CompilationPipeline {
     }
 
     /**
-     * 清除指定脚本的编译缓存。
-     */
-    public static void invalidate(ScriptIR.ScriptUnit unit) {
-        CACHE.remove(deepHash(unit));
-    }
-
-    /**
-     * 清空全部编译缓存（用于配置热重载场景）。
-     */
-    public static void clearCache() {
-        CACHE.clear();
-        TEMPLATE_CACHE.clear();
-    }
-
-    /**
-     * 返回当前缓存条目数（调试用）。
-     */
-    public static int cacheSize() {
-        return CACHE.size();
-    }
-
-    /**
-     * 返回结构模板缓存条目数（调试用）。
-     */
-    public static int templateCacheSize() {
-        return TEMPLATE_CACHE.size();
-    }
-
-    private static int deepHash(ScriptIR.ScriptUnit unit) {
-        int h = unit.payloadClass().hashCode();
-        h = 31 * h + unit.vars().hashCode();
-        h = 31 * h + unit.flow().hashCode();
-        return h;
-    }
-
-    // ======================== 结构模板快速路径 ========================
-
-    /**
-     * 结构模板记录。
-     * <p>
-     * 存储首次完整编译的优化后 IR 和上下文，供后续结构相同的脚本快速复用。
-     */
-    private record TemplateRecord(
-            ScriptIR.ScriptUnit originalUnit,
-            ScriptIR.ScriptUnit optimizedUnit,
-            CompilationContext ctx,
-            Class<?> expectedReturnType) {
-    }
-
-    /**
-     * 计算脚本的"结构哈希"——只哈希节点类型、变量名、操作符等结构信息，
-     * 忽略字面量值（numericValue、attrs 中的 value/args）。
-     * <p>
-     * 结构哈希相同的脚本可以通过常量替换复用已优化的 IR。
-     */
-    static int structuralHash(ScriptIR.ScriptUnit unit) {
-        int h = unit.payloadClass().hashCode();
-        // vars 的结构部分：名字 + 属性链 + 类型
-        for (ScriptIR.VarDecl v : unit.vars()) {
-            h = 31 * h + v.name().hashCode();
-            h = 31 * h + v.property().hashCode();
-            h = 31 * h + v.type().hashCode();
-        }
-        // flow 的结构部分
-        for (ScriptIR.FlowNode node : unit.flow()) {
-            h = 31 * h + structuralHashNode(node);
-        }
-        return h;
-    }
-
-    /**
-     * 递归计算单个节点的结构哈希。
-     * 忽略: numericValue, attrs["value"], attrs["args"], attrs["valueList"],
-     * attrs["__line__"]
-     */
-    private static int structuralHashNode(ScriptIR.FlowNode node) {
-        int h = node.type().hashCode();
-        for (Map.Entry<String, Object> entry : node.attrs().entrySet()) {
-            String key = entry.getKey();
-            // 跳过字面量值和行号——这些不影响结构
-            if ("value".equals(key) || "args".equals(key) || "valueList".equals(key)
-                    || "__line__".equals(key) || "valueType".equals(key)) {
-                continue;
-            }
-            h = 31 * h + key.hashCode();
-            Object val = entry.getValue();
-            // 递归处理子节点列表（如 onFailNodes, children, cases）
-            if (val instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof ScriptIR.FlowNode) {
-                for (Object item : list) {
-                    h = 31 * h + structuralHashNode((ScriptIR.FlowNode) item);
-                }
-            } else if (val instanceof ScriptIR.FlowNode childNode) {
-                h = 31 * h + structuralHashNode(childNode);
-            } else if (val != null) {
-                h = 31 * h + val.hashCode();
-            }
-        }
-        return h;
-    }
-
-    /**
      * 从模板快速编译：用新脚本的常量值替换模板 IR 中的常量，跳过全部验证和优化。
      */
     private CompiledScript compileFromTemplate(ScriptIR.ScriptUnit newUnit, TemplateRecord template, int cacheKey) {
@@ -310,88 +434,6 @@ public final class CompilationPipeline {
         byte[] bytecode = compiler.compile(optimized, ctx);
         Class<?> clazz = defineHidden(bytecode);
         return new CompiledScript(optimized, clazz);
-    }
-
-    /**
-     * 将 newUnit 的常量值替换进 templateOptimized 的对应位置。
-     * <p>
-     * 使用值映射策略（old value → new value）而非节点键匹配，
-     * 使得替换不受优化器变换（variableInlining 移除 variable 属性等）的影响。
-     */
-    private static ScriptIR.ScriptUnit substituteConstants(
-            ScriptIR.ScriptUnit templateOptimized,
-            ScriptIR.ScriptUnit templateOriginal,
-            ScriptIR.ScriptUnit newUnit) {
-
-        ImmutableList<ScriptIR.FlowNode> origFlow = templateOriginal.flow();
-        ImmutableList<ScriptIR.FlowNode> newFlow = newUnit.flow();
-        ImmutableList<ScriptIR.FlowNode> optFlow = templateOptimized.flow();
-
-        if (origFlow.size() != newFlow.size()) {
-            throw new IllegalStateException("Structural mismatch: flow size differs");
-        }
-
-        // 1. 构建值映射：oldValue → newValue
-        Map<Double, Double> numericSubs = new java.util.LinkedHashMap<>();
-        // key: attrKey, value: oldVal→newVal
-        Map<String, Map<Object, Object>> attrSubs = new java.util.HashMap<>();
-
-        for (int i = 0; i < origFlow.size(); i++) {
-            ScriptIR.FlowNode orig = origFlow.get(i);
-            ScriptIR.FlowNode repl = newFlow.get(i);
-
-            // 数值映射
-            if (Double.compare(orig.numericValue(), repl.numericValue()) != 0
-                    && orig.numericValue() != 0.0) { // 跳过默认0值，避免误替换
-                numericSubs.put(orig.numericValue(), repl.numericValue());
-            }
-
-            // 属性值映射
-            for (String key : new String[] { "value", "args", "valueList" }) {
-                Object origVal = orig.attrs().get(key);
-                Object newVal = repl.attrs().get(key);
-                if (origVal != null && newVal != null && !newVal.equals(origVal)) {
-                    attrSubs.computeIfAbsent(key, k -> new java.util.LinkedHashMap<>())
-                            .put(origVal, newVal);
-                }
-            }
-        }
-
-        if (numericSubs.isEmpty() && attrSubs.isEmpty()) {
-            return templateOptimized;
-        }
-
-        // 2. 对优化后 IR 的每个节点应用值映射
-        ImmutableList.Builder<ScriptIR.FlowNode> builder = ImmutableList.builder();
-        for (ScriptIR.FlowNode node : optFlow) {
-            if (node.hasFlag(ScriptIR.FlowNode.FLAG_OPTIMIZER_INJECTED)
-                    || node.hasFlag(ScriptIR.FlowNode.FLAG_FOLDED)) {
-                builder.add(node);
-                continue;
-            }
-
-            // 替换 numericValue
-            Double newNum = numericSubs.get(node.numericValue());
-            if (newNum != null) {
-                node = node.withNumericValue(newNum);
-            }
-
-            // 替换属性值
-            for (Map.Entry<String, Map<Object, Object>> sub : attrSubs.entrySet()) {
-                String attrKey = sub.getKey();
-                Object currentVal = node.attrs().get(attrKey);
-                if (currentVal != null) {
-                    Object replacement = sub.getValue().get(currentVal);
-                    if (replacement != null) {
-                        node = node.withAttr(attrKey, replacement);
-                    }
-                }
-            }
-
-            builder.add(node);
-        }
-
-        return templateOptimized.withFlow(builder.build());
     }
 
     private CompilationContext buildContext(ScriptIR.ScriptUnit unit, Class<?> expectedInterfaceType) {
@@ -450,35 +492,6 @@ public final class CompilationPipeline {
         }
     }
 
-    private static Method findSAM(Class<?> interfaceClass) {
-        Method sam = null;
-        for (Method m : interfaceClass.getMethods()) {
-            if (java.lang.reflect.Modifier.isAbstract(m.getModifiers())
-                    && !m.isDefault()
-                    && !isObjectMethod(m)) {
-                if (sam != null) {
-                    throw ScriptCompileException.parse("Target interface " + interfaceClass.getName()
-                            + " is not a single abstract method (SAM) interface.");
-                }
-                sam = m;
-            }
-        }
-        if (sam == null) {
-            throw ScriptCompileException.parse(
-                    "Target interface " + interfaceClass.getName() + " has no abstract method.");
-        }
-        return sam;
-    }
-
-    private static boolean isObjectMethod(Method m) {
-        try {
-            Object.class.getMethod(m.getName(), m.getParameterTypes());
-            return true;
-        } catch (NoSuchMethodException e) {
-            return false;
-        }
-    }
-
     /**
      * 预扫描所有顶层 check 节点，将 instanceof（非取反）产生的窄化提前注册进 CompilationContext，
      * 使验证阶段（validateActionParameterTypes）可以感知到窄化类型。
@@ -534,28 +547,7 @@ public final class CompilationPipeline {
         }
     }
 
-    /**
-     * 断言变量在编译上下文中存在，否则抛出友好的编译异常。
-     */
-    private static void assertVarExists(String varName, ScriptIR.FlowNode node,
-                                         CompilationContext ctx, String scriptId) {
-        if ("payload".equals(varName))
-            return;
-        try {
-            ctx.getSlot(varName);
-        } catch (gloomlib.diagnostic.DiagnosticException e) {
-            Object nodeValue = node.getAttrOrDefault("value", null);
-            String context = (nodeValue instanceof String s && !s.isEmpty())
-                    ? " (in: \"" + s + "\")"
-                    : "";
-            throw ScriptCompileException.create(scriptId, node,
-                    String.format("Undefined variable '%s' referenced in %s node%s.",
-                            varName, node.type(), context));
-        }
-    }
-
     // ======================== 类型穿透推导 (Type Propagation Pass)
-    // ========================
 
     private void validateActionParameterTypes(ScriptIR.ScriptUnit unit, CompilationContext ctx) {
         for (ScriptIR.FlowNode node : unit.flow()) {
@@ -579,7 +571,6 @@ public final class CompilationPipeline {
         }
     }
 
-    // ======================== 返回类型检查 ========================
 
     private void validateReturnType(ScriptIR.ScriptUnit unit, CompilationContext ctx, Class<?> expectedJavaType) {
         if (expectedJavaType == Object.class || expectedJavaType == void.class || expectedJavaType == Void.class) {
@@ -596,13 +587,13 @@ public final class CompilationPipeline {
         if (!hasReturn) {
             throw ScriptCompileException.create(unit.id(), null, DiagnosticCategory.SEMANTIC,
                     String.format(
-                    "Script intends to return a strongly-typed %s, but no explicit RETURN node was found.",
-                    expectedJavaType.getSimpleName()));
+                            "Script intends to return a strongly-typed %s, but no explicit RETURN node was found.",
+                            expectedJavaType.getSimpleName()));
         }
     }
 
     private boolean checkReturnNodesRecursive(ScriptIR.FlowNode node, CompilationContext ctx,
-            ScriptIR.IRType expectedIR, Class<?> expectedJavaType, String scriptId) {
+                                              ScriptIR.IRType expectedIR, Class<?> expectedJavaType, String scriptId) {
         boolean found = false;
 
         if (node.type() == ScriptIR.FlowNodeType.RETURN) {
@@ -614,8 +605,8 @@ public final class CompilationPipeline {
             if (varName != null && !expectedIR.isAssignableFrom(actualIR)) {
                 throw ScriptCompileException.create(scriptId, node,
                         gloomlib.diagnostic.DiagnosticCategory.TYPE, String.format(
-                        "Script compiled for strict return type %s, but RETURN node provides variable '{%s}' of type %s.",
-                        expectedJavaType.getSimpleName(), varName, actualIR));
+                                "Script compiled for strict return type %s, but RETURN node provides variable '{%s}' of type %s.",
+                                expectedJavaType.getSimpleName(), varName, actualIR));
             }
         }
 
@@ -628,7 +619,19 @@ public final class CompilationPipeline {
         return found;
     }
 
-    // ======================== 编译结果 ========================
+
+    /**
+     * 结构模板记录。
+     * <p>
+     * 存储首次完整编译的优化后 IR 和上下文，供后续结构相同的脚本快速复用。
+     */
+    private record TemplateRecord(
+            ScriptIR.ScriptUnit originalUnit,
+            ScriptIR.ScriptUnit optimizedUnit,
+            CompilationContext ctx,
+            Class<?> expectedReturnType) {
+    }
+
 
     /**
      * 编译结果。
@@ -665,15 +668,5 @@ public final class CompilationPipeline {
         public Function<Object, Object> newFunction() {
             return newInstance(ir.id());
         }
-    }
-
-    // ======================== Hidden Class 定义 ========================
-
-    /**
-     * 委托 {@link gloomlib.script.core.codegen.generated.GeneratedScriptHost#defineHidden}
-     * 在 {@code codegen.generated} 包内定义隐藏类。
-     */
-    private static Class<?> defineHidden(byte[] bytecode) {
-        return gloomlib.script.core.codegen.generated.GeneratedScriptHost.defineHidden(bytecode);
     }
 }

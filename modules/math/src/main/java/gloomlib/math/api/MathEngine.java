@@ -1,17 +1,12 @@
 package gloomlib.math.api;
 
-import gloomlib.math.core.MathNodeEmitter;
-
 import gloomlib.math.core.MathASMUtils;
+import gloomlib.math.core.MathNodeEmitter;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -46,65 +41,48 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class MathEngine {
 
-    private MathEngine() {
-    }
-
-    // ======================== 公开接口 ========================
-
-    /**
-     * 通用评估接口（兼容所有变量数量）。
-     * 变量顺序对应编译时传入的 {@code varNames} 顺序。
-     */
-    @FunctionalInterface
-    public interface CompiledMathExpression {
-        double evaluate(double... vars);
-    }
-
-    /** 0 变量特化——直接调用 {@code eval()} 可消除 varargs 数组分配。 */
-    public interface Expr0 extends CompiledMathExpression {
-        double eval();
-        @Override default double evaluate(double... v) { return eval(); }
-    }
-
-    /** 1 变量特化——直接调用 {@code eval(double)} 可消除 varargs 数组分配。 */
-    public interface Expr1 extends CompiledMathExpression {
-        double eval(double v0);
-        @Override default double evaluate(double... v) { return eval(v[0]); }
-    }
-
-    /** 2 变量特化——直接调用 {@code eval(double, double)} 可消除 varargs 数组分配。 */
-    public interface Expr2 extends CompiledMathExpression {
-        double eval(double v0, double v1);
-        @Override default double evaluate(double... v) { return eval(v[0], v[1]); }
-    }
-
-    /** 3 变量特化——直接调用 {@code eval(double, double, double)} 可消除 varargs 数组分配。 */
-    public interface Expr3 extends CompiledMathExpression {
-        double eval(double v0, double v1, double v2);
-        @Override default double evaluate(double... v) { return eval(v[0], v[1], v[2]); }
-    }
-
-    // ======================== 编译 ========================
-
     private static final AtomicInteger CLASS_COUNTER = new AtomicInteger(0);
-
-    /** 编译结果缓存：key = expression + "\0" + varNames。相同表达式不重复生成类。 */
-    private static volatile Map<String, CompiledMathExpression> COMPILE_CACHE =
-            new ConcurrentHashMap<>();
-
-    /** 默认最大缓存容量（0 = 无限制）。 */
-    private static volatile int maxCacheCapacity = 0;
 
     // 生成类的包路径
     private static final String GENERATED_PKG =
             MathEngine.class.getPackageName().replace('.', '/') + "/generated";
-
     // CompiledMathExpression 的 JVM 内部名称
     private static final String EXPR_INTERFACE =
             org.objectweb.asm.Type.getInternalName(CompiledMathExpression.class);
-
     // evaluate(double[]) 方法描述符
     private static final String EVAL_DESC = "([D)D";
+    /**
+     * 批量编译缓存。
+     */
+    private static final ConcurrentHashMap<String, BatchResult> BATCH_CACHE = new ConcurrentHashMap<>();
+    /**
+     * 编译结果缓存：key = expression + "\0" + varNames。相同表达式不重复生成类。
+     */
+    private static volatile Map<String, CompiledMathExpression> COMPILE_CACHE =
+            new ConcurrentHashMap<>();
+
+    /**
+     * 默认最大缓存容量（0 = 无限制）。
+     */
+    private static volatile int maxCacheCapacity = 0;
+
+    private MathEngine() {
+    }
+
+    /**
+     * 返回当前编译缓存中的条目数。
+     */
+    public static int cacheSize() {
+        return COMPILE_CACHE.size();
+    }
+
+    /**
+     * 返回当前配置的最大缓存容量。
+     * {@code 0} 表示无限制（默认值）。
+     */
+    public static int getMaxCacheSize() {
+        return maxCacheCapacity;
+    }
 
     /**
      * 设置编译缓存最大容量。超出容量时按 LRU 淘汰最久未使用的条目。
@@ -137,20 +115,9 @@ public final class MathEngine {
         }
     }
 
-    /** 返回当前编译缓存中的条目数。 */
-    public static int cacheSize() {
-        return COMPILE_CACHE.size();
-    }
-
     /**
-     * 返回当前配置的最大缓存容量。
-     * {@code 0} 表示无限制（默认值）。
+     * 清空编译缓存（含批量缓存）。
      */
-    public static int getMaxCacheSize() {
-        return maxCacheCapacity;
-    }
-
-    /** 清空编译缓存（含批量缓存）。 */
     public static void clearCache() {
         COMPILE_CACHE.clear();
         BATCH_CACHE.clear();
@@ -185,18 +152,17 @@ public final class MathEngine {
 
         // ② 全常量短路：整棵树折叠为单个字面量，直接返回 lambda，避免 ASM 类生成 + 类加载开销
         // 按 varCount 返回对应特化接口，确保可强转为 Expr0–3
-        if (root instanceof MathNode.LiteralNode l) {
-            double v = l.value();
+        if (root instanceof MathNode.LiteralNode(double value)) {
             if (varCount <= 3) {
                 return switch (varCount) {
-                    case 0 -> (Expr0) () -> v;
-                    case 1 -> (Expr1) (v0) -> v;
-                    case 2 -> (Expr2) (v0, v1) -> v;
-                    case 3 -> (Expr3) (v0, v1, v2) -> v;
+                    case 0 -> (Expr0) () -> value;
+                    case 1 -> (Expr1) (v0) -> value;
+                    case 2 -> (Expr2) (v0, v1) -> value;
+                    case 3 -> (Expr3) (v0, v1, v2) -> value;
                     default -> throw new AssertionError();
                 };
             }
-            return (double... ignored) -> v;
+            return (double... ignored) -> value;
         }
 
         if (varCount <= 3) {
@@ -207,8 +173,6 @@ public final class MathEngine {
             return compileArray(root, varCount);
         }
     }
-
-    // ── ② 特化编译（0–3 变量） ────────────────────────────────────────────────
 
     private static CompiledMathExpression compileSpecialized(MathNode root, int varCount) {
         // 选择对应的特化接口
@@ -230,7 +194,7 @@ public final class MathEngine {
         cw.visit(Opcodes.V21,
                 Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL | Opcodes.ACC_SUPER,
                 className, null, "java/lang/Object",
-                new String[]{ specInternal });
+                new String[]{specInternal});
 
         emitDefaultConstructor(cw);
 
@@ -250,8 +214,6 @@ public final class MathEngine {
         cw.visitEnd();
         return loadClass(cw.toByteArray(), className);
     }
-
-    // ── ③ 数组编译（≥4 变量，带重复变量缓存） ─────────────────────────────────
 
     private static CompiledMathExpression compileArray(MathNode root, int varCount) {
         // 统计每个变量在 AST 中出现次数（委托给 MathNode 工具方法）
@@ -276,7 +238,7 @@ public final class MathEngine {
         cw.visit(Opcodes.V21,
                 Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL | Opcodes.ACC_SUPER,
                 className, null, "java/lang/Object",
-                new String[]{ EXPR_INTERFACE });
+                new String[]{EXPR_INTERFACE});
 
         emitDefaultConstructor(cw);
 
@@ -301,10 +263,6 @@ public final class MathEngine {
         cw.visitEnd();
         return loadClass(cw.toByteArray(), className);
     }
-
-    // ======================== 内部工具 ========================
-
-    // ── ⑥ 批量编译（多表达式 → 单类） ─────────────────────────────────────────
 
     /**
      * 批量编译入口：将多个共享同一变量列表的表达式编译到<b>同一个 JVM 类</b>中，
@@ -338,7 +296,7 @@ public final class MathEngine {
         }
         // 单表达式直接走普通路径（单独一条没有批量优势）
         if (expressions.length == 1) {
-            return new BatchResult(new CompiledMathExpression[]{ compile(expressions[0], varNames) });
+            return new BatchResult(new CompiledMathExpression[]{compile(expressions[0], varNames)});
         }
 
         // 缓存 key：所有表达式 + 变量列表
@@ -363,7 +321,7 @@ public final class MathEngine {
         cw.visit(Opcodes.V21,
                 Opcodes.ACC_PUBLIC | Opcodes.ACC_FINAL | Opcodes.ACC_SUPER,
                 className, null, "java/lang/Object",
-                new String[]{ EXPR_INTERFACE });
+                new String[]{EXPR_INTERFACE});
 
         emitDefaultConstructor(cw);
 
@@ -427,28 +385,6 @@ public final class MathEngine {
         return result;
     }
 
-    /** 批量编译结果，按索引访问各表达式的编译后实例。 */
-    public static final class BatchResult {
-        private final CompiledMathExpression[] expressions;
-
-        BatchResult(CompiledMathExpression[] expressions) {
-            this.expressions = expressions;
-        }
-
-        /** 获取第 {@code index} 个表达式的编译结果。 */
-        public CompiledMathExpression get(int index) {
-            return expressions[index];
-        }
-
-        /** 批次中的表达式数量。 */
-        public int size() {
-            return expressions.length;
-        }
-    }
-
-    /** 批量编译缓存。 */
-    private static final ConcurrentHashMap<String, BatchResult> BATCH_CACHE = new ConcurrentHashMap<>();
-
     /**
      * 清空批量编译缓存。
      */
@@ -456,15 +392,17 @@ public final class MathEngine {
         BATCH_CACHE.clear();
     }
 
+    // ── ② 特化编译（0–3 变量） ────────────────────────────────────────────────
+
     /**
      * 为批量编译发射一个 evalN([D)D 方法。
      */
     private static void emitBatchMethod(ClassWriter cw, MathNode root, String methodName, int varCount) {
         // 常量短路：整棵树为字面量，直接 LDC + DRETURN
-        if (root instanceof MathNode.LiteralNode lit) {
+        if (root instanceof MathNode.LiteralNode(double value)) {
             MethodVisitor mv = cw.visitMethod(Opcodes.ACC_PUBLIC, methodName, EVAL_DESC, null, null);
             mv.visitCode();
-            MathASMUtils.emitDoubleConst(mv, lit.value());
+            MathASMUtils.emitDoubleConst(mv, value);
             mv.visitInsn(Opcodes.DRETURN);
             mv.visitMaxs(0, 0);
             mv.visitEnd();
@@ -502,6 +440,8 @@ public final class MathEngine {
         mv.visitEnd();
     }
 
+    // ── ③ 数组编译（≥4 变量，带重复变量缓存） ─────────────────────────────────
+
     private static Map<String, Integer> buildIndexMap(String[] varNames) {
         Map<String, Integer> map = new HashMap<>(varNames.length * 2);
         for (int i = 0; i < varNames.length; i++) {
@@ -509,6 +449,9 @@ public final class MathEngine {
         }
         return map;
     }
+
+
+    // ── ⑥ 批量编译（多表达式 → 单类） ─────────────────────────────────────────
 
     private static void emitDefaultConstructor(ClassWriter cw) {
         MethodVisitor init = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
@@ -529,8 +472,6 @@ public final class MathEngine {
         }
     }
 
-    // ======================== ASM 字节码发射 ========================
-
     /**
      * 递归将 {@link MathNode} 发射为 JVM 字节码。
      * 实际逻辑委托给 {@link MathNodeEmitter}，保留此方法作为包内公共入口。
@@ -541,9 +482,93 @@ public final class MathEngine {
         MathNodeEmitter.emit(node, mv, MathNodeEmitter.slotBased(varSlots));
     }
 
-    // ======================== 类加载器 ========================
+    /**
+     * 通用评估接口（兼容所有变量数量）。
+     * 变量顺序对应编译时传入的 {@code varNames} 顺序。
+     */
+    @FunctionalInterface
+    public interface CompiledMathExpression {
+        double evaluate(double... vars);
+    }
 
-    /** 专用类加载器，用于加载动态生成的 Math 表达式类。 */
+    /**
+     * 0 变量特化——直接调用 {@code eval()} 可消除 varargs 数组分配。
+     */
+    public interface Expr0 extends CompiledMathExpression {
+        double eval();
+
+        @Override
+        default double evaluate(double... v) {
+            return eval();
+        }
+    }
+
+    /**
+     * 1 变量特化——直接调用 {@code eval(double)} 可消除 varargs 数组分配。
+     */
+    public interface Expr1 extends CompiledMathExpression {
+        double eval(double v0);
+
+        @Override
+        default double evaluate(double... v) {
+            return eval(v[0]);
+        }
+    }
+
+    /**
+     * 2 变量特化——直接调用 {@code eval(double, double)} 可消除 varargs 数组分配。
+     */
+    public interface Expr2 extends CompiledMathExpression {
+        double eval(double v0, double v1);
+
+        @Override
+        default double evaluate(double... v) {
+            return eval(v[0], v[1]);
+        }
+    }
+
+    /**
+     * 3 变量特化——直接调用 {@code eval(double, double, double)} 可消除 varargs 数组分配。
+     */
+    public interface Expr3 extends CompiledMathExpression {
+        double eval(double v0, double v1, double v2);
+
+        @Override
+        default double evaluate(double... v) {
+            return eval(v[0], v[1], v[2]);
+        }
+    }
+
+
+    /**
+     * 批量编译结果，按索引访问各表达式的编译后实例。
+     */
+    public static final class BatchResult {
+        private final CompiledMathExpression[] expressions;
+
+        BatchResult(CompiledMathExpression[] expressions) {
+            this.expressions = expressions;
+        }
+
+        /**
+         * 获取第 {@code index} 个表达式的编译结果。
+         */
+        public CompiledMathExpression get(int index) {
+            return expressions[index];
+        }
+
+        /**
+         * 批次中的表达式数量。
+         */
+        public int size() {
+            return expressions.length;
+        }
+    }
+
+
+    /**
+     * 专用类加载器，用于加载动态生成的 Math 表达式类。
+     */
     private static final class MathClassLoader extends ClassLoader {
         static final MathClassLoader INSTANCE = new MathClassLoader();
 

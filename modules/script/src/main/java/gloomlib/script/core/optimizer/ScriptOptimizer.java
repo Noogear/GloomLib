@@ -1,5 +1,8 @@
 package gloomlib.script.core.optimizer;
 
+import com.google.common.collect.HashMultiset;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Multiset;
 import gloomlib.script.core.CheckOp;
 import gloomlib.script.core.CompilationContext;
 import gloomlib.script.core.CompilationContext.ConstantDef;
@@ -7,16 +10,8 @@ import gloomlib.script.core.ScriptIR;
 import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.NodeCapability;
 import gloomlib.script.core.ScriptIR.ScriptUnit;
-import com.google.common.collect.HashMultiset;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Multiset;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 脚本核心优化器。
@@ -28,6 +23,20 @@ import java.util.Set;
  */
 @SuppressWarnings("null")
 public final class ScriptOptimizer {
+
+    /**
+     * 判断节点是否为"纯守卫"——无外部副作用、仅作条件分支控制的节点。
+     * <p>
+     * 用于 Phase A 前瞻扫描：生产者内联可以安全地跳过这些节点，
+     * 使得中间的守卫检查仍然正常执行，而动作调用则延迟到消费者位置。
+     */
+    private static boolean isPureGuardNode(FlowNode node) {
+        return switch (node.type()) {
+            case CHECK, ANY, ALL -> true;
+            default -> false;
+        };
+    }
+
 
     public ScriptUnit optimize(ScriptUnit unit, CompilationContext ctx) {
         unit = constantFolding(unit, ctx);
@@ -44,54 +53,6 @@ public final class ScriptOptimizer {
         return unit;
     }
 
-    // ======================== 值域记录 ========================
-
-    /**
-     * 编译期已知的变量值域约束。
-     * <p>
-     * 只读保证下，一个 check 通过后其约束在整个 accept() 内有效。
-     */
-    public record ValueRange(double min, double max, Object exactValue, boolean nonNull) {
-
-        public static final ValueRange UNCONSTRAINED = new ValueRange(
-                Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, null, false);
-
-        public ValueRange withMin(double newMin) {
-            return new ValueRange(Math.max(min, newMin), max, exactValue, nonNull);
-        }
-
-        public ValueRange withMax(double newMax) {
-            return new ValueRange(min, Math.min(max, newMax), exactValue, nonNull);
-        }
-
-        public ValueRange withExact(Object val) {
-            double d = val instanceof Number n ? n.doubleValue() : 0;
-            return new ValueRange(d, d, val, true);
-        }
-
-        public ValueRange withNonNull() {
-            return new ValueRange(min, max, exactValue, true);
-        }
-
-        /**
-         * 判断给定操作是否在当前约束下恒真/恒假。
-         *
-         * @return Boolean.TRUE=恒真, Boolean.FALSE=恒假, null=不确定
-         */
-        public Boolean canFold(CheckOp op, double cmpValue) {
-            return op.foldRange(min, max, cmpValue, exactValue);
-        }
-
-        /** 用 String exactValue 判断互斥（枚举/字符串 ==） */
-        public Boolean canFoldExact(CheckOp op, Object cmpValue) {
-            if (op == CheckOp.EQ && exactValue != null) {
-                return exactValue.equals(cmpValue) ? Boolean.TRUE : Boolean.FALSE;
-            }
-            return null;
-        }
-    }
-
-    // ======================== 1. 常量折叠 ========================
 
     private ScriptUnit constantFolding(ScriptUnit unit, CompilationContext ctx) {
         ImmutableList.Builder<FlowNode> optimized = ImmutableList.builder();
@@ -113,7 +74,6 @@ public final class ScriptOptimizer {
         return unit.withFlow(optimized.build());
     }
 
-    // ======================== 2. 死代码消除 ========================
 
     private ScriptUnit deadCodeElimination(ScriptUnit unit, CompilationContext ctx) {
         ImmutableList.Builder<FlowNode> optimized = ImmutableList.builder();
@@ -128,7 +88,6 @@ public final class ScriptOptimizer {
         return unit.withFlow(optimized.build());
     }
 
-    // ======================== 5. 值域传播（只读保证） ========================
 
     /**
      * 值域传播优化 Pass。
@@ -178,7 +137,6 @@ public final class ScriptOptimizer {
         return unit.withFlow(optimized.build());
     }
 
-    // ======================== 7. 分支权重重排 ========================
 
     private ScriptUnit branchReordering(ScriptUnit unit, CompilationContext ctx) {
         ImmutableList.Builder<FlowNode> optimized = ImmutableList.builder();
@@ -192,7 +150,6 @@ public final class ScriptOptimizer {
         return unit.withFlow(optimized.build());
     }
 
-    // ======================== 8. 变量缓存 ========================
 
     private ScriptUnit variableCaching(ScriptUnit unit, CompilationContext ctx) {
         Multiset<String> usageCount = HashMultiset.create();
@@ -229,7 +186,6 @@ public final class ScriptOptimizer {
         return unit.withFlow(optimized.build());
     }
 
-    // ======================== 9. 常量提升分析 ========================
 
     /**
      * 扫描 flow 节点收集需提升为 static final 的常量。
@@ -240,7 +196,7 @@ public final class ScriptOptimizer {
     private ScriptUnit constantHoisting(ScriptUnit unit, CompilationContext ctx) {
         ArrayList<ConstantDef> defs = new ArrayList<>();
         ImmutableList.Builder<FlowNode> optimized = ImmutableList.builder();
-        int[] counter = { 0 };
+        int[] counter = {0};
 
         for (FlowNode node : unit.flow()) {
             optimized.add(hoistNode(node, defs, counter));
@@ -264,7 +220,6 @@ public final class ScriptOptimizer {
         return node;
     }
 
-    // ======================== 10. 活跃变量分析 ========================
 
     /**
      * 扫描 flow 节点引用的变量集合。
@@ -298,7 +253,6 @@ public final class ScriptOptimizer {
         }
     }
 
-    // ======================== 11. 局部变量内联融合 ========================
 
     /**
      * 指令下沉与窥孔内联融合优化 (Variable Sinking & Inlining)
@@ -351,7 +305,6 @@ public final class ScriptOptimizer {
         for (int i = 0; i < oldFlow.size(); i++) {
             FlowNode current = oldFlow.get(i);
 
-            // ==== 【阶段 A】 侦测并吞食生产者到消费者的直接内联 (Producer Inlining) ====
             //
             // 改进：允许跨越纯守卫节点 (CHECK / ANY / ALL) 寻找消费者。
             // 被跳过的守卫节点照常输出，仅生产者与消费者合并。
@@ -395,7 +348,6 @@ public final class ScriptOptimizer {
                 }
             }
 
-            // ==== 【阶段 B】 处理当前节点的按需下沉消费 (Property Sinking) ====
             if (current.type().handler() instanceof ScriptIR.VariableConsumer consumer) {
                 String reqVar = consumer.getConsumedVariable(current);
                 if (reqVar != null && sinkingVars.containsKey(reqVar)) {
@@ -420,15 +372,49 @@ public final class ScriptOptimizer {
     }
 
     /**
-     * 判断节点是否为"纯守卫"——无外部副作用、仅作条件分支控制的节点。
+     * 编译期已知的变量值域约束。
      * <p>
-     * 用于 Phase A 前瞻扫描：生产者内联可以安全地跳过这些节点，
-     * 使得中间的守卫检查仍然正常执行，而动作调用则延迟到消费者位置。
+     * 只读保证下，一个 check 通过后其约束在整个 accept() 内有效。
      */
-    private static boolean isPureGuardNode(FlowNode node) {
-        return switch (node.type()) {
-            case CHECK, ANY, ALL -> true;
-            default -> false;
-        };
+    public record ValueRange(double min, double max, Object exactValue, boolean nonNull) {
+
+        public static final ValueRange UNCONSTRAINED = new ValueRange(
+                Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, null, false);
+
+        public ValueRange withMin(double newMin) {
+            return new ValueRange(Math.max(min, newMin), max, exactValue, nonNull);
+        }
+
+        public ValueRange withMax(double newMax) {
+            return new ValueRange(min, Math.min(max, newMax), exactValue, nonNull);
+        }
+
+        public ValueRange withExact(Object val) {
+            double d = val instanceof Number n ? n.doubleValue() : 0;
+            return new ValueRange(d, d, val, true);
+        }
+
+        public ValueRange withNonNull() {
+            return new ValueRange(min, max, exactValue, true);
+        }
+
+        /**
+         * 判断给定操作是否在当前约束下恒真/恒假。
+         *
+         * @return Boolean.TRUE=恒真, Boolean.FALSE=恒假, null=不确定
+         */
+        public Boolean canFold(CheckOp op, double cmpValue) {
+            return op.foldRange(min, max, cmpValue, exactValue);
+        }
+
+        /**
+         * 用 String exactValue 判断互斥（枚举/字符串 ==）
+         */
+        public Boolean canFoldExact(CheckOp op, Object cmpValue) {
+            if (op == CheckOp.EQ && exactValue != null) {
+                return exactValue.equals(cmpValue) ? Boolean.TRUE : Boolean.FALSE;
+            }
+            return null;
+        }
     }
 }

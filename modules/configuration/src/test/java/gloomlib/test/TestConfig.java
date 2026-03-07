@@ -57,7 +57,6 @@ public class TestConfig extends ConfigurationFile {
     @Comment("元數據 (Template: STRICT)")
     public Map<String, StrictMetadata> metadata = new HashMap<>();
 
-    // ================= 嵌套類定義 =================
 
     // 反射驗證方法
     private static int validatePlayers(int val) {
@@ -137,7 +136,6 @@ public class TestConfig extends ConfigurationFile {
         public Map<String, Object> params = new HashMap<>();
     }
 
-    // ================= 驗證邏輯 =================
 
     @Template(value = Template.Strategy.SMART, name = "gold_coin")
     public static class DropItem extends ConfigurationPart {
@@ -150,7 +148,6 @@ public class TestConfig extends ConfigurationFile {
         public String tag = "none";
     }
 
-    // ================= 生命周期鉤子 =================
 
     // Java Record 類型支持
     public record AdminUser(String name, String role, int permissionLevel) {

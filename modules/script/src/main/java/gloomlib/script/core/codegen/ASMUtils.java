@@ -114,7 +114,7 @@ public final class ASMUtils {
      * 封装 {@link gloomlib.script.core.handler.ReturnNodeHandler} 中的重复模式为共享工具。
      */
     public static void emitLoadBoxed(MethodVisitor mv, int slot,
-            gloomlib.script.core.ScriptIR.IRType type) {
+                                     gloomlib.script.core.ScriptIR.IRType type) {
         switch (type.base()) {
             case INT:
             case BOOLEAN:
@@ -188,7 +188,6 @@ public final class ASMUtils {
         }
     }
 
-    // ======================== 常量加载工具 ========================
 
     public static void emitIntConst(MethodVisitor mv, int value) {
         if (value >= -1 && value <= 5) {
@@ -222,7 +221,6 @@ public final class ASMUtils {
         }
     }
 
-    // ======================== 变量存取操作码 ========================
 
     /**
      * 根据 {@link gloomlib.script.core.ScriptIR.IRType} 返回对应的 XSTORE 操作码。
@@ -242,7 +240,6 @@ public final class ASMUtils {
         }
     }
 
-    // ======================== 对象工具方法 ========================
 
     /**
      * 发射：obj.hashCode()
@@ -258,7 +255,6 @@ public final class ASMUtils {
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Enum", "name", "()Ljava/lang/String;", false);
     }
 
-    // ======================== 常量加载工具（补全 float） ========================
 
     /**
      * 发射 float 字面量的最优加载指令（FCONST_0/1/2 或 LDC）。
@@ -275,7 +271,6 @@ public final class ASMUtils {
         }
     }
 
-    // ======================== 跳转取反映射 ========================
 
     /**
      * 将 JVM 条件跳转 opcode 翻转为反义 opcode（如 IFEQ → IFNE, IFLT → IFGE）。

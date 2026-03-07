@@ -1,18 +1,19 @@
 package gloomlib.script.core.handler;
 
-import gloomlib.script.core.codegen.ASMUtils;
-import gloomlib.script.core.codegen.CheckOpEmitters;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import gloomlib.script.core.CheckOp;
-import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.CompilationContext;
+import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.ScriptIR;
 import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.FlowNodeType;
 import gloomlib.script.core.ScriptIR.IRType;
 import gloomlib.script.core.ScriptIR.NodeCapability;
+import gloomlib.script.core.codegen.ASMUtils;
+import gloomlib.script.core.codegen.CheckOpEmitters;
+import gloomlib.script.core.optimizer.ScriptOptimizer;
 import gloomlib.script.core.parser.ScriptParser;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -21,7 +22,6 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import gloomlib.script.core.optimizer.ScriptOptimizer;
 
 /**
  * CHECK 节点处理器（增强版）。
@@ -42,6 +42,51 @@ public final class CheckNodeHandler
 
     public static void init() {
     }
+
+    /**
+     * 根据上下文目标返回类型发射早退 return 指令。
+     * <p>
+     * void 方法发 RETURN；Object/Array 方法先 ACONST_NULL 再 ARETURN；原生类型方法发对应零值。
+     */
+    static void emitEarlyReturn(MethodVisitor mv, CompilationContext ctx) {
+        org.objectweb.asm.Type ret = ctx.targetReturnType();
+        if (ret.getSort() == org.objectweb.asm.Type.VOID) {
+            mv.visitInsn(Opcodes.RETURN);
+        } else if (ret.getSort() == org.objectweb.asm.Type.OBJECT
+                || ret.getSort() == org.objectweb.asm.Type.ARRAY) {
+            mv.visitInsn(Opcodes.ACONST_NULL);
+            mv.visitInsn(Opcodes.ARETURN);
+        } else if (ret.getSort() == org.objectweb.asm.Type.DOUBLE) {
+            mv.visitInsn(Opcodes.DCONST_0);
+            mv.visitInsn(Opcodes.DRETURN);
+        } else if (ret.getSort() == org.objectweb.asm.Type.LONG) {
+            mv.visitInsn(Opcodes.LCONST_0);
+            mv.visitInsn(Opcodes.LRETURN);
+        } else if (ret.getSort() == org.objectweb.asm.Type.FLOAT) {
+            mv.visitInsn(Opcodes.FCONST_0);
+            mv.visitInsn(Opcodes.FRETURN);
+        } else {
+            mv.visitInsn(Opcodes.ICONST_0);
+            mv.visitInsn(Opcodes.IRETURN);
+        }
+    }
+
+    /**
+     * 从 FlowNode 'op' 属性解析 CheckOp.Resolved 的便利方法。
+     */
+    private static CheckOp.Resolved resolveOp(FlowNode node) {
+        return CheckOp.resolve(node.getRequiredAttr("op"));
+    }
+
+    /**
+     * 操作符是否为数值类比较（决定 value 字段是否可尝试作为数学表达式解析）。
+     */
+    private static boolean isNumericOp(String rawOp) {
+        if (rawOp == null) return false;
+        CheckOp op = CheckOp.resolve(rawOp).op();
+        return op.isNumeric();
+    }
+
 
     @Override
     @SuppressWarnings("unchecked")
@@ -98,12 +143,12 @@ public final class CheckNodeHandler
             }
 
             // 缺口2：若 value 仍为字符串且操作符为数值类，尝试作为数学表达式解析
-            if (value instanceof String mathStr && op != null && isNumericOp(op)) {
+            if (value instanceof String mathStr && isNumericOp(op)) {
                 try {
                     gloomlib.math.api.MathNode mathNode = gloomlib.math.api.MathParser.parse(mathStr);
-                    if (mathNode instanceof gloomlib.math.api.MathNode.LiteralNode lit) {
+                    if (mathNode instanceof gloomlib.math.api.MathNode.LiteralNode(double value1)) {
                         // 纯常量表达式（如 "5*3+2"）——直接折叠为数值
-                        value = lit.value();
+                        value = value1;
                     } else {
                         // 含变量的表达式（如 "{maxHp} * 0.5"）——存储 MathNode 供运行时发射
                         nodeAttrs.put("valueNode", mathNode);
@@ -169,35 +214,6 @@ public final class CheckNodeHandler
         }
     }
 
-    /**
-     * 根据上下文目标返回类型发射早退 return 指令。
-     * <p>
-     * void 方法发 RETURN；Object/Array 方法先 ACONST_NULL 再 ARETURN；原生类型方法发对应零值。
-     */
-    static void emitEarlyReturn(MethodVisitor mv, CompilationContext ctx) {
-        org.objectweb.asm.Type ret = ctx.targetReturnType();
-        if (ret.getSort() == org.objectweb.asm.Type.VOID) {
-            mv.visitInsn(Opcodes.RETURN);
-        } else if (ret.getSort() == org.objectweb.asm.Type.OBJECT
-                || ret.getSort() == org.objectweb.asm.Type.ARRAY) {
-            mv.visitInsn(Opcodes.ACONST_NULL);
-            mv.visitInsn(Opcodes.ARETURN);
-        } else if (ret.getSort() == org.objectweb.asm.Type.DOUBLE) {
-            mv.visitInsn(Opcodes.DCONST_0);
-            mv.visitInsn(Opcodes.DRETURN);
-        } else if (ret.getSort() == org.objectweb.asm.Type.LONG) {
-            mv.visitInsn(Opcodes.LCONST_0);
-            mv.visitInsn(Opcodes.LRETURN);
-        } else if (ret.getSort() == org.objectweb.asm.Type.FLOAT) {
-            mv.visitInsn(Opcodes.FCONST_0);
-            mv.visitInsn(Opcodes.FRETURN);
-        } else {
-            mv.visitInsn(Opcodes.ICONST_0);
-            mv.visitInsn(Opcodes.IRETURN);
-        }
-    }
-
-    // ======================== 可复用条件原语 ========================
 
     /**
      * 发射单个条件的比较字节码，返回"条件成立时应跳转"的 opcode。
@@ -273,10 +289,8 @@ public final class CheckNodeHandler
         }
     }
 
-    // ======================== 字节码发射委托 ========================
-
     private int emitSinkingCheck(MethodVisitor mv, CheckOp op, int slot, IRType type, FlowNode node,
-            CompilationContext ctx) {
+                                 CompilationContext ctx) {
         return CheckOpEmitters.forOp(op).emit(mv, op, slot, type, node, ctx);
     }
 
@@ -284,6 +298,7 @@ public final class CheckNodeHandler
     public EnumSet<NodeCapability> capabilities() {
         return EnumSet.of(NodeCapability.HAS_CONDITION, NodeCapability.FOLDABLE);
     }
+
 
     @Override
     public Iterable<FlowNode> traverseChildren(FlowNode node) {
@@ -337,13 +352,14 @@ public final class CheckNodeHandler
                 if (range instanceof ImmutableList<?> vals && vals.size() == 2) {
                     double lo = ((Number) vals.get(0)).doubleValue();
                     double hi = ((Number) vals.get(1)).doubleValue();
-                    double[] arr = { lo, hi };
+                    double[] arr = {lo, hi};
                     key = "D/" + Double.toHexString(lo) + "/" + Double.toHexString(hi);
                     kind = CompilationContext.ConstantKind.DOUBLE_ARRAY;
                     payload = arr;
                 }
             }
-            case NONE -> {}
+            case NONE -> {
+            }
         }
 
         if (key != null) {
@@ -352,8 +368,6 @@ public final class CheckNodeHandler
         }
         return node;
     }
-
-    // ======================== 实现脱离优化接口 ========================
 
     @Override
     public Boolean evaluateFold(ScriptIR.FlowNode node, gloomlib.script.core.CompilationContext ctx) {
@@ -401,7 +415,7 @@ public final class CheckNodeHandler
     }
 
     private Boolean tryFoldWithRangeOp(ScriptOptimizer.ValueRange range, CheckOp op,
-            ScriptIR.FlowNode node) {
+                                       ScriptIR.FlowNode node) {
         if (op.isRangeFoldable()) {
             Object value = node.getAttrOrDefault("value", null);
             if (value instanceof Number n) {
@@ -432,19 +446,9 @@ public final class CheckNodeHandler
         };
     }
 
-    /** 从 FlowNode 'op' 属性解析 CheckOp.Resolved 的便利方法。 */
-    private static CheckOp.Resolved resolveOp(FlowNode node) {
-        return CheckOp.resolve(node.<String>getRequiredAttr("op"));
-    }
-
-    /** 操作符是否为数值类比较（决定 value 字段是否可尝试作为数学表达式解析）。 */
-    private static boolean isNumericOp(String rawOp) {
-        if (rawOp == null) return false;
-        CheckOp op = CheckOp.resolve(rawOp).op();
-        return op.isNumeric();
-    }
-
-    /** 覆写以包含 valueNode 中引用的变量（活跃变量分析需要）。 */
+    /**
+     * 覆写以包含 valueNode 中引用的变量（活跃变量分析需要）。
+     */
     @Override
     public java.util.List<String> getAllConsumedVariables(FlowNode node) {
         java.util.List<String> vars = new ArrayList<>();

@@ -25,7 +25,8 @@ import java.util.Map;
  */
 public final class YamlLineIndex {
 
-    private YamlLineIndex() {}
+    private YamlLineIndex() {
+    }
 
     /**
      * Builds a {@code dotpath → 1-based line} index from a pre-read YAML string.
@@ -41,7 +42,8 @@ public final class YamlLineIndex {
             if (root instanceof MappingNode mn) {
                 walk(mn, "", index);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return index;
     }
 

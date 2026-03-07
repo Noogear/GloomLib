@@ -1,19 +1,18 @@
 package gloomlib.script.core.handler;
 
-import gloomlib.script.core.codegen.ASMUtils;
-import gloomlib.script.core.ParseContext;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import gloomlib.script.core.CompilationContext;
+import gloomlib.script.core.ParseContext;
+import gloomlib.script.core.ScriptIR.ConditionEmitter;
 import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.FlowNodeType;
 import gloomlib.script.core.ScriptIR.NodeCapability;
+import gloomlib.script.core.codegen.ASMUtils;
 import gloomlib.script.core.parser.ScriptParser;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-
-import gloomlib.script.core.ScriptIR.ConditionEmitter;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -98,7 +97,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
 
     /**
      * ANY（OR 短路）：任一子条件成立即跳过失败路径。
-     * 
+     *
      * <pre>
      *   cond1 → IF_PASS → passLabel
      *   cond2 → IF_PASS → passLabel
@@ -108,7 +107,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
      * </pre>
      */
     private void emitAny(FlowNode node, ImmutableList<FlowNode> children,
-            MethodVisitor mv, CompilationContext ctx) {
+                         MethodVisitor mv, CompilationContext ctx) {
         Label passLabel = new Label();
 
         // 进入 any 前保存快照： any 内部的 instanceof 窄化不应泄漏到父级作用域
@@ -142,7 +141,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
 
     /**
      * ALL（AND 短路）：任一子条件失败即触发失败路径。
-     * 
+     *
      * <pre>
      *   cond1 → IF_FAIL → failLabel
      *   cond2 → IF_FAIL → failLabel
@@ -152,7 +151,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
      * </pre>
      */
     private void emitAll(FlowNode node, ImmutableList<FlowNode> children,
-            MethodVisitor mv, CompilationContext ctx) {
+                         MethodVisitor mv, CompilationContext ctx) {
         Label failLabel = new Label();
         Label continueLabel = new Label();
 
@@ -194,7 +193,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
      * 处理嵌套的 ANY/ALL：递归 emit，检测结果并桥接到父级的 pass/fail 标签。
      */
     private void emitNestedComposite(FlowNode child, MethodVisitor mv,
-            CompilationContext ctx, Label parentTarget, boolean jumpOnPass) {
+                                     CompilationContext ctx, Label parentTarget, boolean jumpOnPass) {
         // 嵌套复合节点的 emit 已完整处理 pass/fail 路径（内部有 RETURN）
         // 但我们需要的是"评估结果"而非直接 RETURN
         // 所以我们需要特殊处理：用和 CheckNodeHandler.emit 相同的模式

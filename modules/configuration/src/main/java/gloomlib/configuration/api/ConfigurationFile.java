@@ -1,7 +1,7 @@
 package gloomlib.configuration.api;
 
+import gloomlib.configuration.api.util.ConfigurationLogger;
 import gloomlib.configuration.core.util.ConfigBackup;
-import gloomlib.configuration.core.util.ConfigurationLogger;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.jetbrains.annotations.NotNull;
 

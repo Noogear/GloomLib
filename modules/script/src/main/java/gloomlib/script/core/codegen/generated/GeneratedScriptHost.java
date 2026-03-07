@@ -17,21 +17,21 @@ import java.lang.invoke.MethodHandles;
  */
 public final class GeneratedScriptHost {
 
-    private GeneratedScriptHost() {}
-
     /**
      * 在 {@code gloomlib.script.core.codegen.generated} 包内捕获的 Lookup。
      * <p>
      * 生成类的内部名格式：{@code cn/warriorview/script/codegen/generated/Script$<hash>}。
      */
     public static final MethodHandles.Lookup LOOKUP = MethodHandles.lookup();
-
     /**
      * 生成类的包前缀（JVM 内部名格式），供 {@link gloomlib.script.core.codegen.BytecodeCompiler}
      * 构造与本 Lookup 同包的类名。
      */
     public static final String PACKAGE_PREFIX =
             GeneratedScriptHost.class.getPackage().getName().replace('.', '/');
+
+    private GeneratedScriptHost() {
+    }
 
     /**
      * 使用 {@link MethodHandles.Lookup#defineHiddenClass} 在本包内定义隐藏类。

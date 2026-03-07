@@ -24,77 +24,6 @@ import java.util.Set;
 @SuppressWarnings("null")
 public final class ActionRegistry {
 
-    // ======================== @ScriptAction 注解 ========================
-
-    /**
-     * 标注一个静态方法为脚本动作。
-     * <p>
-     * 方法必须为 {@code public static}，注册表将从方法签名自动推导
-     * ASM 调用描述符和参数数量。
-     */
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target(ElementType.METHOD)
-    public @interface ScriptAction {
-        /**
-         * 动作名称（YAML 中使用的标识符）。
-         */
-        String value();
-
-        /**
-         * 是否将方法第一个参数视为脚本 payload 对象（由引擎自动注入，不需要在 YAML args 中提供）。
-         * <p>
-         * 默认 {@code true}：第一个参数是 payload，YAML {@code args} 从第二个参数开始对应。<br>
-         * 设为 {@code false}：纯工具方法，所有参数均由 YAML {@code args} 提供，引擎不注入 payload。
-         * <pre>{@code
-         * // consumesPayload = true（默认）：第一位是 payload，YAML 只需传后续参数
-         * @ScriptAction("sendMessage")
-         * public static void sendMessage(Player target, String message) { ... }
-         * // YAML: args: ["Hello"]
-         *
-         * // consumesPayload = false：纯工具函数，所有参数来自 YAML
-         * @ScriptAction(value = "formatNumber", consumesPayload = false)
-         * public static String formatNumber(int value, int digits) { ... }
-         * // YAML: args: ["{hp}", "2"]
-         * }</pre>
-         */
-        boolean consumesPayload() default true;
-    }
-
-    // ======================== ActionDef ========================
-
-    /**
-     * 动作定义，存储目标方法的字节码调用信息。
-     */
-    public record ActionDef(
-            String owner,
-            String method,
-            String descriptor,
-            int invokeType,
-            int paramCount,
-            Class<?>[] paramTypes,
-            com.google.common.reflect.TypeToken<?>[] genericParamTypes,
-            Class<?> returnType,
-            boolean isBuiltin,
-            boolean consumesPayload) {
-
-        /**
-         * 简易构造（非 builtin，consumesPayload=true）。
-         */
-        public ActionDef(String owner, String method, String descriptor, int invokeType, int paramCount,
-                Class<?>[] paramTypes, com.google.common.reflect.TypeToken<?>[] genericParamTypes,
-                Class<?> returnType) {
-            this(owner, method, descriptor, invokeType, paramCount, paramTypes, genericParamTypes, returnType, false, true);
-        }
-
-        /**
-         * 简易构造（指定 isBuiltin，consumesPayload=true）。
-         */
-        public ActionDef(String owner, String method, String descriptor, int invokeType, int paramCount,
-                Class<?>[] paramTypes, com.google.common.reflect.TypeToken<?>[] genericParamTypes,
-                Class<?> returnType, boolean isBuiltin) {
-            this(owner, method, descriptor, invokeType, paramCount, paramTypes, genericParamTypes, returnType, isBuiltin, true);
-        }
-    }
 
     private final Map<String, ActionDef> actions = new HashMap<>();
 
@@ -206,5 +135,73 @@ public final class ActionRegistry {
      */
     public ImmutableMap<String, ActionDef> all() {
         return ImmutableMap.copyOf(actions);
+    }
+
+    /**
+     * 标注一个静态方法为脚本动作。
+     * <p>
+     * 方法必须为 {@code public static}，注册表将从方法签名自动推导
+     * ASM 调用描述符和参数数量。
+     */
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
+    public @interface ScriptAction {
+        /**
+         * 动作名称（YAML 中使用的标识符）。
+         */
+        String value();
+
+        /**
+         * 是否将方法第一个参数视为脚本 payload 对象（由引擎自动注入，不需要在 YAML args 中提供）。
+         * <p>
+         * 默认 {@code true}：第一个参数是 payload，YAML {@code args} 从第二个参数开始对应。<br>
+         * 设为 {@code false}：纯工具方法，所有参数均由 YAML {@code args} 提供，引擎不注入 payload。
+         * <pre>{@code
+         * // consumesPayload = true（默认）：第一位是 payload，YAML 只需传后续参数
+         * @ScriptAction("sendMessage")
+         * public static void sendMessage(Player target, String message) { ... }
+         * // YAML: args: ["Hello"]
+         *
+         * // consumesPayload = false：纯工具函数，所有参数来自 YAML
+         * @ScriptAction(value = "formatNumber", consumesPayload = false)
+         * public static String formatNumber(int value, int digits) { ... }
+         * // YAML: args: ["{hp}", "2"]
+         * }</pre>
+         */
+        boolean consumesPayload() default true;
+    }
+
+    /**
+     * 动作定义，存储目标方法的字节码调用信息。
+     */
+    public record ActionDef(
+            String owner,
+            String method,
+            String descriptor,
+            int invokeType,
+            int paramCount,
+            Class<?>[] paramTypes,
+            com.google.common.reflect.TypeToken<?>[] genericParamTypes,
+            Class<?> returnType,
+            boolean isBuiltin,
+            boolean consumesPayload) {
+
+        /**
+         * 简易构造（非 builtin，consumesPayload=true）。
+         */
+        public ActionDef(String owner, String method, String descriptor, int invokeType, int paramCount,
+                         Class<?>[] paramTypes, com.google.common.reflect.TypeToken<?>[] genericParamTypes,
+                         Class<?> returnType) {
+            this(owner, method, descriptor, invokeType, paramCount, paramTypes, genericParamTypes, returnType, false, true);
+        }
+
+        /**
+         * 简易构造（指定 isBuiltin，consumesPayload=true）。
+         */
+        public ActionDef(String owner, String method, String descriptor, int invokeType, int paramCount,
+                         Class<?>[] paramTypes, com.google.common.reflect.TypeToken<?>[] genericParamTypes,
+                         Class<?> returnType, boolean isBuiltin) {
+            this(owner, method, descriptor, invokeType, paramCount, paramTypes, genericParamTypes, returnType, isBuiltin, true);
+        }
     }
 }

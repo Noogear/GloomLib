@@ -1,5 +1,7 @@
 package gloomlib.configuration.api.exception;
 
+import gloomlib.configuration.core.util.YamlLineIndex;
+
 import java.util.List;
 import java.util.Map;
 
@@ -15,11 +17,10 @@ import java.util.Map;
  */
 public final class LoadContext {
 
-    private record Ctx(String filename, Map<String, Integer> lineIndex) {}
-
     private static final ThreadLocal<Ctx> CURRENT = new ThreadLocal<>();
 
-    private LoadContext() {}
+    private LoadContext() {
+    }
 
     /**
      * Sets the current loading context.
@@ -31,7 +32,9 @@ public final class LoadContext {
         CURRENT.set(new Ctx(filename, lineIndex));
     }
 
-    /** Removes the current context. Always call in a {@code finally} block. */
+    /**
+     * Removes the current context. Always call in a {@code finally} block.
+     */
     public static void clear() {
         CURRENT.remove();
     }
@@ -56,5 +59,8 @@ public final class LoadContext {
         Ctx ctx = CURRENT.get();
         if (ctx == null || path == null || path.isEmpty()) return 0;
         return ctx.lineIndex().getOrDefault(String.join(".", path), 0);
+    }
+
+    private record Ctx(String filename, Map<String, Integer> lineIndex) {
     }
 }
