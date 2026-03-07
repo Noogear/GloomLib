@@ -56,6 +56,12 @@ public final class RegistryResolvers {
     /**
      * Registers a resource key.
      *
+     * <p><b>Note:</b> Multiple calls to this method will overwrite the previous
+     * {@code NamespacedKey.class} resolver, leaving only the last registration
+     * effective. If you need resolvers for multiple registry keys to coexist,
+     * introduce distinct wrapper types for each registry key and register those
+     * instead.</p>
+     *
      * @param gloom       GloomCommand instance
      * @param registryKey Registry key
      * @param <T>         Type

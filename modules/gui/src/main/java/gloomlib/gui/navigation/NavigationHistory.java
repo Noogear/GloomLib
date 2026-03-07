@@ -209,14 +209,11 @@ public final class NavigationHistory {
     }
 
     private StackSnapshot buildStackSnapshot(int size) {
-        @SuppressWarnings("unchecked")
-        WeakReference<Window>[] stackArray = new WeakReference[size];
         Window[] windows = new Window[size];
         int[] hashes = new int[size];
 
         int index = size - 1;
         for (WeakReference<Window> ref : stack) {
-            stackArray[index] = ref;
             windows[index] = ref.get();
             if (windows[index] == null) {
                 return null;

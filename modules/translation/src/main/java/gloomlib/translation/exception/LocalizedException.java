@@ -125,14 +125,15 @@ public class LocalizedException extends RuntimeException {
                 rawMessage = this.node;
             }
 
-            String cleanMessage = MiniMessages.get().stripTags(rawMessage);
-
+            String messageWithArgs = rawMessage;
             for (int i = 0; i < arguments.length; i++) {
-                cleanMessage = cleanMessage.replace(
+                messageWithArgs = messageWithArgs.replace(
                         "<arg:" + i + ">",
                         arguments[i] != null ? arguments[i] : "null"
                 );
             }
+
+            String cleanMessage = MiniMessages.get().stripTags(messageWithArgs);
 
             return cleanMessage;
         } catch (Exception e) {

@@ -5,7 +5,7 @@ import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 
-public class ArgumentTypesAnalyzer {
+class ArgumentTypesAnalyzer {
     public static void main(String[] args) {
         System.out.println("=== Paper ArgumentTypes 所有静态方法 ===\n");
         

@@ -23,8 +23,9 @@ public final class CommandTracker {
         instances.add(instance);
 
         if (!names.isEmpty()) {
-            String mainName = names.iterator().next();
-            aliases.put(mainName.toLowerCase(), names);
+            for (String name : names) {
+                aliases.put(name.toLowerCase(), names);
+            }
         }
     }
 
