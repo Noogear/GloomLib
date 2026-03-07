@@ -73,7 +73,7 @@ public final class GuiItemUtils {
      * Attempts to add an item to a slot.
      *
      * @param slotItem the item in the slot
-     * @param toAdd the item to add
+     * @param toAdd    the item to add
      * @return the add result
      */
     @NotNull
@@ -112,7 +112,7 @@ public final class GuiItemUtils {
      * Removes items from a slot.
      *
      * @param slotItem the item in the slot
-     * @param amount the amount to remove
+     * @param amount   the amount to remove
      * @return the remove result
      */
     @NotNull
@@ -169,9 +169,9 @@ public final class GuiItemUtils {
      * Finds the first stackable slot in an inventory.
      *
      * @param inventory the inventory
-     * @param item the item to stack
-     * @param start the start slot
-     * @param end the end slot
+     * @param item      the item to stack
+     * @param start     the start slot
+     * @param end       the end slot
      * @return the slot index
      */
     public static int findFirstStackableSlot(@NotNull Inventory inventory, @NotNull ItemStack item, int start, int end) {
@@ -193,8 +193,8 @@ public final class GuiItemUtils {
      * Finds the first empty slot in an inventory.
      *
      * @param inventory the inventory
-     * @param start the start slot
-     * @param end the end slot
+     * @param start     the start slot
+     * @param end       the end slot
      * @return the slot index
      */
     public static int findFirstEmptySlot(@NotNull Inventory inventory, int start, int end) {
@@ -211,7 +211,7 @@ public final class GuiItemUtils {
      * Result of an add operation.
      *
      * @param newSlotItem the new item in the slot
-     * @param remaining the remaining item
+     * @param remaining   the remaining item
      */
     public record AddResult(@Nullable ItemStack newSlotItem, @Nullable ItemStack remaining) {
         /**
@@ -228,7 +228,7 @@ public final class GuiItemUtils {
      * Result of a remove operation.
      *
      * @param newSlotItem the new item in the slot
-     * @param removed the removed item
+     * @param removed     the removed item
      */
     public record RemoveResult(@Nullable ItemStack newSlotItem, @Nullable ItemStack removed) {
         /**

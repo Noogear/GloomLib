@@ -9,8 +9,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Advanced type inference utility for resolving complex generic types with caching support.
- * Now supports Gson TypeToken for precise generic type resolution.
+ * Advanced type inference with caching and TypeToken support.
  */
 public final class TypeInference {
 
@@ -19,12 +18,11 @@ public final class TypeInference {
     private static final Map<Class<?>, Map<TypeVariable<?>, Type>> INHERITANCE_CACHE = new ConcurrentHashMap<>();
 
     /**
-     * Extracts generic parameter type at the specified index.
-     * Supports ParameterizedType, WildcardType, TypeVariable, and GenericArrayType.
+     * Extracts generic parameter at index.
      *
-     * @param type  the generic type
-     * @param index the parameter index (0-based)
-     * @return the resolved class, or Object.class if resolution fails
+     * @param type generic type
+     * @param index parameter index (0-based)
+     * @return resolved class, or Object.class if fails
      */
     @NotNull
     public static Class<?> extractGenericParameter(@Nullable Type type, int index) {
@@ -151,6 +149,8 @@ public final class TypeInference {
         return result;
     }
 
+    // === Type Resolution ===
+
     private static void resolveInheritanceChainRecursive(
             Class<?> current,
             Class<?> target,
@@ -196,6 +196,8 @@ public final class TypeInference {
         }
     }
 
+    // === Type Compatibility ===
+
     /**
      * Checks type compatibility.
      *
@@ -223,6 +225,8 @@ public final class TypeInference {
         COMPATIBILITY_CACHE.put(cacheKey, result);
         return result;
     }
+
+    // === Field Type Inference ===
 
     /**
      * Infers the value type from a field (e.g., Map value type, List element type).
@@ -276,6 +280,8 @@ public final class TypeInference {
         return result;
     }
 
+    // === Cache Management ===
+
     /**
      * Clears all caches.
      */
@@ -297,6 +303,8 @@ public final class TypeInference {
                 COMPATIBILITY_CACHE.size(),
                 INHERITANCE_CACHE.size());
     }
+
+    // === TypeToken Support ===
 
     /**
      * Extracts generic parameter from a TypeToken at the specified index.
@@ -337,6 +345,8 @@ public final class TypeInference {
     public static Type getType(@NotNull TypeToken<?> typeToken) {
         return typeToken.getType();
     }
+
+    // === Cache Keys (Records) ===
 
     private record TypeCacheKey(Type type, int index) {
         @Override

@@ -128,7 +128,7 @@ public class GloomGuiManager {
         if (task != null) {
             try {
                 task.cancel();
-            } catch (Exception e) {
+            } catch (Exception ignored) {
             }
         }
     }
@@ -144,7 +144,7 @@ public class GloomGuiManager {
         instance.windowTasks.values().forEach(task -> {
             try {
                 task.cancel();
-            } catch (Exception e) {
+            } catch (Exception ignored) {
             }
         });
 

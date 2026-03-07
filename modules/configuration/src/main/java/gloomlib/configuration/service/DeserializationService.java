@@ -3,6 +3,7 @@ package gloomlib.configuration.service;
 import gloomlib.configuration.ConfigurationPart;
 import gloomlib.configuration.exception.SerializationException;
 import gloomlib.configuration.registry.AdapterRegistry;
+import gloomlib.configuration.util.NamingUtils;
 import gloomlib.configuration.util.ReflectionUtils;
 import gloomlib.configuration.util.TypeConverter;
 import gloomlib.configuration.util.TypeInference;
@@ -39,16 +40,6 @@ public final class DeserializationService {
      */
     public DeserializationService(AdapterRegistry adapterRegistry) {
         this.adapterRegistry = adapterRegistry;
-    }
-
-    /**
-     * Converts camelCase to kebab-case.
-     *
-     * @param s the camelCase string
-     * @return the kebab-case string
-     */
-    private static String camelToKebab(String s) {
-        return s.replaceAll("([a-z])([A-Z]+)", "$1-$2").toLowerCase();
     }
 
     /**
@@ -129,13 +120,7 @@ public final class DeserializationService {
     }
 
     /**
-     * Deserializes a record from a map or ConfigurationSection.
-     *
-     * @param raw      the raw value
-     * @param type     the record class type
-     * @param nodePath the current node path
-     * @return the deserialized record instance
-     * @throws Exception if deserialization fails
+     * Deserializes a record from map or ConfigurationSection.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
     private Object deserializeRecord(Object raw, Class<?> type, List<String> nodePath) throws Exception {
@@ -145,18 +130,39 @@ public final class DeserializationService {
         Class<?>[] types = new Class<?>[rcs.length];
 
         for (int i = 0; i < rcs.length; i++) {
-            types[i] = rcs[i].getType();
-            String fieldKey = camelToKebab(rcs[i].getName());
-            List<String> fieldPath = new ArrayList<>(nodePath);
-            fieldPath.add(fieldKey);
-
-            Object val = deserializeWithPath(map.get(fieldKey), rcs[i].getType(), rcs[i].getGenericType(), fieldPath);
-            args[i] = (val == null && types[i].isPrimitive()) ? TypeConverter.getPrimitiveDefault(types[i]) : val;
+            processRecordComponent(rcs[i], i, map, nodePath, args, types);
         }
 
         Constructor<?> c = type.getDeclaredConstructor(types);
         c.setAccessible(true);
         return c.newInstance(args);
+    }
+
+    /**
+     * Processes single record component.
+     */
+    private void processRecordComponent(
+            RecordComponent component,
+            int index,
+            Map<String, Object> map,
+            List<String> nodePath,
+            Object[] args,
+            Class<?>[] types
+    ) throws Exception {
+        types[index] = component.getType();
+        String fieldKey = NamingUtils.camelToKebab(component.getName());
+        List<String> fieldPath = new ArrayList<>(nodePath);
+        fieldPath.add(fieldKey);
+
+        Object val = deserializeWithPath(
+                map.get(fieldKey),
+                component.getType(),
+                component.getGenericType(),
+                fieldPath
+        );
+        args[index] = (val == null && types[index].isPrimitive())
+                ? TypeConverter.getPrimitiveDefault(types[index])
+                : val;
     }
 
     /**

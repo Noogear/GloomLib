@@ -1,6 +1,7 @@
 package gloomlib.configuration;
 
-import gloomlib.configuration.service.ConfigBackupManager;
+import gloomlib.configuration.util.ConfigBackup;
+import gloomlib.configuration.util.ConfigurationLogger;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.jetbrains.annotations.NotNull;
 
@@ -12,6 +13,9 @@ import java.util.concurrent.CompletableFuture;
  * Provides methods for saving, reloading, and backing up configuration.
  */
 public abstract class ConfigurationFile extends ConfigurationPart {
+
+    private static final String ERROR_FILE_NOT_SET = "Cannot %s: File path is not set.";
+
     private YamlConfiguration yaml;
     private File file;
 
@@ -52,11 +56,11 @@ public abstract class ConfigurationFile extends ConfigurationPart {
      * @throws IllegalStateException if the file path has not been set (e.g., object created manually via constructor)
      */
     public void save() {
-        if (file == null) throw new IllegalStateException("Cannot save: File path is not set.");
+        if (file == null) throw new IllegalStateException(String.format(ERROR_FILE_NOT_SET, "save"));
         try {
             ConfigurationManager.save(this, file);
         } catch (Exception e) {
-            e.printStackTrace();
+            ConfigurationLogger.error("Failed to save configuration", e);
         }
     }
 
@@ -66,11 +70,11 @@ public abstract class ConfigurationFile extends ConfigurationPart {
      * @throws IllegalStateException if the file path has not been set
      */
     public void reload() {
-        if (file == null) throw new IllegalStateException("Cannot reload: File path is not set.");
+        if (file == null) throw new IllegalStateException(String.format(ERROR_FILE_NOT_SET, "reload"));
         try {
             ConfigurationManager.reload(this);
         } catch (Exception e) {
-            e.printStackTrace();
+            ConfigurationLogger.error("Failed to reload configuration", e);
         }
     }
 
@@ -84,7 +88,7 @@ public abstract class ConfigurationFile extends ConfigurationPart {
     public CompletableFuture<Void> reloadAsync() {
         if (file == null) {
             return CompletableFuture.failedFuture(
-                    new IllegalStateException("Cannot reload: File path is not set.")
+                    new IllegalStateException(String.format(ERROR_FILE_NOT_SET, "reload"))
             );
         }
         return CompletableFuture.runAsync(() -> {
@@ -102,8 +106,8 @@ public abstract class ConfigurationFile extends ConfigurationPart {
      * @return the backup file, or null if backup failed
      */
     public File backup() {
-        if (file == null) throw new IllegalStateException("Cannot backup: File path is not set.");
-        return ConfigBackupManager.backup(file);
+        if (file == null) throw new IllegalStateException(String.format(ERROR_FILE_NOT_SET, "backup"));
+        return ConfigBackup.backup(file);
     }
 
     /**
@@ -113,8 +117,8 @@ public abstract class ConfigurationFile extends ConfigurationPart {
      * @return the backup file, or null if backup failed
      */
     public File backup(@NotNull String reason) {
-        if (file == null) throw new IllegalStateException("Cannot backup: File path is not set.");
-        return ConfigBackupManager.backup(file, reason);
+        if (file == null) throw new IllegalStateException(String.format(ERROR_FILE_NOT_SET, "backup"));
+        return ConfigBackup.backup(file, reason);
     }
 
     /**
@@ -126,9 +130,9 @@ public abstract class ConfigurationFile extends ConfigurationPart {
     public CompletableFuture<File> backupAsync() {
         if (file == null) {
             return CompletableFuture.failedFuture(
-                    new IllegalStateException("Cannot backup: File path is not set.")
+                    new IllegalStateException(String.format(ERROR_FILE_NOT_SET, "backup"))
             );
         }
-        return ConfigBackupManager.backupAsync(file);
+        return ConfigBackup.backupAsync(file);
     }
 }

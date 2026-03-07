@@ -2,9 +2,7 @@ package gloomlib.configuration.service;
 
 import gloomlib.configuration.ConfigurationFile;
 import gloomlib.configuration.model.FieldMeta;
-import gloomlib.configuration.util.ConfigurationCache;
-import gloomlib.configuration.util.ConfigurationLogger;
-import gloomlib.configuration.util.ReflectionUtils;
+import gloomlib.configuration.util.*;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
@@ -29,16 +27,6 @@ public final class VersionManager {
      */
     public VersionManager(DeserializationService deserializationService) {
         this.deserializationService = deserializationService;
-    }
-
-    /**
-     * Converts camelCase to kebab-case.
-     *
-     * @param s the camelCase string
-     * @return the kebab-case string
-     */
-    private static String camelToKebab(String s) {
-        return s.replaceAll("([a-z])([A-Z]+)", "$1-$2").toLowerCase();
     }
 
     /**
@@ -94,7 +82,7 @@ public final class VersionManager {
 
         // Read actual version from file
         YamlConfiguration yaml = loader.loadYaml(file);
-        String versionKey = camelToKebab(versionField.getName());
+        String versionKey = NamingUtils.camelToKebab(versionField.getName());
         int actualVersion = yaml.getInt(versionKey, -1);
 
         return new VersionCheckResult(versionField, expectedVersion, actualVersion, autoBackup, migrate);
@@ -115,7 +103,7 @@ public final class VersionManager {
 
         // Backup old configuration
         if (versionCheck.autoBackup) {
-            File backup = ConfigBackupManager.backup(file, "v" + versionCheck.actualVersion);
+            File backup = ConfigBackup.backup(file, "v" + versionCheck.actualVersion);
             if (backup != null) {
                 ConfigurationLogger.info("Old configuration backed up to: " + backup.getName());
             }

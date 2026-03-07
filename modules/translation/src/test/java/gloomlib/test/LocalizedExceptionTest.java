@@ -137,7 +137,7 @@ class LocalizedExceptionTest {
             try {
                 throw ex;
             } catch (RuntimeException e) {
-                assertTrue(e instanceof LocalizedException);
+                assertInstanceOf(LocalizedException.class, e);
                 assertEquals("error.test", ((LocalizedException) e).node());
             }
         }

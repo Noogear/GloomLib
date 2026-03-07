@@ -59,6 +59,20 @@ public final class ReflectionUtils {
             m.invoke(instance);
         }
     }
+
+    /**
+     * Wraps reflection errors into IllegalAccessException.
+     *
+     * @param e throwable to wrap
+     * @param operation operation context
+     * @return IllegalAccessException instance
+     */
+    public static IllegalAccessException wrapReflectionException(Throwable e, String operation) {
+        if (e instanceof IllegalAccessException iae) {
+            return iae;
+        }
+        return new IllegalAccessException(operation + ": " + e.getMessage());
+    }
 }
 
 

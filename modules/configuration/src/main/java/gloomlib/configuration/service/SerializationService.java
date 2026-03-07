@@ -5,46 +5,33 @@ import gloomlib.configuration.ConfigurationPart;
 import gloomlib.configuration.model.FieldMeta;
 import gloomlib.configuration.registry.AdapterRegistry;
 import gloomlib.configuration.util.ConfigurationCache;
+import gloomlib.configuration.util.NamingUtils;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
 
 import java.lang.reflect.RecordComponent;
 import java.util.*;
 
 /**
- * Service for serializing Java objects into YAML-compatible representations.
- * <p>
- * This service handles conversion of various Java types (primitives, records,
- * ConfigurationPart, collections, maps) into formats suitable for YAML persistence.
- * </p>
+ * Serializes Java objects into YAML-compatible formats.
  */
 public final class SerializationService {
 
     private final AdapterRegistry adapterRegistry;
 
     /**
-     * Creates a new serialization service with the given adapter registry.
+     * Creates service with adapter registry.
      *
-     * @param adapterRegistry the adapter registry for custom type serialization
+     * @param adapterRegistry adapter registry instance
      */
     public SerializationService(AdapterRegistry adapterRegistry) {
         this.adapterRegistry = adapterRegistry;
     }
 
     /**
-     * Converts camelCase to kebab-case.
+     * Serializes value into YAML-compatible object.
      *
-     * @param s the camelCase string
-     * @return the kebab-case string
-     */
-    private static String camelToKebab(String s) {
-        return s.replaceAll("([a-z])([A-Z]+)", "$1-$2").toLowerCase();
-    }
-
-    /**
-     * Serializes a value into a YAML-compatible object.
-     *
-     * @param val the value to serialize
-     * @return the serialized object
+     * @param val value to serialize
+     * @return serialized object
      * @throws Exception if serialization fails
      */
     @SuppressWarnings("unchecked")
@@ -55,7 +42,6 @@ public final class SerializationService {
         Class<?> type = val.getClass();
 
         if (adapterRegistry.hasAdapter(type)) {
-            @SuppressWarnings("unchecked")
             ConfigurationManager.TypeAdapter<Object> adapter = (ConfigurationManager.TypeAdapter<Object>) adapterRegistry.getAdapter(type);
             return adapter.serialize(val);
         }
@@ -95,6 +81,8 @@ public final class SerializationService {
         return ConfigurationCache.hasToString(type) ? val.toString() : val;
     }
 
+    // === Record Serialization ===
+
     /**
      * Serializes a Java record into a map.
      *
@@ -106,10 +94,12 @@ public final class SerializationService {
     private Object serializeRecord(Object val, Class<?> type) throws Exception {
         Map<String, Object> map = new LinkedHashMap<>();
         for (RecordComponent rc : type.getRecordComponents()) {
-            map.put(camelToKebab(rc.getName()), serialize(rc.getAccessor().invoke(val)));
+            map.put(NamingUtils.camelToKebab(rc.getName()), serialize(rc.getAccessor().invoke(val)));
         }
         return map;
     }
+
+    // === ConfigurationPart Serialization ===
 
     /**
      * Serializes a ConfigurationPart into a map.
@@ -125,6 +115,8 @@ public final class SerializationService {
         }
         return map;
     }
+
+    // === Map Serialization ===
 
     /**
      * Serializes a map with key-value pairs.
@@ -142,6 +134,8 @@ public final class SerializationService {
         }
         return newMap;
     }
+
+    // === Collection Serialization ===
 
     /**
      * Serializes a collection into a list.

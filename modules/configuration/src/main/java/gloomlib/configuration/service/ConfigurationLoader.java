@@ -31,6 +31,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class ConfigurationLoader {
 
+    /**
+     * Maximum line width for YAML output.
+     * Lines longer than this will be wrapped to improve readability.
+     */
     private static final int YAML_MAX_WIDTH = 250;
     private static final Map<String, FileCacheEntry> FILE_CACHE = new ConcurrentHashMap<>();
 
@@ -219,44 +223,59 @@ public final class ConfigurationLoader {
 
     /**
      * Processes @Template annotations for map fields.
-     *
-     * @param instance the configuration instance
-     * @throws Exception if template processing fails
      */
-    @SuppressWarnings("unchecked")
     private void processTemplates(Object instance) throws Exception {
         for (FieldMeta meta : ConfigurationCache.getCachedMeta(instance.getClass())) {
             Field field = meta.field();
-            if (Map.class.isAssignableFrom(field.getType())) {
-                Type genericType = field.getGenericType();
-                Class<?> valueType = TypeInference.extractGenericParameter(genericType, 1);
-
-                if (valueType.isAnnotationPresent(Template.class)) {
-                    Template template = valueType.getAnnotation(Template.class);
-                    String defaultKey = template.name();
-
-                    Map<String, Object> map = (Map<String, Object>) meta.get(instance);
-                    if (map == null) {
-                        map = new HashMap<>();
-                        meta.set(instance, map);
-                    }
-
-                    boolean shouldAddDefault = false;
-                    switch (template.value()) {
-                        case FORCE -> shouldAddDefault = !map.containsKey(defaultKey);
-                        case SMART -> shouldAddDefault = map.isEmpty();
-                        case STRICT -> shouldAddDefault = false;
-                    }
-                    if (shouldAddDefault) {
-                        try {
-                            map.put(defaultKey, ReflectionUtils.createInstance(valueType));
-                        } catch (Exception e) {
-                            ConfigurationLogger.warn("Failed to create template for " + valueType.getSimpleName() + ": " + e.getMessage());
-                        }
-                    }
-                }
+            if (!Map.class.isAssignableFrom(field.getType())) {
+                continue;
             }
+
+            Type genericType = field.getGenericType();
+            Class<?> valueType = TypeInference.extractGenericParameter(genericType, 1);
+
+            if (!valueType.isAnnotationPresent(Template.class)) {
+                continue;
+            }
+
+            processTemplateField(meta, instance, valueType);
         }
+    }
+
+    /**
+     * Processes a single template field.
+     */
+    @SuppressWarnings("unchecked")
+    private void processTemplateField(FieldMeta meta, Object instance, Class<?> valueType) throws Exception {
+        Template template = valueType.getAnnotation(Template.class);
+        String defaultKey = template.name();
+
+        Map<String, Object> map = (Map<String, Object>) meta.get(instance);
+        if (map == null) {
+            map = new HashMap<>();
+            meta.set(instance, map);
+        }
+
+        if (!shouldAddTemplateDefault(template, map, defaultKey)) {
+            return;
+        }
+
+        try {
+            map.put(defaultKey, ReflectionUtils.createInstance(valueType));
+        } catch (Exception e) {
+            ConfigurationLogger.warn("Failed to create template for " + valueType.getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Checks if template default should be added.
+     */
+    private boolean shouldAddTemplateDefault(Template template, Map<String, Object> map, String defaultKey) {
+        return switch (template.value()) {
+            case FORCE -> !map.containsKey(defaultKey);
+            case SMART -> map.isEmpty();
+            case STRICT -> false;
+        };
     }
 
     /**

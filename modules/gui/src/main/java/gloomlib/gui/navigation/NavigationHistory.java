@@ -16,10 +16,13 @@ public final class NavigationHistory {
 
     private static final long CLEANUP_INTERVAL_MS = 1000;
     private static final int MAX_SEQUENCE_LENGTH = 10;
+    private static final int DEFAULT_MAX_DEPTH = 50;
+    private static final int MAX_BACK_RECURSION_DEPTH = 10;
+
     private final Player player;
     private final Deque<WeakReference<Window>> stack = new ArrayDeque<>();
     private final Object lock = new Object();
-    private volatile int maxDepth = 50;
+    private volatile int maxDepth = DEFAULT_MAX_DEPTH;
     private volatile long lastCleanupTime = 0;
 
     NavigationHistory(@NotNull Player player) {
@@ -69,7 +72,7 @@ public final class NavigationHistory {
     }
 
     private boolean backInternal(int recursionDepth) {
-        if (recursionDepth > 10) {
+        if (recursionDepth > MAX_BACK_RECURSION_DEPTH) {
             return false;
         }
 
@@ -186,57 +189,73 @@ public final class NavigationHistory {
         });
     }
 
+    /**
+     * Detects and removes repeating navigation patterns (A→B→A→B becomes A→B).
+     * Uses identity hash comparison for efficient pattern matching.
+     */
     private void deduplicateRepeatingSequences() {
         int size = stack.size();
         if (size < 4) return;
 
-        @SuppressWarnings("unchecked")
-        WeakReference<Window>[] stackArray = new WeakReference[size];
+        StackSnapshot snapshot = buildStackSnapshot(size);
+        if (snapshot == null) return;
+
+        int maxLen = Math.min(size / 2, MAX_SEQUENCE_LENGTH);
+        int seqLen = findRepeatingSequence(snapshot, maxLen);
+
+        if (seqLen > 0) {
+            removeSequenceFromStack(seqLen);
+        }
+    }
+
+    private StackSnapshot buildStackSnapshot(int size) {
         Window[] windows = new Window[size];
         int[] hashes = new int[size];
 
         int index = size - 1;
         for (WeakReference<Window> ref : stack) {
-            stackArray[index] = ref;
             windows[index] = ref.get();
             if (windows[index] == null) {
-                return;
+                return null;
             }
             hashes[index] = System.identityHashCode(windows[index]);
             index--;
         }
+        return new StackSnapshot(windows, hashes, size);
+    }
 
-        int maxLen = Math.min(size / 2, MAX_SEQUENCE_LENGTH);
-
+    private int findRepeatingSequence(StackSnapshot snapshot, int maxLen) {
         for (int seqLen = maxLen; seqLen >= 2; seqLen--) {
-            int seq1Start = size - seqLen;
-
+            int seq1Start = snapshot.size - seqLen;
             int seq2Start = seq1Start - seqLen;
 
-            if (seq2Start < 0) continue;
+            if (seq2Start <= 0) continue;
 
-            if (seq2Start == 0) continue;
-
-            if (hashes[seq1Start] != hashes[seq2Start] ||
-                    hashes[size - 1] != hashes[seq1Start - 1]) {
+            if (snapshot.hashes[seq1Start] != snapshot.hashes[seq2Start] ||
+                    snapshot.hashes[snapshot.size - 1] != snapshot.hashes[seq1Start - 1]) {
                 continue;
             }
 
-            boolean isRepeating = true;
-            for (int i = 0; i < seqLen; i++) {
-                if (hashes[seq1Start + i] != hashes[seq2Start + i] ||
-                        windows[seq1Start + i] != windows[seq2Start + i]) {
-                    isRepeating = false;
-                    break;
-                }
+            if (isSequenceRepeating(snapshot, seq1Start, seq2Start, seqLen)) {
+                return seqLen;
             }
+        }
+        return 0;
+    }
 
-            if (isRepeating) {
-                for (int i = 0; i < seqLen; i++) {
-                    stack.removeLast();
-                }
-                return;
+    private boolean isSequenceRepeating(StackSnapshot snapshot, int seq1Start, int seq2Start, int seqLen) {
+        for (int i = 0; i < seqLen; i++) {
+            if (snapshot.hashes[seq1Start + i] != snapshot.hashes[seq2Start + i] ||
+                    snapshot.windows[seq1Start + i] != snapshot.windows[seq2Start + i]) {
+                return false;
             }
+        }
+        return true;
+    }
+
+    private void removeSequenceFromStack(int seqLen) {
+        for (int i = 0; i < seqLen; i++) {
+            stack.removeLast();
         }
     }
 
@@ -254,5 +273,8 @@ public final class NavigationHistory {
      */
     public Player getPlayer() {
         return player;
+    }
+
+    private record StackSnapshot(Window[] windows, int[] hashes, int size) {
     }
 }

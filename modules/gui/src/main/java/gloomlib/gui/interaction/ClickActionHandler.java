@@ -15,7 +15,36 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class ClickActionHandler {
 
+    private static final int MAX_HOTBAR_SLOT = 8;
+
     private ClickActionHandler() {
+    }
+
+    /**
+     * Try extracting item from bundle (used by left/right click).
+     */
+    @Nullable
+    private static ClickResult tryExtractFromBundle(@Nullable ItemStack slotItem) {
+        if (!BundleUtils.isBundleSupported() || !BundleUtils.isBundle(slotItem)) {
+            return null;
+        }
+        BundleUtils.ExtractResult extractResult = BundleUtils.extractFromBundle(slotItem);
+        if (extractResult.wasExtracted()) {
+            return new ClickResult(extractResult.newBundle(), extractResult.extracted(), true);
+        }
+        return new ClickResult(null, slotItem.clone(), true);
+    }
+
+    /**
+     * Try inserting item into bundle (used by left click).
+     */
+    @Nullable
+    private static ClickResult tryInsertIntoBundle(@Nullable ItemStack slotItem, @NotNull ItemStack cursorItem) {
+        if (!BundleUtils.isBundleSupported() || !BundleUtils.isBundle(slotItem)) {
+            return null;
+        }
+        BundleUtils.InsertResult result = BundleUtils.insertIntoBundle(slotItem, cursorItem);
+        return new ClickResult(result.newBundle(), result.remaining(), true);
     }
 
     /**
@@ -32,17 +61,14 @@ public final class ClickActionHandler {
             @Nullable ItemStack slotItem,
             @Nullable ItemStack cursorItem
     ) {
-        if (BundleUtils.isBundleSupported() && BundleUtils.isBundle(slotItem) && !GuiItemUtils.isEmpty(cursorItem)) {
-            BundleUtils.InsertResult bundleResult = BundleUtils.insertIntoBundle(slotItem, cursorItem);
-            return new ClickResult(bundleResult.newBundle(), bundleResult.remaining(), true);
+        if (!GuiItemUtils.isEmpty(cursorItem)) {
+            ClickResult bundleInsert = tryInsertIntoBundle(slotItem, cursorItem);
+            if (bundleInsert != null) return bundleInsert;
         }
 
-        if (BundleUtils.isBundleSupported() && BundleUtils.isBundle(slotItem) && GuiItemUtils.isEmpty(cursorItem)) {
-            BundleUtils.ExtractResult extractResult = BundleUtils.extractFromBundle(slotItem);
-            if (extractResult.wasExtracted()) {
-                return new ClickResult(extractResult.newBundle(), extractResult.extracted(), true);
-            }
-            return new ClickResult(null, slotItem.clone(), true);
+        if (GuiItemUtils.isEmpty(cursorItem)) {
+            ClickResult bundleExtract = tryExtractFromBundle(slotItem);
+            if (bundleExtract != null) return bundleExtract;
         }
 
         if (GuiItemUtils.isEmpty(cursorItem)) {
@@ -79,12 +105,9 @@ public final class ClickActionHandler {
             @Nullable ItemStack slotItem,
             @Nullable ItemStack cursorItem
     ) {
-        if (BundleUtils.isBundleSupported() && BundleUtils.isBundle(slotItem) && GuiItemUtils.isEmpty(cursorItem)) {
-            BundleUtils.ExtractResult extractResult = BundleUtils.extractFromBundle(slotItem);
-            if (extractResult.wasExtracted()) {
-                return new ClickResult(extractResult.newBundle(), extractResult.extracted(), true);
-            }
-            return new ClickResult(null, slotItem.clone(), true);
+        if (GuiItemUtils.isEmpty(cursorItem)) {
+            ClickResult bundleExtract = tryExtractFromBundle(slotItem);
+            if (bundleExtract != null) return bundleExtract;
         }
 
         if (GuiItemUtils.isEmpty(cursorItem)) {
@@ -149,50 +172,57 @@ public final class ClickActionHandler {
         }
 
         ItemStack remaining = slotItem.clone();
-
-        java.util.List<PrioritizedSlot> slots = new java.util.ArrayList<>();
-        for (int i = startSlot; i < endSlot; i++) {
-            int slotPriority = priority.getPriority(i, remaining);
-            if (slotPriority > SlotPriority.PRIORITY_NONE) {
-                slots.add(new PrioritizedSlot(i, slotPriority));
-            }
-        }
-
-        slots.sort((a, b) -> Integer.compare(b.priority, a.priority));
-
-        for (PrioritizedSlot ps : slots) {
-            if (GuiItemUtils.isEmpty(remaining)) break;
-
-            ItemStack targetItem = targetInventory.getItem(ps.slot);
-            if (!GuiItemUtils.isEmpty(targetItem) && GuiItemUtils.canStackWith(targetItem, remaining)) {
-                GuiItemUtils.AddResult result = GuiItemUtils.addItem(targetItem, remaining);
-                targetInventory.setItem(ps.slot, result.newSlotItem());
-                remaining = result.remaining();
-            }
-        }
-
-        for (PrioritizedSlot ps : slots) {
-            if (GuiItemUtils.isEmpty(remaining)) break;
-
-            if (GuiItemUtils.isEmpty(targetInventory.getItem(ps.slot))) {
-                targetInventory.setItem(ps.slot, remaining.clone());
-                remaining = null;
-                break;
-            }
-        }
+        java.util.List<PrioritizedSlot> slots = buildPrioritizedSlots(remaining, targetInventory, startSlot, endSlot, priority);
+        remaining = tryStackIntoPrioritySlots(remaining, targetInventory, slots);
+        remaining = tryPlaceInEmptyPrioritySlot(remaining, targetInventory, slots);
 
         boolean moved = remaining == null || remaining.getAmount() < slotItem.getAmount();
         return new ShiftClickResult(remaining, moved);
     }
 
+    private static java.util.List<PrioritizedSlot> buildPrioritizedSlots(ItemStack item, Inventory inv,
+                                                                         int start, int end, SlotPriority priority) {
+        java.util.List<PrioritizedSlot> slots = new java.util.ArrayList<>();
+        for (int i = start; i < end; i++) {
+            int slotPriority = priority.getPriority(i, item);
+            if (slotPriority > SlotPriority.PRIORITY_NONE) {
+                slots.add(new PrioritizedSlot(i, slotPriority));
+            }
+        }
+        slots.sort((a, b) -> Integer.compare(b.priority, a.priority));
+        return slots;
+    }
+
+    private static ItemStack tryStackIntoPrioritySlots(ItemStack remaining, Inventory inv,
+                                                       java.util.List<PrioritizedSlot> slots) {
+        for (PrioritizedSlot ps : slots) {
+            if (GuiItemUtils.isEmpty(remaining)) break;
+
+            ItemStack targetItem = inv.getItem(ps.slot);
+            if (!GuiItemUtils.isEmpty(targetItem) && GuiItemUtils.canStackWith(targetItem, remaining)) {
+                GuiItemUtils.AddResult result = GuiItemUtils.addItem(targetItem, remaining);
+                inv.setItem(ps.slot, result.newSlotItem());
+                remaining = result.remaining();
+            }
+        }
+        return remaining;
+    }
+
+    private static ItemStack tryPlaceInEmptyPrioritySlot(ItemStack remaining, Inventory inv,
+                                                         java.util.List<PrioritizedSlot> slots) {
+        for (PrioritizedSlot ps : slots) {
+            if (GuiItemUtils.isEmpty(remaining)) break;
+
+            if (GuiItemUtils.isEmpty(inv.getItem(ps.slot))) {
+                inv.setItem(ps.slot, remaining.clone());
+                return null;
+            }
+        }
+        return remaining;
+    }
+
     /**
      * Handles shift-click.
-     *
-     * @param slotItem        the item in the slot
-     * @param targetInventory the target inventory
-     * @param startSlot       the start slot
-     * @param endSlot         the end slot
-     * @return the shift-click result
      */
     @NotNull
     public static ShiftClickResult handleShiftClick(
@@ -201,31 +231,7 @@ public final class ClickActionHandler {
             int startSlot,
             int endSlot
     ) {
-        if (GuiItemUtils.isEmpty(slotItem)) {
-            return new ShiftClickResult(null, false);
-        }
-
-        ItemStack remaining = slotItem.clone();
-
-        for (int i = startSlot; i < endSlot && !GuiItemUtils.isEmpty(remaining); i++) {
-            ItemStack targetItem = targetInventory.getItem(i);
-            if (!GuiItemUtils.isEmpty(targetItem) && GuiItemUtils.canStackWith(targetItem, remaining)) {
-                GuiItemUtils.AddResult result = GuiItemUtils.addItem(targetItem, remaining);
-                targetInventory.setItem(i, result.newSlotItem());
-                remaining = result.remaining();
-            }
-        }
-
-        for (int i = startSlot; i < endSlot && !GuiItemUtils.isEmpty(remaining); i++) {
-            if (GuiItemUtils.isEmpty(targetInventory.getItem(i))) {
-                targetInventory.setItem(i, remaining.clone());
-                remaining = null;
-                break;
-            }
-        }
-
-        boolean moved = remaining == null || remaining.getAmount() < slotItem.getAmount();
-        return new ShiftClickResult(remaining, moved);
+        return handleShiftClickWithPriority(slotItem, targetInventory, startSlot, endSlot, null);
     }
 
     /**
@@ -242,7 +248,7 @@ public final class ClickActionHandler {
             int hotbarSlot,
             @NotNull PlayerInventory playerInventory
     ) {
-        if (hotbarSlot < 0 || hotbarSlot > 8) {
+        if (hotbarSlot < 0 || hotbarSlot > MAX_HOTBAR_SLOT) {
             return new HotbarSwapResult(slotItem, false);
         }
 

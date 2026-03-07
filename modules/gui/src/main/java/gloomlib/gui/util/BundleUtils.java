@@ -20,7 +20,7 @@ public final class BundleUtils {
             bundleContentsClass = Class.forName("org.bukkit.inventory.meta.BundleMeta");
             dataComponentTypesClass = Class.forName("io.papermc.paper.datacomponent.DataComponentTypes");
             supported = true;
-        } catch (ClassNotFoundException e) {
+        } catch (ClassNotFoundException expected) {
         }
         BUNDLE_SUPPORTED = supported;
     }
@@ -53,7 +53,7 @@ public final class BundleUtils {
     /**
      * Attempts to insert an item into a Bundle.
      *
-     * @param bundle the Bundle item
+     * @param bundle   the Bundle item
      * @param toInsert the item to insert
      * @return the insert result
      */
@@ -66,25 +66,25 @@ public final class BundleUtils {
         try {
             if (bundle.getItemMeta() instanceof org.bukkit.inventory.meta.BundleMeta bundleMeta) {
                 java.util.List<ItemStack> contents = bundleMeta.getItems();
-                
+
                 ItemStack cloned = toInsert.clone();
                 bundleMeta.addItem(cloned);
-                
+
                 java.util.List<ItemStack> newContents = bundleMeta.getItems();
-                
+
                 ItemStack newBundle = bundle.clone();
                 newBundle.setItemMeta(bundleMeta);
-                
+
                 int inserted = getTotalAmount(newContents) - getTotalAmount(contents);
                 ItemStack remaining = null;
                 if (inserted < toInsert.getAmount()) {
                     remaining = toInsert.clone();
                     remaining.setAmount(toInsert.getAmount() - inserted);
                 }
-                
+
                 return new InsertResult(newBundle, remaining);
             }
-        } catch (Exception e) {
+        } catch (Exception ignored) {
         }
 
         return new InsertResult(bundle, toInsert);
@@ -105,21 +105,21 @@ public final class BundleUtils {
         try {
             if (bundle.getItemMeta() instanceof org.bukkit.inventory.meta.BundleMeta bundleMeta) {
                 java.util.List<ItemStack> contents = bundleMeta.getItems();
-                
+
                 if (contents.isEmpty()) {
                     return new ExtractResult(bundle, null);
                 }
-                
+
                 ItemStack extracted = contents.get(0).clone();
                 contents.remove(0);
-                
+
                 bundleMeta.setItems(contents);
                 ItemStack newBundle = bundle.clone();
                 newBundle.setItemMeta(bundleMeta);
-                
+
                 return new ExtractResult(newBundle, extracted);
             }
-        } catch (Exception e) {
+        } catch (Exception ignored) {
         }
 
         return new ExtractResult(bundle, null);

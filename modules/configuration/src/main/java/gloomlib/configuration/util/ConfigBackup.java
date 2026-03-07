@@ -1,6 +1,4 @@
-package gloomlib.configuration.service;
-
-import gloomlib.configuration.util.ConfigurationLogger;
+package gloomlib.configuration.util;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -15,12 +13,12 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Manages configuration file backups with automatic versioning and restoration capabilities.
  */
-public final class ConfigBackupManager {
+public final class ConfigBackup {
 
     private static final SimpleDateFormat TIMESTAMP_FORMAT = new SimpleDateFormat("yyyyMMdd_HHmmss");
     private static final String BACKUP_DIR_NAME = "backups";
 
-    private ConfigBackupManager() {
+    private ConfigBackup() {
         throw new UnsupportedOperationException("Utility class");
     }
 

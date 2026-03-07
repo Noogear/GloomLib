@@ -3,6 +3,7 @@ package gloomlib.configuration.integration;
 import gloomlib.configuration.ConfigurationFile;
 import gloomlib.configuration.ConfigurationPart;
 import gloomlib.configuration.annotations.Sensitive;
+import gloomlib.configuration.util.NamingUtils;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
@@ -109,6 +110,7 @@ public final class SparkConfigIntegration {
                 return true;
             }
         } catch (Exception ignored) {
+            // Expected: Spark may not be available or configuration structure may differ
         }
 
         // Check if Spark plugin is loaded
@@ -116,6 +118,7 @@ public final class SparkConfigIntegration {
             Class.forName("me.lucko.spark.api.Spark");
             return true;
         } catch (ClassNotFoundException ignored) {
+            // Expected: Spark plugin may not be installed
         }
 
         return false;
@@ -127,8 +130,8 @@ public final class SparkConfigIntegration {
                 Sensitive annotation = field.getAnnotation(Sensitive.class);
                 if (annotation.hideFromMonitoring()) {
                     String path = prefix.isEmpty() ?
-                            camelToKebab(field.getName()) :
-                            prefix + "." + camelToKebab(field.getName());
+                            NamingUtils.camelToKebab(field.getName()) :
+                            prefix + "." + NamingUtils.camelToKebab(field.getName());
                     hiddenPaths.add(path);
                 }
             }
@@ -136,8 +139,8 @@ public final class SparkConfigIntegration {
             // Recursively scan nested ConfigurationPart
             if (ConfigurationPart.class.isAssignableFrom(field.getType())) {
                 String newPrefix = prefix.isEmpty() ?
-                        camelToKebab(field.getName()) :
-                        prefix + "." + camelToKebab(field.getName());
+                        NamingUtils.camelToKebab(field.getName()) :
+                        prefix + "." + NamingUtils.camelToKebab(field.getName());
                 scanSensitiveFields(field.getType(), newPrefix);
             }
         }
@@ -161,10 +164,6 @@ public final class SparkConfigIntegration {
         }
         String newHidden = allHidden.stream().distinct().collect(Collectors.joining(","));
         System.setProperty(SPARK_HIDDEN_PATHS_PROPERTY, newHidden);
-    }
-
-    private static String camelToKebab(String camel) {
-        return camel.replaceAll("([a-z])([A-Z]+)", "$1-$2").toLowerCase();
     }
 
     /**

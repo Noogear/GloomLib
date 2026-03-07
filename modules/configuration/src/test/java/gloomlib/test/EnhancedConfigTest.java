@@ -2,7 +2,7 @@ package gloomlib.test;
 
 import gloomlib.configuration.ConfigurationManager;
 import gloomlib.configuration.integration.SparkConfigIntegration;
-import gloomlib.configuration.service.ConfigBackupManager;
+import gloomlib.configuration.util.ConfigBackup;
 import org.junit.jupiter.api.*;
 
 import java.io.File;
@@ -91,7 +91,7 @@ public class EnhancedConfigTest {
     void testBackup() throws Exception {
         System.out.println("\n=== Test 3: Backup ===");
 
-        File backup = ConfigBackupManager.backup(configFile, "manual");
+        File backup = ConfigBackup.backup(configFile, "manual");
         assertNotNull(backup);
         assertTrue(backup.exists());
         assertTrue(backup.getName().contains("manual"));
@@ -101,7 +101,7 @@ public class EnhancedConfigTest {
         System.out.println("  - Backup size: " + backup.length() + " bytes");
 
         // Test async backup
-        CompletableFuture<File> asyncBackup = ConfigBackupManager.backupAsync(configFile, "async");
+        CompletableFuture<File> asyncBackup = ConfigBackup.backupAsync(configFile, "async");
         File asyncBackupFile = asyncBackup.get(5, TimeUnit.SECONDS);
         assertNotNull(asyncBackupFile);
         assertTrue(asyncBackupFile.exists());
@@ -118,24 +118,24 @@ public class EnhancedConfigTest {
 
         // Create multiple backups
         for (int i = 0; i < 5; i++) {
-            ConfigBackupManager.backup(configFile, "test" + i);
+            ConfigBackup.backup(configFile, "test" + i);
             Thread.sleep(100); // Ensure different timestamps
         }
 
-        File[] backups = ConfigBackupManager.listBackups(configFile);
+        File[] backups = ConfigBackup.listBackups(configFile);
         assertTrue(backups.length >= 5);
         System.out.println("✓ Created multiple backups: " + backups.length);
 
         // Test cleanup - keep only 3 most recent
-        int deleted = ConfigBackupManager.cleanOldBackups(configFile, 3);
+        int deleted = ConfigBackup.cleanOldBackups(configFile, 3);
         assertTrue(deleted >= 2);
         System.out.println("✓ Cleaned old backups: " + deleted + " deleted");
 
-        File[] remainingBackups = ConfigBackupManager.listBackups(configFile);
+        File[] remainingBackups = ConfigBackup.listBackups(configFile);
         assertTrue(remainingBackups.length <= 5); // May have some from previous tests
         System.out.println("  - Remaining backups: " + remainingBackups.length);
 
-        long totalSize = ConfigBackupManager.getBackupSize(configFile);
+        long totalSize = ConfigBackup.getBackupSize(configFile);
         System.out.println("  - Total backup size: " + totalSize + " bytes");
     }
 

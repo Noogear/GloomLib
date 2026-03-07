@@ -17,7 +17,6 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.*;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -93,6 +92,10 @@ public final class GloomGui implements Gui.Normal {
         return inventory;
     }
 
+    /**
+     * Maps structure layout and slot assignments to component slots.
+     * Processes character-based grid structure and direct slot mappings.
+     */
     private void calculateLayout(InventoryType type,
                                  String[] structure,
                                  Map<Character, GloomComponent> charComponents,
@@ -332,107 +335,83 @@ public final class GloomGui implements Gui.Normal {
         ItemStack slotItem = event.getCurrentItem();
         ItemStack cursorItem = event.getCursor();
 
-        if (component instanceof InventoryLinkComponent link) {
-            if (!link.allowInteraction()) {
-                event.setCancelled(true);
-            }
+        if (component instanceof InventoryLinkComponent link && !link.allowInteraction()) {
+            event.setCancelled(true);
             return;
         }
 
         event.setCancelled(true);
 
-        boolean changed = false;
-        ItemStack newSlotItem = null;
-        ItemStack newCursorItem = null;
+        ClickResult result = processClick(event, clicker, clickType, slot, slotItem, cursorItem);
+        if (result.changed()) {
+            applyClickChanges(clickType, slot, result.newSlotItem(), result.newCursorItem(), clicker);
+        }
 
-        switch (clickType) {
-            case LEFT -> {
-                ClickActionHandler.ClickResult result = ClickActionHandler.handleLeftClick(clicker, slotItem, cursorItem);
-                changed = result.changed();
-                newSlotItem = result.newSlotItem();
-                newCursorItem = result.newCursorItem();
-            }
-            case RIGHT -> {
-                ClickActionHandler.ClickResult result = ClickActionHandler.handleRightClick(clicker, slotItem, cursorItem);
-                changed = result.changed();
-                newSlotItem = result.newSlotItem();
-                newCursorItem = result.newCursorItem();
-            }
+        notifyComponentClick(component, event, clicker, clickType, slot, slotItem);
+    }
+
+    private ClickResult processClick(InventoryClickEvent event, Player clicker, ClickType clickType,
+                                     int slot, ItemStack slotItem, ItemStack cursorItem) {
+        return switch (clickType) {
+            case LEFT -> wrapResult(ClickActionHandler.handleLeftClick(clicker, slotItem, cursorItem));
+            case RIGHT -> wrapResult(ClickActionHandler.handleRightClick(clicker, slotItem, cursorItem));
             case SHIFT_LEFT, SHIFT_RIGHT -> {
-                PlayerInventory playerInv = clicker.getInventory();
-                ClickActionHandler.ShiftClickResult result = ClickActionHandler.handleShiftClickWithPriority(
-                        slotItem, playerInv, 0, 36, slotPriority
-                );
-                if (result.moved()) {
-                    changed = true;
-                    newSlotItem = result.remaining();
-                }
+                var r = ClickActionHandler.handleShiftClickWithPriority(
+                        slotItem, clicker.getInventory(), 0, 36, slotPriority);
+                yield new ClickResult(r.moved(), r.remaining(), null);
             }
             case NUMBER_KEY -> {
-                int hotbarSlot = event.getHotbarButton();
-                PlayerInventory playerInv = clicker.getInventory();
-                ClickActionHandler.HotbarSwapResult result = ClickActionHandler.handleHotbarSwap(
-                        slotItem, hotbarSlot, playerInv
-                );
-                if (result.swapped()) {
-                    changed = true;
-                    newSlotItem = result.newSlotItem();
-                }
+                var r = ClickActionHandler.handleHotbarSwap(
+                        slotItem, event.getHotbarButton(), clicker.getInventory());
+                yield new ClickResult(r.swapped(), r.newSlotItem(), null);
             }
             case DOUBLE_CLICK -> {
-                ClickActionHandler.DoubleClickResult guiResult = ClickActionHandler.handleDoubleClick(
-                        cursorItem, inventory, 0, size
-                );
-                ClickActionHandler.DoubleClickResult playerResult = ClickActionHandler.handleDoubleClick(
-                        guiResult.newCursorItem(), clicker.getInventory(), 0, 36
-                );
-                if (guiResult.collected() || playerResult.collected()) {
-                    changed = true;
-                    newCursorItem = playerResult.newCursorItem();
-                }
+                var guiRes = ClickActionHandler.handleDoubleClick(cursorItem, inventory, 0, size);
+                var playerRes = ClickActionHandler.handleDoubleClick(
+                        guiRes.newCursorItem(), clicker.getInventory(), 0, 36);
+                yield new ClickResult(guiRes.collected() || playerRes.collected(), null, playerRes.newCursorItem());
             }
             case MIDDLE -> {
-                ClickActionHandler.MiddleClickResult result = ClickActionHandler.handleMiddleClick(clicker, slotItem);
-                if (result.cloned()) {
-                    changed = true;
-                    newCursorItem = result.newCursorItem();
-                }
+                var r = ClickActionHandler.handleMiddleClick(clicker, slotItem);
+                yield new ClickResult(r.cloned(), null, r.newCursorItem());
             }
             case SWAP_OFFHAND -> {
-                PlayerInventory playerInv = clicker.getInventory();
-                ClickActionHandler.OffhandSwapResult result = ClickActionHandler.handleOffhandSwap(
-                        slotItem, playerInv
-                );
-                if (result.swapped()) {
-                    changed = true;
-                    newSlotItem = result.newSlotItem();
-                }
+                var r = ClickActionHandler.handleOffhandSwap(slotItem, clicker.getInventory());
+                yield new ClickResult(r.swapped(), r.newSlotItem(), null);
             }
             case DROP, CONTROL_DROP -> {
-                boolean dropAll = clickType == ClickType.CONTROL_DROP;
-                ClickActionHandler.DropResult result = ClickActionHandler.handleDrop(slotItem, dropAll, clicker);
-                if (result.dropped()) {
-                    changed = true;
-                    newSlotItem = result.newSlotItem();
-                }
+                var r = ClickActionHandler.handleDrop(slotItem, clickType == ClickType.CONTROL_DROP, clicker);
+                yield new ClickResult(r.dropped(), r.newSlotItem(), null);
             }
-            default -> {
-            }
+            default -> ClickResult.noChange();
+        };
+    }
+
+    private ClickResult wrapResult(ClickActionHandler.ClickResult r) {
+        return new ClickResult(r.changed(), r.newSlotItem(), r.newCursorItem());
+    }
+
+    private void applyClickChanges(ClickType clickType, int slot, ItemStack newSlotItem,
+                                   ItemStack newCursorItem, Player clicker) {
+        boolean shouldUpdateSlot = newSlotItem != null || clickType.isLeftClick() || clickType.isRightClick()
+                || clickType == ClickType.SWAP_OFFHAND || clickType == ClickType.DROP
+                || clickType == ClickType.CONTROL_DROP || clickType == ClickType.NUMBER_KEY;
+
+        if (shouldUpdateSlot) {
+            inventory.setItem(slot, newSlotItem);
+            markDirty(slot);
         }
 
-        if (changed) {
-            if (newSlotItem != null || clickType.isLeftClick() || clickType.isRightClick()
-                    || clickType == ClickType.SWAP_OFFHAND || clickType == ClickType.DROP
-                    || clickType == ClickType.CONTROL_DROP || clickType == ClickType.NUMBER_KEY) {
-                inventory.setItem(slot, newSlotItem);
-                markDirty(slot);
-            }
-            if (newCursorItem != null || clickType.isLeftClick() || clickType.isRightClick()
-                    || clickType == ClickType.MIDDLE || clickType == ClickType.DOUBLE_CLICK) {
-                clicker.setItemOnCursor(newCursorItem);
-            }
-        }
+        boolean shouldUpdateCursor = newCursorItem != null || clickType.isLeftClick() || clickType.isRightClick()
+                || clickType == ClickType.MIDDLE || clickType == ClickType.DOUBLE_CLICK;
 
+        if (shouldUpdateCursor) {
+            clicker.setItemOnCursor(newCursorItem);
+        }
+    }
+
+    private void notifyComponentClick(GloomComponent component, InventoryClickEvent event,
+                                      Player clicker, ClickType clickType, int slot, ItemStack slotItem) {
         if (component != null) {
             InteractionContext context = new InteractionContext(
                     clicker, clickType, event.getAction(), slot, slotItem, getComponentIndex(slot)
@@ -442,8 +421,7 @@ public final class GloomGui implements Gui.Normal {
                 if (component.onTick()) {
                     updateInventoryItem(slot, component.render(getComponentIndex(slot)));
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
+            } catch (Exception expected) {
             }
         }
     }
@@ -807,6 +785,12 @@ public final class GloomGui implements Gui.Normal {
         }
 
         return -1;
+    }
+
+    private record ClickResult(boolean changed, ItemStack newSlotItem, ItemStack newCursorItem) {
+        static ClickResult noChange() {
+            return new ClickResult(false, null, null);
+        }
     }
 
     private record ObserverEntry(@NotNull Observer observer, int how) {

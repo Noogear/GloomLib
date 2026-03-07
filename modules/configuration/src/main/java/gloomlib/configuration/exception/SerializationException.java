@@ -13,6 +13,12 @@ import java.util.List;
  */
 public class SerializationException extends Exception {
 
+    /**
+     * Maximum length for displaying values in error messages.
+     * Values longer than this will be truncated with "..." suffix.
+     */
+    private static final int MAX_VALUE_DISPLAY_LENGTH = 100;
+
     private final List<String> nodePath;
     private final Class<?> expectedType;
     private final Object actualValue;
@@ -104,8 +110,8 @@ public class SerializationException extends Exception {
         }
 
         String str = value.toString();
-        if (str.length() > 100) {
-            return "'" + str.substring(0, 97) + "...'";
+        if (str.length() > MAX_VALUE_DISPLAY_LENGTH) {
+            return "'" + str.substring(0, MAX_VALUE_DISPLAY_LENGTH - 3) + "...'";
         }
 
         return "'" + str + "' (" + value.getClass().getSimpleName() + ")";
