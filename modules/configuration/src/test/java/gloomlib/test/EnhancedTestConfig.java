@@ -1,7 +1,7 @@
 package gloomlib.test;
 
-import gloomlib.configuration.ConfigurationFile;
-import gloomlib.configuration.annotations.*;
+import gloomlib.configuration.api.ConfigurationFile;
+import gloomlib.configuration.api.annotation.*;
 
 /**
  * Test configuration demonstrating features:
@@ -65,7 +65,7 @@ public class EnhancedTestConfig extends ConfigurationFile {
 
     // ============ Nested Classes ============
 
-    public static class DatabaseConfig extends gloomlib.configuration.ConfigurationPart {
+    public static class DatabaseConfig extends gloomlib.configuration.api.ConfigurationPart {
 
         @Comment("Database host")
         public String host = "localhost";

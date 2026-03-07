@@ -1,7 +1,7 @@
 package gloomlib.test;
 
-import gloomlib.configuration.ConfigurationManager;
-import gloomlib.configuration.util.ConfigBackup;
+import gloomlib.configuration.api.ConfigurationManager;
+import gloomlib.configuration.core.util.ConfigBackup;
 import org.junit.jupiter.api.*;
 
 import java.io.File;
@@ -151,7 +151,7 @@ public class EnhancedConfigTest {
 
         // Verify version field is annotated
         var versionField = EnhancedTestConfig.class.getField("version");
-        assertTrue(versionField.isAnnotationPresent(gloomlib.configuration.annotations.Version.class));
+        assertTrue(versionField.isAnnotationPresent(gloomlib.configuration.api.annotation.Version.class));
         System.out.println("✓ @Version annotation present");
     }
 

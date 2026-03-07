@@ -1,8 +1,8 @@
 package gloomlib.test;
 
-import gloomlib.configuration.ConfigurationFile;
-import gloomlib.configuration.ConfigurationPart;
-import gloomlib.configuration.annotations.*;
+import gloomlib.configuration.api.ConfigurationFile;
+import gloomlib.configuration.api.ConfigurationPart;
+import gloomlib.configuration.api.annotation.*;
 
 import java.util.*;
 

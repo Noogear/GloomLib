@@ -1,6 +1,6 @@
 package gloomlib.test;
 
-import gloomlib.configuration.ConfigurationManager;
+import gloomlib.configuration.api.ConfigurationManager;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

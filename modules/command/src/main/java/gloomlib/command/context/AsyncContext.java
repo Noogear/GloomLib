@@ -177,7 +177,7 @@ public class AsyncContext extends GloomCommandContext {
      * @return True if on Global Region thread
      */
     public boolean isMainThread() {
-        return plugin.getServer().isGlobalTickThread();
+        return org.bukkit.Bukkit.isPrimaryThread();
     }
 
     /**

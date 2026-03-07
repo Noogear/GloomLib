@@ -1,3 +1,10 @@
+pluginManagement {
+    repositories {
+        maven { url = "https://repo.papermc.io/repository/maven-public/" }
+        gradlePluginPortal()
+    }
+}
+
 rootProject.name = 'GloomLib'
 
 file('modules').listFiles()?.findAll { it.isDirectory() }?.each {

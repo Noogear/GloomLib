@@ -1,8 +1,8 @@
 package gloomlib.test;
 
-import gloomlib.configuration.ConfigurationFile;
-import gloomlib.configuration.ConfigurationPart;
-import gloomlib.configuration.util.TypeInference;
+import gloomlib.configuration.api.ConfigurationFile;
+import gloomlib.configuration.api.ConfigurationPart;
+import gloomlib.configuration.core.util.TypeInference;
 import org.junit.jupiter.api.*;
 
 import java.lang.reflect.Field;

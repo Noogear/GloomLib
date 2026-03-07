@@ -1,10 +1,10 @@
 package gloomlib.test;
 
-import gloomlib.configuration.ConfigurationFile;
-import gloomlib.configuration.ConfigurationManager;
-import gloomlib.configuration.ConfigurationPart;
-import gloomlib.configuration.annotations.Check;
-import gloomlib.configuration.annotations.Comment;
+import gloomlib.configuration.api.ConfigurationFile;
+import gloomlib.configuration.api.ConfigurationManager;
+import gloomlib.configuration.api.ConfigurationPart;
+import gloomlib.configuration.api.annotation.Check;
+import gloomlib.configuration.api.annotation.Comment;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

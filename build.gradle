@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.shadow) apply false
+    alias(libs.plugins.paperweight.userdev) apply false
 }
 
 allprojects {
@@ -15,8 +16,9 @@ allprojects {
     }
 }
 
-subprojects {
+configure(subprojects.findAll { it.childProjects.isEmpty() }) {
     apply plugin: 'java-library'
+    apply plugin: 'io.papermc.paperweight.userdev'
     apply plugin: 'maven-publish'
     apply plugin: 'checkstyle'
     apply plugin: 'jacoco'
@@ -44,9 +46,8 @@ subprojects {
 
     dependencies {
         compileOnly libs.jetbrains.annotations
-        compileOnly libs.paper.api
+        paperweight.paperDevBundle(libs.versions.paper.get())
 
-        testImplementation libs.paper.api
         testImplementation platform(libs.junit.bom)
         testImplementation libs.junit.jupiter
         testImplementation libs.mockito.core

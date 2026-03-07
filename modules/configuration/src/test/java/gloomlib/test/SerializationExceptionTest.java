@@ -1,10 +1,10 @@
 package gloomlib.test;
 
 import com.google.gson.reflect.TypeToken;
-import gloomlib.configuration.ConfigurationManager;
-import gloomlib.configuration.TypeSerializer;
-import gloomlib.configuration.exception.SerializationException;
-import gloomlib.configuration.util.TypeInference;
+import gloomlib.configuration.api.ConfigurationManager;
+import gloomlib.configuration.api.TypeSerializer;
+import gloomlib.configuration.api.exception.SerializationException;
+import gloomlib.configuration.core.util.TypeInference;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

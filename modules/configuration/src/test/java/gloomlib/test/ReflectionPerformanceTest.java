@@ -1,6 +1,6 @@
 package gloomlib.test;
 
-import gloomlib.configuration.model.FieldMeta;
+import gloomlib.configuration.core.model.FieldMeta;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
