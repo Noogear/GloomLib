@@ -47,9 +47,9 @@ public final class ASMUtils {
     }
 
     /**
-     * 根据 Java 对象类型自动选择最优加载指令并将结果庋变为 {@code Object}。
+     * 根据 Java 对象类型自动选择最优加载指令并将结果装箱为 {@code Object}。
      * <ul>
-     * <li>{@code Integer} → {@code emitIntConst} + {@code Integer.valueOf}就</li>
+     * <li>{@code Integer} → {@code emitIntConst} + {@code Integer.valueOf}</li>
      * <li>{@code Double/Float} → {@code emitDoubleConst} +
      * {@code Double.valueOf}</li>
      * <li>{@code Long} → {@code emitLongConst} + {@code Long.valueOf}</li>

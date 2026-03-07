@@ -173,11 +173,17 @@ public class AsyncContext extends GloomCommandContext {
 
     /**
      * Checks if currently on the main thread (Global Region).
+     * Prefers the Global Region tick thread check when available (Folia/Paper),
+     * falling back to the primary server thread on platforms without this API.
      *
      * @return True if on Global Region thread
      */
     public boolean isMainThread() {
-        return org.bukkit.Bukkit.isPrimaryThread();
+        try {
+            return org.bukkit.Bukkit.getGlobalRegionScheduler().isGlobalTickThread();
+        } catch (NoSuchMethodError | NoClassDefFoundError ignored) {
+            return org.bukkit.Bukkit.isPrimaryThread();
+        }
     }
 
     /**
