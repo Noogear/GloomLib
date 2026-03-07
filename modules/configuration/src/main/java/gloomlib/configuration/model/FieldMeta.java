@@ -84,17 +84,6 @@ public final class FieldMeta {
         }
     }
 
-    public boolean compareAndSet(Object instance, Object expected, Object newValue) {
-        if (!isPrimitive) {
-            throw new UnsupportedOperationException("compareAndSet only available for primitive types");
-        }
-        return varHandle.compareAndSet(instance, expected, newValue);
-    }
-
-    public boolean isUsingVarHandle() {
-        return isPrimitive;
-    }
-
     public String key() {
         return key;
     }

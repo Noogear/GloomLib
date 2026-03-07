@@ -2,12 +2,16 @@ package gloomlib.configuration.util;
 
 import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Centralized logging utility for the configuration system.
+ * Uses ComponentLogger when available, falls back to SLF4J.
  */
 public final class ConfigurationLogger {
 
+    private static final Logger SLF4J_LOGGER = LoggerFactory.getLogger("GloomLib-Config");
     private static ComponentLogger logger;
 
     private ConfigurationLogger() {
@@ -33,10 +37,7 @@ public final class ConfigurationLogger {
         if (logger != null) {
             logger.error(message, throwable);
         } else {
-            System.err.println("[Config] [ERROR] " + message);
-            if (throwable != null) {
-                throwable.printStackTrace();
-            }
+            SLF4J_LOGGER.error(message, throwable);
         }
     }
 
@@ -49,7 +50,7 @@ public final class ConfigurationLogger {
         if (logger != null) {
             logger.warn(message);
         } else {
-            System.out.println("[Config] [WARN] " + message);
+            SLF4J_LOGGER.warn(message);
         }
     }
 
@@ -62,7 +63,7 @@ public final class ConfigurationLogger {
         if (logger != null) {
             logger.info(message);
         } else {
-            System.out.println("[Config] [INFO] " + message);
+            SLF4J_LOGGER.info(message);
         }
     }
 }

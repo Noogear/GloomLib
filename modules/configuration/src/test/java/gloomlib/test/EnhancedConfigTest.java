@@ -1,7 +1,6 @@
 package gloomlib.test;
 
 import gloomlib.configuration.ConfigurationManager;
-import gloomlib.configuration.integration.SparkConfigIntegration;
 import gloomlib.configuration.util.ConfigBackup;
 import org.junit.jupiter.api.*;
 
@@ -62,7 +61,7 @@ public class EnhancedConfigTest {
         System.out.println("✓ Configuration loaded successfully");
         System.out.println("  - Version: " + config.version);
         System.out.println("  - Server Name: " + config.serverName);
-        System.out.println("  - API Key: " + config.apiKey + " (sensitive)");
+        System.out.println("  - API Key: " + config.apiKey);
     }
 
     @Test
@@ -156,57 +155,12 @@ public class EnhancedConfigTest {
         System.out.println("✓ @Version annotation present");
     }
 
+
     @Test
     @Order(6)
-    @DisplayName("6. 测试敏感字段标记")
-    void testSensitiveFields() throws Exception {
-        System.out.println("\n=== Test 6: Sensitive Fields ===");
-
-        var apiKeyField = EnhancedTestConfig.class.getField("apiKey");
-        var passwordField = EnhancedTestConfig.class.getField("databasePassword");
-        var dbPasswordField = EnhancedTestConfig.DatabaseConfig.class.getField("password");
-
-        assertTrue(apiKeyField.isAnnotationPresent(gloomlib.configuration.annotations.Sensitive.class));
-        assertTrue(passwordField.isAnnotationPresent(gloomlib.configuration.annotations.Sensitive.class));
-        assertTrue(dbPasswordField.isAnnotationPresent(gloomlib.configuration.annotations.Sensitive.class));
-
-        System.out.println("✓ Sensitive fields properly annotated:");
-        System.out.println("  - apiKey");
-        System.out.println("  - databasePassword");
-        System.out.println("  - database.password");
-    }
-
-    @Test
-    @Order(7)
-    @DisplayName("7. 测试 Spark 集成")
-    void testSparkIntegration() throws Exception {
-        System.out.println("\n=== Test 7: Spark Integration ===");
-
-        // Register config with Spark
-        SparkConfigIntegration.register(configFile, EnhancedTestConfig.class);
-
-        var registeredConfigs = SparkConfigIntegration.getRegisteredConfigs();
-        assertFalse(registeredConfigs.isEmpty());
-        System.out.println("✓ Configuration registered with Spark");
-        System.out.println("  - Registered configs: " + registeredConfigs.size());
-
-        var hiddenPaths = SparkConfigIntegration.getHiddenPaths();
-        assertFalse(hiddenPaths.isEmpty());
-        System.out.println("✓ Sensitive paths hidden from monitoring:");
-        for (String path : hiddenPaths) {
-            System.out.println("  - " + path);
-        }
-
-        // Check if Spark is available (may be false in test environment)
-        boolean sparkAvailable = SparkConfigIntegration.isSparkAvailable();
-        System.out.println("  - Spark available: " + sparkAvailable);
-    }
-
-    @Test
-    @Order(8)
-    @DisplayName("8. 测试字段验证")
+    @DisplayName("6. 测试字段验证")
     void testFieldValidation() throws Exception {
-        System.out.println("\n=== Test 8: Field Validation ===");
+        System.out.println("\n=== Test 6: Field Validation ===");
 
         config.maxPlayers = 500; // Exceeds limit
         config.save();

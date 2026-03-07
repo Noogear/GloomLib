@@ -4,14 +4,13 @@ import gloomlib.configuration.ConfigurationFile;
 import gloomlib.configuration.annotations.*;
 
 /**
- * Test configuration demonstrating new features:
+ * Test configuration demonstrating features:
  * - Version management with @Version
- * - Sensitive fields with @Sensitive
  * - Async operations
  */
 @Header({
         "Enhanced Configuration Test",
-        "Features: Version Management, Sensitive Data, Async Reload"
+        "Features: Version Management, Async Reload"
 })
 public class EnhancedTestConfig extends ConfigurationFile {
 
@@ -21,13 +20,11 @@ public class EnhancedTestConfig extends ConfigurationFile {
     @Comment("Configuration version (do not modify manually)")
     public int version = 2;
 
-    // ============ Sensitive Data ============
+    // ============ API Keys ============
 
-    @Sensitive(mask = "***")
-    @Comment("API key (will be hidden from monitoring tools)")
+    @Comment("API key")
     public String apiKey = "secret-key-12345";
 
-    @Sensitive(mask = "[REDACTED]")
     @Comment("Database password")
     public String databasePassword = "password123";
 
@@ -76,11 +73,9 @@ public class EnhancedTestConfig extends ConfigurationFile {
         @Comment("Database port")
         public int port = 3306;
 
-        @Sensitive(mask = "***")
         @Comment("Database username")
         public String username = "root";
 
-        @Sensitive(mask = "***")
         @Comment("Database password")
         public String password = "root";
     }

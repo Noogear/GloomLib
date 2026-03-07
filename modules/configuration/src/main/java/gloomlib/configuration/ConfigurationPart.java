@@ -1,12 +1,10 @@
 package gloomlib.configuration;
 
-import java.lang.reflect.Field;
-import java.util.Map;
+import gloomlib.configuration.model.FieldMeta;
+import gloomlib.configuration.util.ConfigurationCache;
 
-/**
- * Represents a node in the configuration structure.
- * Provides capabilities for deep value retrieval.
- */
+import java.util.List;
+import java.util.Map;
 
 /**
  * Base class for nested configuration sections.
@@ -16,7 +14,7 @@ public abstract class ConfigurationPart {
     /**
      * Retrieves a value using a dot-separated path.
      * <p>
-     * Supports fuzzy matching (ignores case and underscores).
+     * Supports fuzzy matching (ignores case, underscores, and hyphens).
      *
      * @param path The path to the value (e.g., "database.host").
      * @return The value, or null if not found.
@@ -27,25 +25,26 @@ public abstract class ConfigurationPart {
         int dotIndex = path.indexOf('.');
         String key = (dotIndex == -1) ? path : path.substring(0, dotIndex);
         String remaining = (dotIndex == -1) ? null : path.substring(dotIndex + 1);
-        String fuzzyKey = key.replace("_", "").replace("-", "");
+        String fuzzyKey = key.replace("_", "").replace("-", "").toLowerCase();
 
         try {
-            for (Field f : this.getClass().getFields()) {
-                if (f.getName().replace("_", "").replace("-", "").equalsIgnoreCase(fuzzyKey)) {
-                    Object val = f.get(this);
+            List<FieldMeta> metas = ConfigurationCache.getCachedMeta(this.getClass());
+            for (FieldMeta meta : metas) {
+                String fieldFuzzy = meta.field().getName().replace("_", "").replace("-", "").toLowerCase();
+                if (fieldFuzzy.equals(fuzzyKey)) {
+                    Object val = meta.get(this);
                     if (remaining == null) return val;
 
                     if (val instanceof ConfigurationPart part) {
                         return part.get(remaining);
                     }
                     if (val instanceof Map<?, ?> map) {
-                        // Assumes map keys are strings for configuration
                         return map.get(remaining.split("\\.")[0]);
                     }
                 }
             }
         } catch (Exception ignored) {
-            // Expected: field access, type conversion, or nested access may fail
+            // Expected: field access or nested access may fail
         }
         return null;
     }

@@ -1,6 +1,5 @@
 package gloomlib.configuration.util;
 
-import com.google.gson.reflect.TypeToken;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -14,7 +13,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class TypeInference {
 
     private static final Map<TypeCacheKey, Class<?>> GENERIC_TYPE_CACHE = new ConcurrentHashMap<>();
-    private static final Map<CompatibilityCacheKey, Boolean> COMPATIBILITY_CACHE = new ConcurrentHashMap<>();
     private static final Map<Class<?>, Map<TypeVariable<?>, Type>> INHERITANCE_CACHE = new ConcurrentHashMap<>();
 
     /**
@@ -196,36 +194,6 @@ public final class TypeInference {
         }
     }
 
-    // === Type Compatibility ===
-
-    /**
-     * Checks type compatibility.
-     *
-     * @param sourceType the source type
-     * @param targetType the target type
-     * @return true if compatible
-     */
-    public static boolean isCompatible(@Nullable Class<?> sourceType, @Nullable Class<?> targetType) {
-        if (sourceType == null || targetType == null) {
-            return false;
-        }
-
-        if (sourceType == targetType) {
-            return true;
-        }
-
-        // Cache check
-        CompatibilityCacheKey cacheKey = new CompatibilityCacheKey(sourceType, targetType);
-        Boolean cached = COMPATIBILITY_CACHE.get(cacheKey);
-        if (cached != null) {
-            return cached;
-        }
-
-        boolean result = targetType.isAssignableFrom(sourceType);
-        COMPATIBILITY_CACHE.put(cacheKey, result);
-        return result;
-    }
-
     // === Field Type Inference ===
 
     /**
@@ -287,7 +255,6 @@ public final class TypeInference {
      */
     public static void clearCaches() {
         GENERIC_TYPE_CACHE.clear();
-        COMPATIBILITY_CACHE.clear();
         INHERITANCE_CACHE.clear();
     }
 
@@ -298,81 +265,12 @@ public final class TypeInference {
      */
     @NotNull
     public static String getCacheStats() {
-        return String.format("TypeInference Caches: Generic=%d, Compatibility=%d, Inheritance=%d",
+        return String.format("TypeInference Caches: Generic=%d, Inheritance=%d",
                 GENERIC_TYPE_CACHE.size(),
-                COMPATIBILITY_CACHE.size(),
                 INHERITANCE_CACHE.size());
-    }
-
-    // === TypeToken Support ===
-
-    /**
-     * Extracts generic parameter from a TypeToken at the specified index.
-     * <p>
-     * This method provides precise generic type resolution for complex types like
-     * {@code Map<UUID, List<ItemStack>>} using Gson's TypeToken.
-     * </p>
-     *
-     * @param typeToken the TypeToken containing generic type information
-     * @param index     the parameter index (0-based)
-     * @return the resolved class, or Object.class if resolution fails
-     */
-    @NotNull
-    public static Class<?> extractGenericParameter(@NotNull TypeToken<?> typeToken, int index) {
-        return extractGenericParameter(typeToken.getType(), index);
-    }
-
-    /**
-     * Gets the raw type from a TypeToken.
-     *
-     * @param typeToken the type token
-     * @return the raw type class
-     */
-    @NotNull
-    public static Class<?> getRawType(@NotNull TypeToken<?> typeToken) {
-        return typeToken.getRawType();
-    }
-
-    // ======================== TypeToken Support ========================
-
-    /**
-     * Gets the full generic Type from a TypeToken.
-     *
-     * @param typeToken the type token
-     * @return the generic type
-     */
-    @NotNull
-    public static Type getType(@NotNull TypeToken<?> typeToken) {
-        return typeToken.getType();
     }
 
     // === Cache Keys (Records) ===
 
-    private record TypeCacheKey(Type type, int index) {
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (!(obj instanceof TypeCacheKey(Type type1, int index1))) return false;
-            return index == index1 && Objects.equals(type, type1);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(type, index);
-        }
-    }
-
-    private record CompatibilityCacheKey(Class<?> source, Class<?> target) {
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (!(obj instanceof CompatibilityCacheKey(Class<?> source1, Class<?> target1))) return false;
-            return source == source1 && target == target1;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(System.identityHashCode(source), System.identityHashCode(target));
-        }
-    }
+    private record TypeCacheKey(Type type, int index) { }
 }

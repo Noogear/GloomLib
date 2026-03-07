@@ -2,6 +2,7 @@ package gloomlib.test;
 
 import com.google.gson.reflect.TypeToken;
 import gloomlib.configuration.ConfigurationManager;
+import gloomlib.configuration.TypeSerializer;
 import gloomlib.configuration.exception.SerializationException;
 import gloomlib.configuration.util.TypeInference;
 import org.junit.jupiter.api.DisplayName;
@@ -74,22 +75,22 @@ public class SerializationExceptionTest {
         // Test simple generic type
         TypeToken<List<String>> listToken = new TypeToken<List<String>>() {
         };
-        Class<?> elementType = TypeInference.extractGenericParameter(listToken, 0);
+        Class<?> elementType = TypeInference.extractGenericParameter(listToken.getType(), 0);
         assertEquals(String.class, elementType);
 
         // Test map with two generic parameters
         TypeToken<Map<String, Integer>> mapToken = new TypeToken<Map<String, Integer>>() {
         };
-        Class<?> keyType = TypeInference.extractGenericParameter(mapToken, 0);
-        Class<?> valueType = TypeInference.extractGenericParameter(mapToken, 1);
+        Class<?> keyType = TypeInference.extractGenericParameter(mapToken.getType(), 0);
+        Class<?> valueType = TypeInference.extractGenericParameter(mapToken.getType(), 1);
         assertEquals(String.class, keyType);
         assertEquals(Integer.class, valueType);
 
         // Test complex nested generics
         TypeToken<Map<UUID, List<Integer>>> complexToken = new TypeToken<Map<UUID, List<Integer>>>() {
         };
-        Class<?> complexKeyType = TypeInference.extractGenericParameter(complexToken, 0);
-        Class<?> complexValueType = TypeInference.extractGenericParameter(complexToken, 1);
+        Class<?> complexKeyType = TypeInference.extractGenericParameter(complexToken.getType(), 0);
+        Class<?> complexValueType = TypeInference.extractGenericParameter(complexToken.getType(), 1);
         assertEquals(UUID.class, complexKeyType);
         assertEquals(List.class, complexValueType);
     }
@@ -99,12 +100,12 @@ public class SerializationExceptionTest {
     void testTypeTokenRawType() {
         TypeToken<List<String>> token = new TypeToken<List<String>>() {
         };
-        Class<?> rawType = TypeInference.getRawType(token);
+        Class<?> rawType = token.getRawType();
         assertEquals(List.class, rawType);
 
         TypeToken<Map<UUID, Integer>> mapToken = new TypeToken<Map<UUID, Integer>>() {
         };
-        Class<?> mapRawType = TypeInference.getRawType(mapToken);
+        Class<?> mapRawType = mapToken.getRawType();
         assertEquals(Map.class, mapRawType);
     }
 
@@ -115,7 +116,7 @@ public class SerializationExceptionTest {
         };
 
         // Register a custom serializer
-        ConfigurationManager.registerTypeSerializer(token, new ConfigurationManager.TypeSerializer<List<UUID>>() {
+        ConfigurationManager.registerTypeSerializer(token, new TypeSerializer<List<UUID>>() {
             @Override
             public Object serialize(List<UUID> value, java.lang.reflect.Type genericType) {
                 return value.stream().map(UUID::toString).toList();

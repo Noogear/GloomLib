@@ -4,20 +4,13 @@ import gloomlib.configuration.ConfigurationFile;
 import gloomlib.configuration.annotations.Header;
 import gloomlib.configuration.annotations.PostLoad;
 import gloomlib.configuration.annotations.PreLoad;
-import gloomlib.configuration.annotations.Template;
-import gloomlib.configuration.model.FieldMeta;
-import gloomlib.configuration.util.ConfigurationCache;
 import gloomlib.configuration.util.ConfigurationLogger;
 import gloomlib.configuration.util.ReflectionUtils;
-import gloomlib.configuration.util.TypeInference;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.Type;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -203,7 +196,7 @@ public final class ConfigurationLoader {
      * @throws Exception if population fails
      */
     private void populateInstance(ConfigurationFile instance, YamlConfiguration yaml, File file) throws Exception {
-        processTemplates(instance);
+        synchronizer.processTemplates(instance);
         ReflectionUtils.runHooks(instance, PreLoad.class);
 
         AtomicBoolean isDirty = new AtomicBoolean(false);
@@ -219,63 +212,6 @@ public final class ConfigurationLoader {
         }
 
         ReflectionUtils.runHooks(instance, PostLoad.class);
-    }
-
-    /**
-     * Processes @Template annotations for map fields.
-     */
-    private void processTemplates(Object instance) throws Exception {
-        for (FieldMeta meta : ConfigurationCache.getCachedMeta(instance.getClass())) {
-            Field field = meta.field();
-            if (!Map.class.isAssignableFrom(field.getType())) {
-                continue;
-            }
-
-            Type genericType = field.getGenericType();
-            Class<?> valueType = TypeInference.extractGenericParameter(genericType, 1);
-
-            if (!valueType.isAnnotationPresent(Template.class)) {
-                continue;
-            }
-
-            processTemplateField(meta, instance, valueType);
-        }
-    }
-
-    /**
-     * Processes a single template field.
-     */
-    @SuppressWarnings("unchecked")
-    private void processTemplateField(FieldMeta meta, Object instance, Class<?> valueType) throws Exception {
-        Template template = valueType.getAnnotation(Template.class);
-        String defaultKey = template.name();
-
-        Map<String, Object> map = (Map<String, Object>) meta.get(instance);
-        if (map == null) {
-            map = new HashMap<>();
-            meta.set(instance, map);
-        }
-
-        if (!shouldAddTemplateDefault(template, map, defaultKey)) {
-            return;
-        }
-
-        try {
-            map.put(defaultKey, ReflectionUtils.createInstance(valueType));
-        } catch (Exception e) {
-            ConfigurationLogger.warn("Failed to create template for " + valueType.getSimpleName() + ": " + e.getMessage());
-        }
-    }
-
-    /**
-     * Checks if template default should be added.
-     */
-    private boolean shouldAddTemplateDefault(Template template, Map<String, Object> map, String defaultKey) {
-        return switch (template.value()) {
-            case FORCE -> !map.containsKey(defaultKey);
-            case SMART -> map.isEmpty();
-            case STRICT -> false;
-        };
     }
 
     /**

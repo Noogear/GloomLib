@@ -1,7 +1,8 @@
 package gloomlib.configuration.registry;
 
 import com.google.gson.reflect.TypeToken;
-import gloomlib.configuration.ConfigurationManager;
+import gloomlib.configuration.TypeAdapter;
+import gloomlib.configuration.TypeSerializer;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,8 +16,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class AdapterRegistry {
 
-    private final Map<Class<?>, ConfigurationManager.TypeAdapter<?>> adapters = new ConcurrentHashMap<>();
-    private final Map<TypeToken<?>, ConfigurationManager.TypeSerializer<?>> typeSerializers = new ConcurrentHashMap<>();
+    private final Map<Class<?>, TypeAdapter<?>> adapters = new ConcurrentHashMap<>();
+    private final Map<TypeToken<?>, TypeSerializer<?>> typeSerializers = new ConcurrentHashMap<>();
 
     /**
      * Registers a custom type adapter.
@@ -25,7 +26,7 @@ public final class AdapterRegistry {
      * @param adapter the adapter implementation
      * @param <T>     the type
      */
-    public <T> void registerAdapter(Class<T> type, ConfigurationManager.TypeAdapter<T> adapter) {
+    public <T> void registerAdapter(Class<T> type, TypeAdapter<T> adapter) {
         adapters.put(type, adapter);
     }
 
@@ -36,7 +37,7 @@ public final class AdapterRegistry {
      * @param serializer the type serializer implementation
      * @param <T>        the type
      */
-    public <T> void registerTypeSerializer(TypeToken<T> typeToken, ConfigurationManager.TypeSerializer<T> serializer) {
+    public <T> void registerTypeSerializer(TypeToken<T> typeToken, TypeSerializer<T> serializer) {
         typeSerializers.put(typeToken, serializer);
     }
 
@@ -58,8 +59,8 @@ public final class AdapterRegistry {
      * @return the adapter, or null if not registered
      */
     @SuppressWarnings("unchecked")
-    public <T> ConfigurationManager.TypeAdapter<T> getAdapter(Class<T> type) {
-        return (ConfigurationManager.TypeAdapter<T>) adapters.get(type);
+    public <T> TypeAdapter<T> getAdapter(Class<T> type) {
+        return (TypeAdapter<T>) adapters.get(type);
     }
 
     /**
@@ -80,7 +81,7 @@ public final class AdapterRegistry {
      * @return the type serializer, or null if not registered
      */
     @SuppressWarnings("unchecked")
-    public <T> ConfigurationManager.TypeSerializer<T> getTypeSerializer(TypeToken<T> typeToken) {
-        return (ConfigurationManager.TypeSerializer<T>) typeSerializers.get(typeToken);
+    public <T> TypeSerializer<T> getTypeSerializer(TypeToken<T> typeToken) {
+        return (TypeSerializer<T>) typeSerializers.get(typeToken);
     }
 }

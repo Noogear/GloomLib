@@ -32,10 +32,6 @@ class FieldMetaVarHandleTest {
         FieldMeta nameMeta = new FieldMeta(nameField, "name", false, false, false);
         FieldMeta levelMeta = new FieldMeta(levelField, "level", false, false, false);
 
-        // Verify strategy selection
-        assertFalse(nameMeta.isUsingVarHandle(), "String should use MethodHandle");
-        assertTrue(levelMeta.isUsingVarHandle(), "int should use VarHandle");
-
         // Test get
         assertEquals("default", nameMeta.get(config));
         assertEquals(1, levelMeta.get(config));
@@ -48,21 +44,6 @@ class FieldMetaVarHandleTest {
         assertEquals(99, config.level);
     }
 
-    @Test
-    @DisplayName("Hybrid - atomic operations only for primitives")
-    void testHybridAtomicOperations() throws Exception {
-        FieldMeta nameMeta = new FieldMeta(nameField, "name", false, false, false);
-        FieldMeta levelMeta = new FieldMeta(levelField, "level", false, false, false);
-
-        // Should work for primitive
-        assertTrue(levelMeta.compareAndSet(config, 1, 50));
-        assertEquals(50, config.level);
-
-        // Should throw for object
-        assertThrows(UnsupportedOperationException.class, () ->
-                nameMeta.compareAndSet(config, "default", "new")
-        );
-    }
 
     @Test
     @DisplayName("Performance comparison - mixed operations")

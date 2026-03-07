@@ -13,8 +13,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
-import static gloomlib.configuration.util.NamingUtils.camelToKebab;
+import com.google.common.base.CaseFormat;
 
 /**
  * Cache manager for configuration metadata and reflection results.
@@ -49,7 +50,7 @@ public final class ConfigurationCache {
                 f.setAccessible(true);
                 list.add(new FieldMeta(
                         f,
-                        camelToKebab(f.getName()),
+                        CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_HYPHEN, f.getName()),
                         f.isAnnotationPresent(Check.class),
                         f.isAnnotationPresent(Comment.class),
                         f.isAnnotationPresent(Inline.class)
@@ -98,19 +99,11 @@ public final class ConfigurationCache {
      * Gets or caches a method by key.
      *
      * @param key     the cache key
-     * @param factory the factory to create the method if not cached
+     * @param factory the supplier to create the method if not cached
      * @return the method
      */
-    public static Method getCachedMethod(String key, MethodFactory factory) {
-        return METHOD_CACHE.computeIfAbsent(key, k -> factory.create());
-    }
-
-    /**
-     * Functional interface for creating methods.
-     */
-    @FunctionalInterface
-    public interface MethodFactory {
-        Method create();
+    public static Method getCachedMethod(String key, Supplier<Method> factory) {
+        return METHOD_CACHE.computeIfAbsent(key, k -> factory.get());
     }
 }
 

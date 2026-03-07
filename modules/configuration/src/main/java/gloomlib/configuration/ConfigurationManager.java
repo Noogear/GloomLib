@@ -19,16 +19,10 @@ public class ConfigurationManager {
 
     private static final AdapterRegistry adapterRegistry = new AdapterRegistry();
     private static final SerializationService serializationService = new SerializationService(adapterRegistry);
-    private static final DeserializationService deserializationService = new DeserializationService(adapterRegistry);
+    private static final DeserializationService deserializationService = new DeserializationService(adapterRegistry, () -> ConfigurationManager.synchronizer);
+    private static final VersionManager versionManager = new VersionManager(deserializationService, () -> ConfigurationManager.loader);
     private static final ConfigurationSynchronizer synchronizer = new ConfigurationSynchronizer(deserializationService, serializationService);
-    private static final VersionManager versionManager = new VersionManager(deserializationService);
     private static final ConfigurationLoader loader = new ConfigurationLoader(synchronizer, versionManager);
-
-    static {
-        // Break circular dependencies
-        deserializationService.setSynchronizer(synchronizer);
-        versionManager.setLoader(loader);
-    }
 
     /**
      * Enables logging for the configuration manager.
@@ -52,10 +46,6 @@ public class ConfigurationManager {
 
     /**
      * Registers a TypeSerializer for a specific TypeToken.
-     * <p>
-     * This allows fine-grained control over serialization of complex generic types.
-     * Example: {@code registerTypeSerializer(new TypeToken<Map<UUID, List<ItemStack>>>() {}, serializer)}
-     * </p>
      *
      * @param typeToken  the type token representing the generic type
      * @param serializer the type serializer implementation
@@ -67,10 +57,6 @@ public class ConfigurationManager {
 
     /**
      * Deserializes a value using a TypeToken for precise generic type resolution.
-     * <p>
-     * This method provides better type safety for complex generic types like
-     * {@code Map<UUID, List<ItemStack>>} by using Gson's TypeToken.
-     * </p>
      *
      * @param raw       the raw value from YAML
      * @param typeToken the type token representing the target type
@@ -99,13 +85,11 @@ public class ConfigurationManager {
         }
 
         try {
-            // Check for registered TypeSerializer
             if (adapterRegistry.hasTypeSerializer(typeToken)) {
                 TypeSerializer<T> serializer = adapterRegistry.getTypeSerializer(typeToken);
                 return serializer.deserialize(raw, typeToken.getType());
             }
 
-            // Fall back to Class-based deserialization
             Class<T> rawType = (Class<T>) typeToken.getRawType();
             Type genericType = typeToken.getType();
 
@@ -123,9 +107,6 @@ public class ConfigurationManager {
 
     /**
      * Loads a configuration file into a Java object.
-     * <p>
-     * If the file does not exist, it will be created with default values based on the class structure.
-     * </p>
      *
      * @param clazz the class of the configuration object
      * @param file  the file to load from
@@ -139,9 +120,6 @@ public class ConfigurationManager {
 
     /**
      * Creates the file and delegates to load mechanism to populate and save defaults.
-     * <p>
-     * This avoids running hooks multiple times.
-     * </p>
      *
      * @param clazz the class of the configuration object
      * @param file  the file to create and save to
@@ -173,60 +151,5 @@ public class ConfigurationManager {
     public static void save(ConfigurationFile instance, File file) throws Exception {
         loader.save(instance, file);
     }
-
-    /**
-     * Interface for custom type serialization logic.
-     *
-     * @param <T> the target type
-     */
-    public interface TypeAdapter<T> {
-        /**
-         * Serializes the value into a YAML-compatible object.
-         *
-         * @param value the value to serialize
-         * @return the serialized object
-         */
-        Object serialize(T value);
-
-        /**
-         * Deserializes the YAML value into the target type.
-         *
-         * @param yamlValue the YAML value to deserialize
-         * @return the deserialized object
-         */
-        T deserialize(Object yamlValue);
-    }
-
-    /**
-     * Interface for TypeToken-based type serialization.
-     * <p>
-     * Unlike TypeAdapter, this interface receives the full generic Type information,
-     * allowing for precise handling of complex generic types like {@code Map<UUID, List<ItemStack>>}.
-     * </p>
-     *
-     * @param <T> the target type
-     */
-    public interface TypeSerializer<T> {
-        /**
-         * Serializes the value into a YAML-compatible object.
-         *
-         * @param value       the value to serialize
-         * @param genericType the full generic type information
-         * @return the serialized object
-         * @throws SerializationException if serialization fails
-         */
-        Object serialize(T value, Type genericType) throws SerializationException;
-
-        /**
-         * Deserializes the YAML value into the target type.
-         *
-         * @param yamlValue   the YAML value to deserialize
-         * @param genericType the full generic type information
-         * @return the deserialized object
-         * @throws SerializationException if deserialization fails
-         */
-        T deserialize(Object yamlValue, Type genericType) throws SerializationException;
-    }
-
 }
 

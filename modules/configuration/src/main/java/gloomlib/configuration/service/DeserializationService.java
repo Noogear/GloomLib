@@ -3,7 +3,7 @@ package gloomlib.configuration.service;
 import gloomlib.configuration.ConfigurationPart;
 import gloomlib.configuration.exception.SerializationException;
 import gloomlib.configuration.registry.AdapterRegistry;
-import gloomlib.configuration.util.NamingUtils;
+import com.google.common.base.CaseFormat;
 import gloomlib.configuration.util.ReflectionUtils;
 import gloomlib.configuration.util.TypeConverter;
 import gloomlib.configuration.util.TypeInference;
@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 /**
  * Service for deserializing YAML values into Java objects.
@@ -31,24 +32,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class DeserializationService {
 
     private final AdapterRegistry adapterRegistry;
-    private ConfigurationSynchronizer synchronizer; // Circular dependency - set via setter
+    private final Supplier<ConfigurationSynchronizer> synchronizerSupplier;
 
     /**
-     * Creates a new deserialization service with the given adapter registry.
+     * Creates a new deserialization service.
      *
-     * @param adapterRegistry the adapter registry for custom type deserialization
+     * @param adapterRegistry      the adapter registry for custom type deserialization
+     * @param synchronizerSupplier lazy reference to the synchronizer (breaks circular dependency)
      */
-    public DeserializationService(AdapterRegistry adapterRegistry) {
+    public DeserializationService(AdapterRegistry adapterRegistry, Supplier<ConfigurationSynchronizer> synchronizerSupplier) {
         this.adapterRegistry = adapterRegistry;
-    }
-
-    /**
-     * Sets the configuration synchronizer (required to break circular dependency).
-     *
-     * @param synchronizer the configuration synchronizer
-     */
-    public void setSynchronizer(ConfigurationSynchronizer synchronizer) {
-        this.synchronizer = synchronizer;
+        this.synchronizerSupplier = synchronizerSupplier;
     }
 
     /**
@@ -150,7 +144,7 @@ public final class DeserializationService {
             Class<?>[] types
     ) throws Exception {
         types[index] = component.getType();
-        String fieldKey = NamingUtils.camelToKebab(component.getName());
+        String fieldKey = CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_HYPHEN, component.getName());
         List<String> fieldPath = new ArrayList<>(nodePath);
         fieldPath.add(fieldKey);
 
@@ -186,7 +180,7 @@ public final class DeserializationService {
             }
         }
 
-        synchronizer.syncSection(tmp, inst, new AtomicBoolean());
+        synchronizerSupplier.get().syncSection(tmp, inst, new AtomicBoolean());
         return inst;
     }
 

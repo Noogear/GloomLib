@@ -4,18 +4,19 @@ import gloomlib.configuration.ConfigurationPart;
 import gloomlib.configuration.annotations.Check;
 import gloomlib.configuration.annotations.Comment;
 import gloomlib.configuration.annotations.Inline;
+import gloomlib.configuration.annotations.Template;
 import gloomlib.configuration.model.FieldMeta;
 import gloomlib.configuration.util.ConfigurationCache;
 import gloomlib.configuration.util.ConfigurationLogger;
 import gloomlib.configuration.util.ReflectionUtils;
+import gloomlib.configuration.util.TypeInference;
 import org.bukkit.configuration.ConfigurationSection;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.lang.reflect.Type;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -261,5 +262,61 @@ public final class ConfigurationSynchronizer {
     private Object runValidatorCheck(Check annotation, Object val) throws Exception {
         Check.Validator<Object> v = ConfigurationCache.getCachedValidator(annotation.value());
         return v.validate(val);
+    }
+
+    // === Template Processing ===
+
+    /**
+     * Processes @Template annotations for map fields.
+     *
+     * @param instance the configuration instance
+     * @throws Exception if template processing fails
+     */
+    void processTemplates(Object instance) throws Exception {
+        for (FieldMeta meta : ConfigurationCache.getCachedMeta(instance.getClass())) {
+            Field field = meta.field();
+            if (!Map.class.isAssignableFrom(field.getType())) {
+                continue;
+            }
+
+            Type genericType = field.getGenericType();
+            Class<?> valueType = TypeInference.extractGenericParameter(genericType, 1);
+
+            if (!valueType.isAnnotationPresent(Template.class)) {
+                continue;
+            }
+
+            processTemplateField(meta, instance, valueType);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void processTemplateField(FieldMeta meta, Object instance, Class<?> valueType) throws Exception {
+        Template template = valueType.getAnnotation(Template.class);
+        String defaultKey = template.name();
+
+        Map<String, Object> map = (Map<String, Object>) meta.get(instance);
+        if (map == null) {
+            map = new HashMap<>();
+            meta.set(instance, map);
+        }
+
+        if (!shouldAddTemplateDefault(template, map, defaultKey)) {
+            return;
+        }
+
+        try {
+            map.put(defaultKey, ReflectionUtils.createInstance(valueType));
+        } catch (Exception e) {
+            ConfigurationLogger.warn("Failed to create template for " + valueType.getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    private boolean shouldAddTemplateDefault(Template template, Map<String, Object> map, String defaultKey) {
+        return switch (template.value()) {
+            case FORCE -> !map.containsKey(defaultKey);
+            case SMART -> map.isEmpty();
+            case STRICT -> false;
+        };
     }
 }

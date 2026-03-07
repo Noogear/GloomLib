@@ -43,14 +43,14 @@ public final class ConfigBackup {
     @Nullable
     public static File backup(@NotNull File file, @Nullable String reason) {
         if (!file.exists()) {
-            logInfo("Cannot backup non-existent file: " + file.getName());
+            ConfigurationLogger.info("Cannot backup non-existent file: " + file.getName());
             return null;
         }
 
         try {
             File backupDir = new File(file.getParent(), BACKUP_DIR_NAME);
             if (!backupDir.exists() && !backupDir.mkdirs()) {
-                logError("Failed to create backup directory: " + backupDir.getAbsolutePath());
+                ConfigurationLogger.error("Failed to create backup directory: " + backupDir.getAbsolutePath(), null);
                 return null;
             }
 
@@ -60,10 +60,10 @@ public final class ConfigBackup {
             File backupFile = new File(backupDir, backupName);
 
             Files.copy(file.toPath(), backupFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            logInfo("Created backup: " + backupFile.getName());
+            ConfigurationLogger.info("Created backup: " + backupFile.getName());
             return backupFile;
         } catch (IOException e) {
-            logError("Failed to backup file: " + file.getName(), e);
+            ConfigurationLogger.error("Failed to backup file: " + file.getName(), e);
             return null;
         }
     }
@@ -100,16 +100,16 @@ public final class ConfigBackup {
      */
     public static boolean restore(@NotNull File backupFile, @NotNull File targetFile) {
         if (!backupFile.exists()) {
-            logError("Backup file does not exist: " + backupFile.getName());
+            ConfigurationLogger.error("Backup file does not exist: " + backupFile.getName(), null);
             return false;
         }
 
         try {
             Files.copy(backupFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            logInfo("Restored configuration from backup: " + backupFile.getName());
+            ConfigurationLogger.info("Restored configuration from backup: " + backupFile.getName());
             return true;
         } catch (IOException e) {
-            logError("Failed to restore from backup: " + backupFile.getName(), e);
+            ConfigurationLogger.error("Failed to restore from backup: " + backupFile.getName(), e);
             return false;
         }
     }
@@ -139,7 +139,7 @@ public final class ConfigBackup {
         for (int i = keepCount; i < backups.length; i++) {
             if (backups[i].delete()) {
                 deleted++;
-                logInfo("Deleted old backup: " + backups[i].getName());
+                ConfigurationLogger.info("Deleted old backup: " + backups[i].getName());
             }
         }
 
@@ -187,15 +187,5 @@ public final class ConfigBackup {
         return backups != null ? backups : new File[0];
     }
 
-    private static void logInfo(String message) {
-        ConfigurationLogger.info(message);
-    }
 
-    private static void logError(String message) {
-        ConfigurationLogger.error(message, null);
-    }
-
-    private static void logError(String message, Throwable throwable) {
-        ConfigurationLogger.error(message, throwable);
-    }
 }

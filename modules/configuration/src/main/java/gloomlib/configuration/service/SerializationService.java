@@ -1,11 +1,11 @@
 package gloomlib.configuration.service;
 
-import gloomlib.configuration.ConfigurationManager;
 import gloomlib.configuration.ConfigurationPart;
+import gloomlib.configuration.TypeAdapter;
 import gloomlib.configuration.model.FieldMeta;
 import gloomlib.configuration.registry.AdapterRegistry;
 import gloomlib.configuration.util.ConfigurationCache;
-import gloomlib.configuration.util.NamingUtils;
+import com.google.common.base.CaseFormat;
 import org.bukkit.configuration.serialization.ConfigurationSerializable;
 
 import java.lang.reflect.RecordComponent;
@@ -42,7 +42,7 @@ public final class SerializationService {
         Class<?> type = val.getClass();
 
         if (adapterRegistry.hasAdapter(type)) {
-            ConfigurationManager.TypeAdapter<Object> adapter = (ConfigurationManager.TypeAdapter<Object>) adapterRegistry.getAdapter(type);
+            TypeAdapter<Object> adapter = (TypeAdapter<Object>) adapterRegistry.getAdapter(type);
             return adapter.serialize(val);
         }
 
@@ -94,7 +94,7 @@ public final class SerializationService {
     private Object serializeRecord(Object val, Class<?> type) throws Exception {
         Map<String, Object> map = new LinkedHashMap<>();
         for (RecordComponent rc : type.getRecordComponents()) {
-            map.put(NamingUtils.camelToKebab(rc.getName()), serialize(rc.getAccessor().invoke(val)));
+            map.put(CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_HYPHEN, rc.getName()), serialize(rc.getAccessor().invoke(val)));
         }
         return map;
     }

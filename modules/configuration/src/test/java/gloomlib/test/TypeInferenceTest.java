@@ -124,32 +124,6 @@ public class TypeInferenceTest {
         System.out.println("✓ Map<String, ? super Integer> → " + wildcardMapValue.getSimpleName());
     }
 
-    @Test
-    @Order(5)
-    @DisplayName("5. 测试类型兼容性")
-    void testTypeCompatibility() {
-        System.out.println("\n=== Test 5: Type Compatibility ===");
-
-        // 相同类型
-        assertTrue(TypeInference.isCompatible(String.class, String.class));
-        System.out.println("✓ String ↔ String: compatible");
-
-        // 继承关系
-        assertTrue(TypeInference.isCompatible(Integer.class, Number.class));
-        System.out.println("✓ Integer → Number: compatible");
-
-        // 接口实现
-        assertTrue(TypeInference.isCompatible(ArrayList.class, List.class));
-        System.out.println("✓ ArrayList → List: compatible");
-
-        // 不兼容
-        assertFalse(TypeInference.isCompatible(String.class, Integer.class));
-        System.out.println("✓ String ↔ Integer: incompatible");
-
-        // ConfigurationPart
-        assertTrue(TypeInference.isCompatible(TestPart.class, ConfigurationPart.class));
-        System.out.println("✓ TestPart → ConfigurationPart: compatible");
-    }
 
     @Test
     @Order(6)
@@ -267,11 +241,6 @@ public class TypeInferenceTest {
         } catch (Exception e) {
             fail("Should handle out of bounds gracefully: " + e.getMessage());
         }
-
-        // null 兼容性检查
-        assertFalse(TypeInference.isCompatible(null, String.class));
-        assertFalse(TypeInference.isCompatible(String.class, null));
-        System.out.println("✓ null compatibility checks work correctly");
     }
 
     // 测试配置类

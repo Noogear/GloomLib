@@ -165,40 +165,10 @@ public class TypeInferenceBenchmark {
         System.out.printf("  - Speedup: %.2fx%n", (double) coldTime / (avgHotTime * 3));
     }
 
+
     @Test
     @Order(5)
-    @DisplayName("5. 类型兼容性检查性能")
-    void benchmarkCompatibilityCheck() {
-        System.out.println("\n=== Benchmark 5: Compatibility Check ===");
-
-        TypeInference.clearCaches();
-
-        // 首次检查
-        long coldStart = System.nanoTime();
-        TypeInference.isCompatible(Integer.class, Number.class);
-        TypeInference.isCompatible(ArrayList.class, List.class);
-        TypeInference.isCompatible(ComplexPart.class, ConfigurationPart.class);
-        long coldTime = System.nanoTime() - coldStart;
-
-        // 重复检查
-        long hotStart = System.nanoTime();
-        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
-            TypeInference.isCompatible(Integer.class, Number.class);
-            TypeInference.isCompatible(ArrayList.class, List.class);
-            TypeInference.isCompatible(ComplexPart.class, ConfigurationPart.class);
-        }
-        long hotTime = System.nanoTime() - hotStart;
-        long avgHotTime = hotTime / (BENCHMARK_ITERATIONS * 3);
-
-        System.out.println("✓ 3 compatibility checks");
-        System.out.printf("  - Cold cache (total): %,d ns%n", coldTime);
-        System.out.printf("  - Hot cache (avg per check): %,d ns%n", avgHotTime);
-        System.out.printf("  - Speedup: %.2fx%n", (double) coldTime / (avgHotTime * 3));
-    }
-
-    @Test
-    @Order(6)
-    @DisplayName("6. 批量字段扫描性能")
+    @DisplayName("5. 批量字段扫描性能")
     void benchmarkBatchFieldScanning() throws Exception {
         System.out.println("\n=== Benchmark 6: Batch Field Scanning ===");
 
@@ -229,8 +199,8 @@ public class TypeInferenceBenchmark {
     }
 
     @Test
-    @Order(7)
-    @DisplayName("7. 内存占用统计")
+    @Order(6)
+    @DisplayName("6. 内存占用统计")
     void benchmarkMemoryUsage() throws Exception {
         System.out.println("\n=== Benchmark 7: Memory Usage ===");
 
@@ -250,11 +220,6 @@ public class TypeInferenceBenchmark {
             TypeInference.extractGenericParameter(field.getGenericType(), 1);
         }
 
-        // 兼容性检查缓存
-        TypeInference.isCompatible(Integer.class, Number.class);
-        TypeInference.isCompatible(String.class, Object.class);
-        TypeInference.isCompatible(ArrayList.class, List.class);
-
         long memAfter = runtime.totalMemory() - runtime.freeMemory();
         long memUsed = memAfter - memBefore;
 
@@ -262,7 +227,7 @@ public class TypeInferenceBenchmark {
         System.out.println(TypeInference.getCacheStats());
         System.out.printf("  - Estimated memory: %,d bytes (%.2f KB)%n", memUsed, memUsed / 1024.0);
         System.out.printf("  - Memory per cache entry: ~%,d bytes%n",
-                memUsed / (fields.length * 3L + 3));
+                memUsed / (fields.length * 3L));
     }
 
     // 测试配置类（包含各种复杂类型）

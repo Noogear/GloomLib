@@ -2,11 +2,16 @@ package gloomlib.configuration.service;
 
 import gloomlib.configuration.ConfigurationFile;
 import gloomlib.configuration.model.FieldMeta;
-import gloomlib.configuration.util.*;
+import com.google.common.base.CaseFormat;
+import gloomlib.configuration.util.ConfigBackup;
+import gloomlib.configuration.util.ConfigurationCache;
+import gloomlib.configuration.util.ConfigurationLogger;
+import gloomlib.configuration.util.ReflectionUtils;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.util.function.Supplier;
 
 /**
  * Manages configuration version checking and automatic upgrades.
@@ -18,24 +23,17 @@ import java.lang.reflect.Field;
 public final class VersionManager {
 
     private final DeserializationService deserializationService;
-    private ConfigurationLoader loader; // Set later to break circular dependency
+    private final Supplier<ConfigurationLoader> loaderSupplier;
 
     /**
      * Creates a new version manager.
      *
      * @param deserializationService the deserialization service for data migration
+     * @param loaderSupplier         lazy reference to the loader (breaks circular dependency)
      */
-    public VersionManager(DeserializationService deserializationService) {
+    public VersionManager(DeserializationService deserializationService, Supplier<ConfigurationLoader> loaderSupplier) {
         this.deserializationService = deserializationService;
-    }
-
-    /**
-     * Sets the configuration loader (called after initialization to break circular dependency).
-     *
-     * @param loader the configuration loader
-     */
-    public void setLoader(ConfigurationLoader loader) {
-        this.loader = loader;
+        this.loaderSupplier = loaderSupplier;
     }
 
     /**
@@ -81,8 +79,8 @@ public final class VersionManager {
         }
 
         // Read actual version from file
-        YamlConfiguration yaml = loader.loadYaml(file);
-        String versionKey = NamingUtils.camelToKebab(versionField.getName());
+        YamlConfiguration yaml = loaderSupplier.get().loadYaml(file);
+        String versionKey = CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_HYPHEN, versionField.getName());
         int actualVersion = yaml.getInt(versionKey, -1);
 
         return new VersionCheckResult(versionField, expectedVersion, actualVersion, autoBackup, migrate);
@@ -112,7 +110,7 @@ public final class VersionManager {
         // Attempt data migration if enabled
         YamlConfiguration oldYaml = null;
         if (versionCheck.migrate) {
-            oldYaml = loader.loadYaml(file);
+            oldYaml = loaderSupplier.get().loadYaml(file);
         }
 
         // Delete old file and create new one
@@ -121,13 +119,13 @@ public final class VersionManager {
         }
 
         // Create new configuration with defaults (skip version check)
-        loader.createIfNotExist(file);
-        T newInstance = loader.loadWithoutVersionCheck(clazz, file);
+        loaderSupplier.get().createIfNotExist(file);
+        T newInstance = loaderSupplier.get().loadWithoutVersionCheck(clazz, file);
 
         // Migrate data if enabled
         if (versionCheck.migrate && oldYaml != null) {
             migrateConfigData(oldYaml, newInstance);
-            loader.save(newInstance, file);
+            loaderSupplier.get().save(newInstance, file);
             ConfigurationLogger.info("Configuration data migrated from version " + versionCheck.actualVersion);
         }
 
