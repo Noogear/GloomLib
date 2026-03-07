@@ -1,15 +1,19 @@
 package gloomlib.command;
 
+import gloomlib.command.api.annotation.Command;
+import gloomlib.command.api.condition.CommandCondition;
+import gloomlib.command.api.condition.CommandConditionRegistry;
 import gloomlib.command.core.CommandRegistry;
-import gloomlib.command.injection.DependencyInjector;
-import gloomlib.command.internal.CommandMetadata;
-import gloomlib.command.internal.CommandTracker;
-import gloomlib.command.internal.CommandUnregistrar;
-import gloomlib.command.processor.ProcessorPipeline;
-import gloomlib.command.processor.processors.LoggingProcessor;
-import gloomlib.command.resolver.ArgumentResolver;
-import gloomlib.command.resolver.ArgumentResolverRegistry;
-import gloomlib.command.resolver.registry.BuiltInResolvers;
+import gloomlib.command.api.exception.ExceptionResolver;
+import gloomlib.command.api.exception.ExceptionResolverRegistry;
+import gloomlib.command.api.injection.DependencyInjector;
+import gloomlib.command.core.internal.CommandTracker;
+import gloomlib.command.core.internal.CommandUnregistrar;
+import gloomlib.command.core.processor.ProcessorPipeline;
+import gloomlib.command.core.processor.LoggingProcessor;
+import gloomlib.command.api.resolver.ArgumentResolver;
+import gloomlib.command.core.resolver.ArgumentResolverRegistry;
+import gloomlib.command.core.resolver.registry.BuiltInResolvers;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -80,6 +84,8 @@ public final class GloomCommand {
     private final DependencyInjector injector;
     private final CommandRegistry commandRegistry;
     private final ProcessorPipeline pipeline;
+    private final CommandConditionRegistry conditionRegistry;
+    private final ExceptionResolverRegistry exceptionResolverRegistry;
     private final List<Object> pendingCommands = new ArrayList<>();
 
     private final CommandTracker tracker = new CommandTracker();
@@ -94,10 +100,13 @@ public final class GloomCommand {
         this.injector = new DependencyInjector();
         this.pipeline = new ProcessorPipeline();
 
-        // Register default processors
-        pipeline.registerPreProcessor(new LoggingProcessor(plugin));
+        if (builder.enableLogging) {
+            pipeline.registerPreProcessor(new LoggingProcessor(plugin));
+        }
 
-        this.commandRegistry = new CommandRegistry(plugin, resolverRegistry, pipeline);
+        this.conditionRegistry = new CommandConditionRegistry();
+        this.exceptionResolverRegistry = new ExceptionResolverRegistry();
+        this.commandRegistry = new CommandRegistry(plugin, resolverRegistry, pipeline, conditionRegistry, exceptionResolverRegistry);
 
         // Register built-in resolvers
         initializeBuiltInResolvers();
@@ -258,7 +267,8 @@ public final class GloomCommand {
             return false;
         }
 
-        String commandName = CommandMetadata.getName(commandInstance);
+        Command cmdAnnotation = commandInstance.getClass().getAnnotation(Command.class);
+        String commandName = cmdAnnotation != null ? cmdAnnotation.value() : null;
         if (commandName == null) {
             plugin.getLogger().warning("Cannot unregister: no @Command annotation");
             return false;
@@ -305,14 +315,75 @@ public final class GloomCommand {
     }
 
     /**
+     * Registers a named condition.
+     *
+     * <p>
+     * Conditions can be referenced on command methods via the {@code @Condition} annotation.
+     * All conditions must be registered before the plugin calls {@code registerCommand()}.
+     * </p>
+     *
+     * <pre>{@code
+     * gloom.registerCondition("daytime", ctx ->
+     *     ctx.getPlayer().getWorld().getTime() < 12000
+     *         ? CommandCondition.ConditionResult.pass()
+     *         : CommandCondition.ConditionResult.fail("<red>This command is only available during the day.")
+     * );
+     * }</pre>
+     *
+     * @param name      Unique condition name (case-sensitive)
+     * @param condition Condition implementation
+     * @return this (chainable)
+     */
+    public GloomCommand registerCondition(String name, CommandCondition condition) {
+        conditionRegistry.register(name, condition);
+        return this;
+    }
+
+    /**
+     * Registers a global exception handler for a specific exception type.
+     *
+     * <p>
+     * When a command method throws an exception and no matching {@code @OnError}
+     * handler exists in the command class, this global fallback is invoked.
+     * </p>
+     *
+     * <pre>{@code
+     * gloom.registerExceptionHandler(DatabaseException.class, (ctx, ex) ->
+     *     ctx.sendMessage("<red>A database error occurred. Please try again later.")
+     * );
+     * }</pre>
+     *
+     * @param <T>      Exception type
+     * @param type     Exception class to handle
+     * @param resolver Handler invoked when this exception type is thrown
+     * @return this (chainable)
+     */
+    public <T extends Throwable> GloomCommand registerExceptionHandler(
+            Class<T> type, ExceptionResolver<T> resolver) {
+        exceptionResolverRegistry.register(type, resolver);
+        return this;
+    }
+
+    /**
      * GloomCommand Builder.
      */
     public static final class Builder {
 
         private final JavaPlugin plugin;
+        private boolean enableLogging = false;
 
         private Builder(JavaPlugin plugin) {
             this.plugin = plugin;
+        }
+
+        /**
+         * Enables command execution logging (disabled by default).
+         *
+         * @return this (chainable)
+         */
+        public Builder withLogging() {
+            this.enableLogging = true;
+            return this;
         }
 
         /**

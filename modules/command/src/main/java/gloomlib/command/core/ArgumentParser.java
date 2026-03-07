@@ -1,15 +1,15 @@
 package gloomlib.command.core;
 
 import com.mojang.brigadier.context.CommandContext;
-import gloomlib.command.annotation.*;
-import gloomlib.command.context.AsyncContext;
-import gloomlib.command.context.GloomCommandContext;
-import gloomlib.command.exception.CommandException;
-import gloomlib.command.processor.processors.ValidationProcessor;
-import gloomlib.command.resolver.ArgumentResolver;
-import gloomlib.command.resolver.ArgumentResolverRegistry;
-import gloomlib.command.util.ParameterUtils;
-import gloomlib.command.util.TypeConverterUtils;
+import gloomlib.command.api.annotation.*;
+import gloomlib.command.api.context.AsyncContext;
+import gloomlib.command.api.context.GloomCommandContext;
+import gloomlib.command.api.exception.CommandException;
+import gloomlib.command.core.processor.ValidationProcessor;
+import gloomlib.command.api.resolver.ArgumentResolver;
+import gloomlib.command.core.resolver.ArgumentResolverRegistry;
+import gloomlib.command.core.util.ParameterUtils;
+import gloomlib.command.core.util.TypeConverterUtils;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;

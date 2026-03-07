@@ -2,12 +2,14 @@ package gloomlib.command.core;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
-import gloomlib.command.annotation.*;
-import gloomlib.command.exception.CommandException;
-import gloomlib.command.processor.MethodInvoker;
-import gloomlib.command.processor.ProcessorPipeline;
-import gloomlib.command.processor.processors.CooldownProcessor;
-import gloomlib.command.resolver.ArgumentResolverRegistry;
+import gloomlib.command.api.annotation.*;
+import gloomlib.command.api.condition.CommandConditionRegistry;
+import gloomlib.command.api.exception.CommandException;
+import gloomlib.command.api.exception.ExceptionResolverRegistry;
+import gloomlib.command.core.processor.MethodInvoker;
+import gloomlib.command.core.processor.ProcessorPipeline;
+import gloomlib.command.core.processor.CooldownProcessor;
+import gloomlib.command.core.resolver.ArgumentResolverRegistry;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import net.kyori.adventure.text.Component;
@@ -92,16 +94,23 @@ public class CommandRegistry {
     /**
      * Creates a command registry.
      *
-     * @param plugin           Plugin instance
-     * @param resolverRegistry Argument resolver registry
-     * @param pipeline         Processor pipeline
+     * @param plugin                    Plugin instance
+     * @param resolverRegistry          Argument resolver registry
+     * @param pipeline                  Processor pipeline
+     * @param conditionRegistry         Named condition registry
+     * @param exceptionResolverRegistry Global exception resolver registry
      */
-    public CommandRegistry(JavaPlugin plugin, ArgumentResolverRegistry resolverRegistry, ProcessorPipeline pipeline) {
+    public CommandRegistry(
+            JavaPlugin plugin,
+            ArgumentResolverRegistry resolverRegistry,
+            ProcessorPipeline pipeline,
+            CommandConditionRegistry conditionRegistry,
+            ExceptionResolverRegistry exceptionResolverRegistry) {
         this.plugin = plugin;
         this.logger = plugin.getComponentLogger();
         // Initialize components
         this.argumentParser = new ArgumentParser(plugin, resolverRegistry);
-        this.commandExecutor = new CommandExecutor(plugin, pipeline, cooldownProcessor);
+        this.commandExecutor = new CommandExecutor(plugin, pipeline, cooldownProcessor, conditionRegistry, exceptionResolverRegistry);
         this.treeBuilder = new BrigadierTreeBuilder(resolverRegistry);
     }
 
@@ -122,8 +131,8 @@ public class CommandRegistry {
         Class<?> clazz = commandInstance.getClass();
 
         // Check @Command annotation
-        gloomlib.command.annotation.Command cmdAnnotation = clazz
-                .getAnnotation(gloomlib.command.annotation.Command.class);
+        gloomlib.command.api.annotation.Command cmdAnnotation = clazz
+                .getAnnotation(gloomlib.command.api.annotation.Command.class);
 
         if (cmdAnnotation == null) {
             throw new IllegalArgumentException(
@@ -160,8 +169,8 @@ public class CommandRegistry {
 
         // Register root alias commands
         for (Method method : methods.rootAliases) {
-            gloomlib.command.annotation.Command rootAliasAnnotation = method
-                    .getAnnotation(gloomlib.command.annotation.Command.class);
+            gloomlib.command.api.annotation.Command rootAliasAnnotation = method
+                    .getAnnotation(gloomlib.command.api.annotation.Command.class);
 
             LiteralArgumentBuilder<CommandSourceStack> aliasRoot = Commands.literal(rootAliasAnnotation.value());
             Permission methodPermission = method.getAnnotation(Permission.class);
@@ -194,7 +203,7 @@ public class CommandRegistry {
                 result.usage.add(method);
             } else if (method.isAnnotationPresent(SubCommand.class)) {
                 result.subCommands.add(method);
-            } else if (method.isAnnotationPresent(gloomlib.command.annotation.Command.class)) {
+            } else if (method.isAnnotationPresent(gloomlib.command.api.annotation.Command.class)) {
                 result.rootAliases.add(method);
             } else if (method.isAnnotationPresent(OnError.class)) {
                 OnError onError = method.getAnnotation(OnError.class);

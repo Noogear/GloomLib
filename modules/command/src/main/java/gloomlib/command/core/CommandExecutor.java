@@ -2,17 +2,22 @@ package gloomlib.command.core;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
-import gloomlib.command.annotation.ConsoleOnly;
-import gloomlib.command.annotation.Cooldown;
-import gloomlib.command.annotation.PlayerOnly;
-import gloomlib.command.context.CommandResult;
-import gloomlib.command.context.GloomCommandContext;
-import gloomlib.command.exception.CommandException;
-import gloomlib.command.message.CommandMessages;
-import gloomlib.command.processor.MethodInvoker;
-import gloomlib.command.processor.ProcessorPipeline;
-import gloomlib.command.processor.processors.CooldownProcessor;
-import gloomlib.command.util.MessageUtils;
+import gloomlib.command.api.annotation.Condition;
+import gloomlib.command.api.annotation.ConsoleOnly;
+import gloomlib.command.api.annotation.Cooldown;
+import gloomlib.command.api.annotation.PlayerOnly;
+import gloomlib.command.api.condition.CommandCondition;
+import gloomlib.command.api.condition.CommandConditionRegistry;
+import gloomlib.command.api.context.CommandResult;
+import gloomlib.command.api.context.GloomCommandContext;
+import gloomlib.command.api.exception.CommandException;
+import gloomlib.command.api.exception.ExceptionResolver;
+import gloomlib.command.api.exception.ExceptionResolverRegistry;
+import gloomlib.command.core.message.CommandMessages;
+import gloomlib.command.core.processor.MethodInvoker;
+import gloomlib.command.core.processor.ProcessorPipeline;
+import gloomlib.command.core.processor.CooldownProcessor;
+import gloomlib.command.core.util.MessageUtils;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -46,21 +51,29 @@ public class CommandExecutor {
     private final JavaPlugin plugin;
     private final ProcessorPipeline pipeline;
     private final CooldownProcessor cooldownProcessor;
+    private final CommandConditionRegistry conditionRegistry;
+    private final ExceptionResolverRegistry exceptionResolverRegistry;
 
     /**
      * Creates a command executor.
      *
-     * @param plugin            Plugin instance
-     * @param pipeline          Processor pipeline
-     * @param cooldownProcessor Cooldown processor
+     * @param plugin                  Plugin instance
+     * @param pipeline                Processor pipeline
+     * @param cooldownProcessor       Cooldown processor
+     * @param conditionRegistry       Named condition registry (may be null)
+     * @param exceptionResolverRegistry Global exception resolver registry (may be null)
      */
     public CommandExecutor(
             JavaPlugin plugin,
             ProcessorPipeline pipeline,
-            CooldownProcessor cooldownProcessor) {
+            CooldownProcessor cooldownProcessor,
+            CommandConditionRegistry conditionRegistry,
+            ExceptionResolverRegistry exceptionResolverRegistry) {
         this.plugin = plugin;
         this.pipeline = pipeline;
         this.cooldownProcessor = cooldownProcessor;
+        this.conditionRegistry = conditionRegistry;
+        this.exceptionResolverRegistry = exceptionResolverRegistry;
     }
 
     /**
@@ -131,6 +144,11 @@ public class CommandExecutor {
                 return Command.SINGLE_SUCCESS;
             }
 
+            // 1.5 Check Conditions (@Condition annotation)
+            if (!checkConditions(method, context)) {
+                return Command.SINGLE_SUCCESS;
+            }
+
             CommandSender sender = ctx.getSource().getSender();
 
             // 2. Check Execution Permission (@PlayerOnly / @ConsoleOnly)
@@ -178,6 +196,33 @@ public class CommandExecutor {
             return false;
         }
 
+        return true;
+    }
+
+    /**
+     * Runs all {@code @Condition} checks on the given method.
+     * Conditions are evaluated in declaration order; the first failure halts the chain.
+     *
+     * @param method  Command method (may have {@link Condition} annotation)
+     * @param context Command context
+     * @return {@code true} if all conditions pass (or no conditions declared)
+     */
+    private boolean checkConditions(Method method, GloomCommandContext context) {
+        Condition conditionAnnotation = method.getAnnotation(Condition.class);
+        if (conditionAnnotation == null || conditionRegistry == null) {
+            return true;
+        }
+        for (String name : conditionAnnotation.value()) {
+            CommandCondition condition = conditionRegistry.get(name);
+            if (condition == null) continue; // Unknown condition — skip
+            CommandCondition.ConditionResult result = condition.test(context);
+            if (!result.passed()) {
+                if (result.failureMessage() != null) {
+                    context.getSender().sendMessage(result.failureMessage());
+                }
+                return false;
+            }
+        }
         return true;
     }
 
@@ -259,6 +304,22 @@ public class CommandExecutor {
                 } catch (Exception handlerEx) {
                     LOGGER.debug("Error handler invocation failed", handlerEx);
                 }
+            }
+        }
+
+        // Try global exception resolvers
+        if (exceptionResolverRegistry != null) {
+            @SuppressWarnings("unchecked")
+            ExceptionResolver<Throwable> globalResolver =
+                    (ExceptionResolver<Throwable>) exceptionResolverRegistry.getResolver(
+                            (Class<Throwable>) cause.getClass());
+            if (globalResolver != null) {
+                try {
+                    globalResolver.resolve(new GloomCommandContext(ctx), cause);
+                } catch (Exception resolverEx) {
+                    LOGGER.debug("Global exception resolver failed", resolverEx);
+                }
+                return 0;
             }
         }
 
