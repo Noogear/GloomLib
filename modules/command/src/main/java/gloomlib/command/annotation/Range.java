@@ -32,7 +32,7 @@ public @interface Range {
      *
      * @return minimum value
      */
-    double min() default Double.MIN_VALUE;
+    double min() default -Double.MAX_VALUE;
 
     /**
      * Maximum value (inclusive).

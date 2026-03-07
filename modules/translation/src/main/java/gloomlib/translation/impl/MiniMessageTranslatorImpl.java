@@ -51,6 +51,10 @@ public final class MiniMessageTranslatorImpl implements MiniMessageTranslator {
 
     @Override
     public @Nullable MessageFormat translate(@NotNull String key, @NotNull Locale locale) {
+        Translator currentSource = this.source;
+        if (currentSource != null) {
+            return currentSource.translate(key, locale);
+        }
         return null;
     }
 

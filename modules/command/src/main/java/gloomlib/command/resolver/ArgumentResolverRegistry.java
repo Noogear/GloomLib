@@ -1,6 +1,6 @@
 package gloomlib.command.resolver;
 
-import gloomlib.command.resolver.registry.BrigadierResolver;
+import gloomlib.command.resolver.registry.EnumResolver;
 import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
 import org.jetbrains.annotations.Nullable;
 
@@ -124,9 +124,7 @@ public class ArgumentResolverRegistry {
     private <E extends Enum<E>> ArgumentResolver<?> createEnumResolver(Class<?> enumType) {
         Class<E> enumClass = (Class<E>) enumType;
 
-        ArgumentResolver<?> resolver = BrigadierResolver.of(
-                enumClass,
-                param -> com.mojang.brigadier.arguments.StringArgumentType.word());
+        ArgumentResolver<?> resolver = EnumResolver.of(enumClass);
 
         LOGGER.debug(MSG_ENUM_RESOLVER_CREATED, enumType.getSimpleName());
         return resolver;

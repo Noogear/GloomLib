@@ -4,7 +4,6 @@ import org.jetbrains.annotations.NotNull;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.Reader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -34,8 +33,8 @@ public final class TranslationParsers {
      * @throws IOException if reading fails
      */
     public static @NotNull Map<String, String> parseYaml(@NotNull Path path, @NotNull Charset charset) throws IOException {
-        try (InputStream in = Files.newInputStream(path)) {
-            Map<String, Object> data = YAML.get().load(in);
+        try (Reader reader = Files.newBufferedReader(path, charset)) {
+            Map<String, Object> data = YAML.get().load(reader);
             if (data == null) {
                 return Collections.emptyMap();
             }
