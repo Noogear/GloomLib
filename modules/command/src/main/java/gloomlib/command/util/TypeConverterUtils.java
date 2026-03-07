@@ -74,11 +74,11 @@ public final class TypeConverterUtils {
      * @return true if supported
      */
     public static boolean supportsPrimitiveConversion(Class<?> type) {
-        return type == String.class ||
-                type == Integer.class || type == int.class ||
-                type == Double.class || type == double.class ||
-                type == Float.class || type == float.class ||
-                type == Long.class || type == long.class ||
-                type == Boolean.class || type == boolean.class;
+        return type == String.class
+                || type == Integer.class || type == int.class
+                || type == Double.class || type == double.class
+                || type == Float.class || type == float.class
+                || type == Long.class || type == long.class
+                || type == Boolean.class || type == boolean.class;
     }
 }

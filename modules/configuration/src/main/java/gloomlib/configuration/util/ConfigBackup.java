@@ -6,8 +6,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -15,7 +15,7 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class ConfigBackup {
 
-    private static final SimpleDateFormat TIMESTAMP_FORMAT = new SimpleDateFormat("yyyyMMdd_HHmmss");
+    private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
     private static final String BACKUP_DIR_NAME = "backups";
 
     private ConfigBackup() {
@@ -54,7 +54,7 @@ public final class ConfigBackup {
                 return null;
             }
 
-            String timestamp = TIMESTAMP_FORMAT.format(new Date());
+            String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMAT);
             String suffix = (reason != null && !reason.isEmpty()) ? "_" + reason : "";
             String backupName = file.getName() + "." + timestamp + suffix + ".bak";
             File backupFile = new File(backupDir, backupName);

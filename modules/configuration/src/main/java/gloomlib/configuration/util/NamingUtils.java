@@ -1,5 +1,6 @@
 package gloomlib.configuration.util;
 
+import com.google.common.base.CaseFormat;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -12,7 +13,7 @@ public final class NamingUtils {
     }
 
     /**
-     * Converts camelCase to kebab-case.
+     * Converts camelCase to kebab-case using Guava's CaseFormat.
      * <p>
      * Examples: {@code maxRetries → max-retries}, {@code serverPort → server-port}
      *
@@ -21,6 +22,6 @@ public final class NamingUtils {
      */
     @NotNull
     public static String camelToKebab(@NotNull String camelCase) {
-        return camelCase.replaceAll("([a-z])([A-Z]+)", "$1-$2").toLowerCase();
+        return CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_HYPHEN, camelCase);
     }
 }

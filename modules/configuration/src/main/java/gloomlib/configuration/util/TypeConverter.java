@@ -1,5 +1,8 @@
 package gloomlib.configuration.util;
 
+import com.google.common.base.Defaults;
+import com.google.common.primitives.Primitives;
+
 import java.util.UUID;
 
 /**
@@ -34,7 +37,7 @@ public final class TypeConverter {
                 throw new IllegalArgumentException("Invalid UUID: " + s);
             }
         }
-        if (Number.class.isAssignableFrom(primitiveToWrapper(type)) || type.isPrimitive()) {
+        if (Number.class.isAssignableFrom(Primitives.wrap(type)) || type.isPrimitive()) {
             String s = raw.toString();
             try {
                 if (type == int.class || type == Integer.class) {
@@ -60,57 +63,16 @@ public final class TypeConverter {
     }
 
     /**
-     * Converts a primitive type to its wrapper class.
-     *
-     * @param type the primitive type
-     * @return the wrapper class
-     */
-    public static Class<?> primitiveToWrapper(Class<?> type) {
-        if (!type.isPrimitive()) {
-            return type;
-        }
-        if (type == int.class) {
-            return Integer.class;
-        }
-        if (type == double.class) {
-            return Double.class;
-        }
-        if (type == boolean.class) {
-            return Boolean.class;
-        }
-        if (type == long.class) {
-            return Long.class;
-        }
-        if (type == float.class) {
-            return Float.class;
-        }
-        return type;
-    }
-
-    /**
      * Gets the default value for a primitive type.
+     * Delegates to Guava's {@link Defaults#defaultValue(Class)}.
      *
      * @param type the primitive type
-     * @return the default value (0, false, etc.)
+     * @return the default value (0, false, etc.), or null for non-primitive types
      */
     public static Object getPrimitiveDefault(Class<?> type) {
-        if (type == int.class) {
-            return 0;
+        if (!type.isPrimitive()) {
+            return null;
         }
-        if (type == boolean.class) {
-            return false;
-        }
-        if (type == double.class) {
-            return 0.0;
-        }
-        if (type == long.class) {
-            return 0L;
-        }
-        if (type == float.class) {
-            return 0.0f;
-        }
-        return null;
+        return Defaults.defaultValue(type);
     }
 }
-
-

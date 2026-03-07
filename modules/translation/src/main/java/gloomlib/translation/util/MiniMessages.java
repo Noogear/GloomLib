@@ -1,9 +1,9 @@
 package gloomlib.translation.util;
 
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -50,23 +50,12 @@ public final class MiniMessages {
 
     /**
      * Extracts plain text from a component, ignoring formatting.
+     * Uses Adventure's PlainTextComponentSerializer for complete component support.
      *
      * @param component the component
      * @return the plain text content
      */
     public static @NotNull String toPlainText(@NotNull Component component) {
-        StringBuilder sb = new StringBuilder();
-        extractText(component, sb);
-        return sb.toString();
-    }
-
-    private static void extractText(Component component, StringBuilder sb) {
-        if (component instanceof TextComponent text) {
-            sb.append(text.content());
-        }
-        for (Component child : component.children()) {
-            extractText(child, sb);
-        }
+        return PlainTextComponentSerializer.plainText().serialize(component);
     }
 }
-
