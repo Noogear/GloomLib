@@ -183,6 +183,33 @@ public final class SourceView {
     }
 
     /**
+     * 生成 YAML 键值上下文片段，用于配置反序列化错误的诊断输出。
+     *
+     * <pre>
+     *   health: 'abc'
+     *   ↑ expected Integer, got String
+     * </pre>
+     *
+     * @param path         YAML 键路径（取最后一个键作为展示用 key）
+     * @param value        实际值（可为 null）
+     * @param expectedType 期望类型（可为 null）
+     * @return 两行上下文字符串
+     */
+    public static String yamlValueSnippet(java.util.List<String> path, Object value, Class<?> expectedType) {
+        String key = (path == null || path.isEmpty()) ? "<root>" : path.getLast();
+        String valPart = formatYamlValue(value);
+        String firstLine = "  " + key + ": " + valPart;
+        StringBuilder hint = new StringBuilder("  ↑");
+        if (expectedType != null) {
+            hint.append(" expected ").append(expectedType.getSimpleName());
+            if (value != null) {
+                hint.append(", got ").append(value.getClass().getSimpleName());
+            }
+        }
+        return firstLine + "\n" + hint;
+    }
+
+    /**
      * 将值格式化为 YAML 友好显示。
      * 列表显示为 {@code [a, b, c]}，嵌套 Map 显示为 {@code \{...\}}。
      */

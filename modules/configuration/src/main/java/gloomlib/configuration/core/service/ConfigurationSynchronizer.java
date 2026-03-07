@@ -2,6 +2,7 @@ package gloomlib.configuration.core.service;
 
 import gloomlib.configuration.api.ConfigurationPart;
 import gloomlib.configuration.api.annotation.Check;
+import gloomlib.configuration.api.exception.SerializationException;
 import gloomlib.configuration.api.annotation.Comment;
 import gloomlib.configuration.api.annotation.Inline;
 import gloomlib.configuration.api.annotation.Template;
@@ -65,6 +66,8 @@ public final class ConfigurationSynchronizer {
 
             try {
                 loadFieldFromSection(section, obj, meta, key, isDirty);
+            } catch (SerializationException e) {
+                ConfigurationLogger.warn(e.getMessage());
             } catch (Exception e) {
                 ConfigurationLogger.warn("Failed to load '" + key + "': " + e.getMessage());
             }
@@ -211,8 +214,10 @@ public final class ConfigurationSynchronizer {
 
     /**
      * Runs validation checks on field value.
+     *
+     * @throws SerializationException if validation fails, with {@link gloomlib.diagnostic.DiagnosticCategory#SEMANTIC} category
      */
-    private Object runCheck(FieldMeta meta, Object val) {
+    private Object runCheck(FieldMeta meta, Object val) throws SerializationException {
         Check annotation = meta.getAnnotation(Check.class);
         try {
             if (annotation.cls() != void.class && !annotation.method().isEmpty()) {
@@ -221,8 +226,13 @@ public final class ConfigurationSynchronizer {
             if (annotation.value() != Check.NoOpValidator.class) {
                 return runValidatorCheck(annotation, val);
             }
+        } catch (SerializationException e) {
+            throw e;
         } catch (Exception e) {
-            ConfigurationLogger.error("Validation failed: " + e.getMessage(), e);
+            throw SerializationException.validation(
+                    List.of(meta.key()),
+                    "Validation failed for '" + meta.key() + "': " + e.getMessage()
+            );
         }
         return val;
     }

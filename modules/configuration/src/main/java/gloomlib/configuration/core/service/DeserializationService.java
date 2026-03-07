@@ -103,13 +103,7 @@ public final class DeserializationService {
             if (e instanceof SerializationException) {
                 throw e;
             }
-            throw SerializationException.builder()
-                    .message("Failed to deserialize value")
-                    .path(nodePath)
-                    .expectedType(type)
-                    .actualValue(raw)
-                    .cause(e)
-                    .build();
+            throw SerializationException.wrap(nodePath, type, raw, e);
         }
     }
 

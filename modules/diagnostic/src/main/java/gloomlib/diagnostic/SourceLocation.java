@@ -46,6 +46,20 @@ public record SourceLocation(String source, int line, int column) {
         return new SourceLocation(source, line, col);
     }
 
+    /**
+     * 从 YAML 键路径列表构造位置描述符。
+     * 以点分路径作为 source，line/column 置为 0（{@link #toString()} 仅显示路径，不附加行列号）。
+     *
+     * <p>示例：{@code ["classes", "warrior", "health"]} → {@code classes.warrior.health}
+     *
+     * @param path YAML 键路径（e.g., ["database", "host"]）
+     * @return 对应的 SourceLocation，路径为空时返回 {@link #UNKNOWN}
+     */
+    public static SourceLocation ofYamlPath(java.util.List<String> path) {
+        if (path == null || path.isEmpty()) return UNKNOWN;
+        return new SourceLocation(String.join(".", path), 0, 0);
+    }
+
     @Override
     public String toString() {
         if (this == UNKNOWN) return "<unknown>";

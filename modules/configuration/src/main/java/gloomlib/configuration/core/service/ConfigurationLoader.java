@@ -4,13 +4,17 @@ import gloomlib.configuration.api.ConfigurationFile;
 import gloomlib.configuration.api.annotation.Header;
 import gloomlib.configuration.api.annotation.PostLoad;
 import gloomlib.configuration.api.annotation.PreLoad;
+import gloomlib.configuration.api.exception.LoadContext;
 import gloomlib.configuration.core.util.ConfigurationLogger;
 import gloomlib.configuration.core.util.ReflectionUtils;
+import gloomlib.configuration.core.util.YamlLineIndex;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -128,15 +132,16 @@ public final class ConfigurationLoader {
             throw new IllegalStateException("Config file does not exist: " + file);
         }
 
+        String content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
         YamlConfiguration yaml = new YamlConfiguration();
         try {
-            yaml.load(file);
+            yaml.loadFromString(content);
         } catch (Exception e) {
             ConfigurationLogger.error("Reload failed: " + e.getMessage(), e);
             throw e;
         }
 
-        FILE_CACHE.put(file.getAbsolutePath(), new FileCacheEntry(file.lastModified(), file.length(), yaml));
+        FILE_CACHE.put(file.getAbsolutePath(), new FileCacheEntry(file.lastModified(), file.length(), yaml, content));
         instance.setYaml(yaml);
         populateInstance(instance, yaml, file);
     }
@@ -159,7 +164,8 @@ public final class ConfigurationLoader {
 
         yaml.options().width(YAML_MAX_WIDTH);
         yaml.save(file);
-        FILE_CACHE.put(file.getAbsolutePath(), new FileCacheEntry(file.lastModified(), file.length(), yaml));
+        // saveToString() serialises from memory — no extra file read
+        FILE_CACHE.put(file.getAbsolutePath(), new FileCacheEntry(file.lastModified(), file.length(), yaml, yaml.saveToString()));
     }
 
     /**
@@ -176,14 +182,21 @@ public final class ConfigurationLoader {
             return cached.yaml;
         }
 
+        String content;
+        try {
+            content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+        } catch (java.io.IOException e) {
+            throw new java.io.IOException("Failed to read config file: " + file.getName(), e);
+        }
+
         YamlConfiguration yaml = new YamlConfiguration();
         try {
-            yaml.load(file);
+            yaml.loadFromString(content);
         } catch (InvalidConfigurationException e) {
             ConfigurationLogger.error("YAML Syntax Error in '" + file.getName() + "': " + e.getMessage(), e);
             throw e;
         }
-        FILE_CACHE.put(path, new FileCacheEntry(file.lastModified(), file.length(), yaml));
+        FILE_CACHE.put(path, new FileCacheEntry(file.lastModified(), file.length(), yaml, content));
         return yaml;
     }
 
@@ -200,11 +213,17 @@ public final class ConfigurationLoader {
         ReflectionUtils.runHooks(instance, PreLoad.class);
 
         AtomicBoolean isDirty = new AtomicBoolean(false);
+        FileCacheEntry entry = FILE_CACHE.get(file.getAbsolutePath());
+        LoadContext.set(file.getName(), YamlLineIndex.buildFromString(
+                entry != null ? entry.content() : ""
+        ));
         try {
             synchronizer.syncSection(yaml, instance, isDirty);
         } catch (Exception e) {
             ConfigurationLogger.error("Structure parse failed for '" + file.getName() + "': " + e.getMessage(), e);
             throw e;
+        } finally {
+            LoadContext.clear();
         }
 
         if (isDirty.get()) {
@@ -240,13 +259,7 @@ public final class ConfigurationLoader {
      * @param size         the file size
      * @param yaml         the loaded YAML configuration
      */
-    private record FileCacheEntry(long lastModified, long size, YamlConfiguration yaml) {
-        /**
-         * Checks if the cache entry is still fresh.
-         *
-         * @param file the file to check against
-         * @return true if the cache is fresh
-         */
+    private record FileCacheEntry(long lastModified, long size, YamlConfiguration yaml, String content) {
         boolean isFresh(File file) {
             return file.lastModified() == lastModified && file.length() == size;
         }

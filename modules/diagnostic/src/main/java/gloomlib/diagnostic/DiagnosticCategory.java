@@ -12,7 +12,10 @@ public enum DiagnosticCategory {
     TYPE("Type"),
 
     /** 语义阶段错误（未定义变量、参数数目不匹配、重复声明等）。 */
-    SEMANTIC("Semantic");
+    SEMANTIC("Semantic"),
+
+    /** 配置序列化/反序列化阶段错误。 */
+    CONFIG("Config");
 
     private final String label;
 

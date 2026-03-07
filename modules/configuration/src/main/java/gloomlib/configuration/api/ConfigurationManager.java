@@ -95,13 +95,8 @@ public class ConfigurationManager {
 
             return (T) deserializationService.deserialize(raw, rawType, genericType);
         } catch (Exception e) {
-            throw SerializationException.builder()
-                    .message("Failed to deserialize value")
-                    .path(nodePath)
-                    .expectedType(typeToken.getRawType())
-                    .actualValue(raw)
-                    .cause(e)
-                    .build();
+            if (e instanceof SerializationException se) throw se;
+            throw SerializationException.wrap(nodePath, typeToken.getRawType(), raw, e);
         }
     }
 

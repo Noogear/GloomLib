@@ -1,5 +1,10 @@
 package gloomlib.configuration.api.exception;
 
+import gloomlib.diagnostic.Diagnostic;
+import gloomlib.diagnostic.DiagnosticCategory;
+import gloomlib.diagnostic.DiagnosticException;
+import gloomlib.diagnostic.SourceLocation;
+import gloomlib.diagnostic.SourceView;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -8,219 +13,167 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Enhanced exception for configuration serialization/deserialization errors.
- * Provides detailed context including node path, expected type, actual value, and cause.
+ * Configuration serialization/deserialization exception integrating with
+ * the unified {@link DiagnosticException} system.
+ *
+ * <p>Produces structured error output including YAML key path, value context
+ * and type hint:
+ *
+ * <pre>
+ * [Type]     at classes.warrior.health — Type mismatch: expected Integer
+ *   health: 'abc'
+ *   ↑ expected Integer, got String
+ * </pre>
+ *
+ * <h3>工厂方法选择指南</h3>
+ * <table>
+ *   <tr><th>场景</th><th>方法</th><th>类别</th></tr>
+ *   <tr><td>YAML 值类型与 Java 类型不匹配</td><td>{@link #typeMismatch}</td><td>TYPE</td></tr>
+ *   <tr><td>必填字段缺失</td><td>{@link #missing}</td><td>SEMANTIC</td></tr>
+ *   <tr><td>带 cause 的通用反序列化失败</td><td>{@link #wrap}</td><td>CONFIG</td></tr>
+ *   <tr><td>@Check 注解校验失败</td><td>{@link #validation}</td><td>SEMANTIC</td></tr>
+ * </table>
  */
-public class SerializationException extends Exception {
-
-    /**
-     * Maximum length for displaying values in error messages.
-     * Values longer than this will be truncated with "..." suffix.
-     */
-    private static final int MAX_VALUE_DISPLAY_LENGTH = 100;
+public class SerializationException extends DiagnosticException {
 
     private final List<String> nodePath;
     private final Class<?> expectedType;
     private final Object actualValue;
-    private final String context;
 
-    /**
-     * Creates a SerializationException with detailed context.
-     *
-     * @param message      the error message
-     * @param nodePath     the path to the node that failed (e.g., ["classes", "warrior", "health"])
-     * @param expectedType the expected Java type
-     * @param actualValue  the actual value from YAML
-     * @param cause        the underlying exception
-     */
-    public SerializationException(
-            @NotNull String message,
+    private SerializationException(
+            @NotNull Diagnostic diagnostic,
             @Nullable List<String> nodePath,
             @Nullable Class<?> expectedType,
             @Nullable Object actualValue,
             @Nullable Throwable cause) {
-        super(buildMessage(message, nodePath, expectedType, actualValue), cause);
+        super(diagnostic, cause);
         this.nodePath = nodePath != null ? Collections.unmodifiableList(new ArrayList<>(nodePath)) : List.of();
         this.expectedType = expectedType;
         this.actualValue = actualValue;
-        this.context = buildContext(nodePath, expectedType, actualValue);
+    }
+
+    // ======================== 工厂方法 ========================
+
+    /**
+     * YAML 值类型与 Java 类型不匹配（例如字符串写入了 int 字段）。
+     * 类别：{@link DiagnosticCategory#TYPE}
+     *
+     * @param path     YAML 键路径
+     * @param expected 期望的 Java 类型
+     * @param actual   实际读取到的值
+     */
+    public static SerializationException typeMismatch(
+            @NotNull List<String> path,
+            @Nullable Class<?> expected,
+            @Nullable Object actual) {
+        String msg = "Type mismatch: expected " + (expected != null ? expected.getSimpleName() : "?");
+        String snippet = SourceView.yamlValueSnippet(path, actual, expected);
+        Diagnostic d = new Diagnostic(pathLocation(path), DiagnosticCategory.TYPE, msg, snippet);
+        return new SerializationException(d, path, expected, actual, null);
     }
 
     /**
-     * Creates a SerializationException with message and cause.
+     * YAML 中缺少必填字段或 section。
+     * 类别：{@link DiagnosticCategory#SEMANTIC}
      *
-     * @param message the error message
-     * @param cause   the underlying exception
+     * @param path      父 YAML 键路径
+     * @param fieldName 缺失的字段名
      */
-    public SerializationException(@NotNull String message, @Nullable Throwable cause) {
-        this(message, null, null, null, cause);
+    public static SerializationException missing(
+            @NotNull List<String> path,
+            @NotNull String fieldName) {
+        List<String> fullPath = appendedPath(path, fieldName);
+        String msg = "Missing required field: " + fieldName;
+        Diagnostic d = new Diagnostic(pathLocation(fullPath), DiagnosticCategory.SEMANTIC, msg, null);
+        return new SerializationException(d, fullPath, null, null, null);
     }
 
     /**
-     * Creates a SerializationException with message only.
+     * 带 cause 的通用反序列化失败，保留完整异常链。
+     * 类别：{@link DiagnosticCategory#CONFIG}
      *
-     * @param message the error message
+     * @param path     YAML 键路径
+     * @param expected 期望的 Java 类型（可为 null）
+     * @param actual   实际读取到的值（可为 null）
+     * @param cause    原始异常
      */
-    public SerializationException(@NotNull String message) {
-        this(message, null, null, null, null);
-    }
-
-    private static String buildMessage(String message, List<String> nodePath, Class<?> expectedType, Object actualValue) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("[Config Error] ").append(message);
-
-        if (nodePath != null && !nodePath.isEmpty()) {
-            sb.append("\n  At path: '").append(String.join(".", nodePath)).append("'");
-        }
-
-        if (expectedType != null) {
-            sb.append("\n  Expected type: ").append(expectedType.getSimpleName());
-        }
-
-        if (actualValue != null) {
-            sb.append("\n  Actual value: ").append(formatValue(actualValue));
-        }
-
-        return sb.toString();
-    }
-
-    private static String buildContext(List<String> nodePath, Class<?> expectedType, Object actualValue) {
-        StringBuilder sb = new StringBuilder();
-
-        if (nodePath != null && !nodePath.isEmpty()) {
-            sb.append("at path '").append(String.join(".", nodePath)).append("'");
-        }
-
-        if (expectedType != null) {
-            if (sb.length() > 0) sb.append(", ");
-            sb.append("expected ").append(expectedType.getSimpleName());
-        }
-
-        if (actualValue != null) {
-            if (sb.length() > 0) sb.append(", ");
-            sb.append("got ").append(formatValue(actualValue));
-        }
-
-        return sb.toString();
-    }
-
-    private static String formatValue(Object value) {
-        if (value == null) {
-            return "null";
-        }
-
-        String str = value.toString();
-        if (str.length() > MAX_VALUE_DISPLAY_LENGTH) {
-            return "'" + str.substring(0, MAX_VALUE_DISPLAY_LENGTH - 3) + "...'";
-        }
-
-        return "'" + str + "' (" + value.getClass().getSimpleName() + ")";
+    public static SerializationException wrap(
+            @NotNull List<String> path,
+            @Nullable Class<?> expected,
+            @Nullable Object actual,
+            @Nullable Throwable cause) {
+        String msg = (cause != null && cause.getMessage() != null && !cause.getMessage().isBlank())
+                ? cause.getMessage()
+                : "Deserialization failed";
+        String snippet = SourceView.yamlValueSnippet(path, actual, expected);
+        Diagnostic d = new Diagnostic(pathLocation(path), DiagnosticCategory.CONFIG, msg, snippet);
+        return new SerializationException(d, path, expected, actual, cause);
     }
 
     /**
-     * Creates a new builder for SerializationException.
+     * {@code @Check} 注解校验失败。
+     * 类别：{@link DiagnosticCategory#SEMANTIC}
      *
-     * @return a new builder instance
+     * @param path    YAML 键路径
+     * @param message 校验失败原因
      */
-    public static Builder builder() {
-        return new Builder();
+    public static SerializationException validation(
+            @NotNull List<String> path,
+            @NotNull String message) {
+        Diagnostic d = new Diagnostic(pathLocation(path), DiagnosticCategory.SEMANTIC, message, null);
+        return new SerializationException(d, path, null, null, null);
     }
 
-    /**
-     * Gets the node path where the error occurred.
-     *
-     * @return the node path (e.g., ["classes", "warrior", "health"])
-     */
+    // ======================== Internal helpers ========================
+
+    private static SourceLocation pathLocation(List<String> path) {
+        if (path == null || path.isEmpty()) return SourceLocation.UNKNOWN;
+
+        String filename = LoadContext.filename();
+        String dotPath = String.join(".", path);
+
+        if (filename != null) {
+            int line = LoadContext.lineFor(path);
+            // Encode both file:line and dotpath into the source string so that
+            // Diagnostic.format() prints: "at config.yml:15 (classes.warrior.health)"
+            String source = line > 0
+                    ? filename + ":" + line + " (" + dotPath + ")"
+                    : filename + " (" + dotPath + ")";
+            return new SourceLocation(source, 0, 0);
+        }
+
+        return SourceLocation.ofYamlPath(path);
+    }
+
+    private static List<String> appendedPath(List<String> path, String key) {
+        List<String> full = new ArrayList<>(path != null ? path : List.of());
+        full.add(key);
+        return full;
+    }
+
+    // ======================== Accessors ========================
+
+    /** YAML 键路径，例如 {@code ["classes", "warrior", "health"]}。 */
     @NotNull
     public List<String> getNodePath() {
         return nodePath;
     }
 
-    /**
-     * Gets the expected Java type.
-     *
-     * @return the expected type, or null if not applicable
-     */
+    /** 期望的 Java 类型，可为 null。 */
     @Nullable
     public Class<?> getExpectedType() {
         return expectedType;
     }
 
-    /**
-     * Gets the actual value from YAML.
-     *
-     * @return the actual value, or null if not applicable
-     */
+    /** YAML 中读取到的实际值，可为 null。 */
     @Nullable
     public Object getActualValue() {
         return actualValue;
     }
 
-    /**
-     * Gets the formatted context string.
-     *
-     * @return the context string (e.g., "at path 'classes.warrior.health', expected int, got 'invalid'")
-     */
-    @NotNull
-    public String getContext() {
-        return context;
-    }
-
-    /**
-     * Gets the node path as a dot-separated string.
-     *
-     * @return the path string (e.g., "classes.warrior.health")
-     */
+    /** 路径的点分隔形式，根路径返回 {@code "<root>"}。 */
     @NotNull
     public String getPathString() {
         return nodePath.isEmpty() ? "<root>" : String.join(".", nodePath);
-    }
-
-    /**
-     * Builder for creating SerializationException with fluent API.
-     */
-    public static class Builder {
-        private String message;
-        private List<String> nodePath;
-        private Class<?> expectedType;
-        private Object actualValue;
-        private Throwable cause;
-
-        public Builder message(@NotNull String message) {
-            this.message = message;
-            return this;
-        }
-
-        public Builder path(@NotNull List<String> nodePath) {
-            this.nodePath = nodePath;
-            return this;
-        }
-
-        public Builder path(@NotNull String... path) {
-            this.nodePath = List.of(path);
-            return this;
-        }
-
-        public Builder expectedType(@NotNull Class<?> type) {
-            this.expectedType = type;
-            return this;
-        }
-
-        public Builder actualValue(@Nullable Object value) {
-            this.actualValue = value;
-            return this;
-        }
-
-        public Builder cause(@Nullable Throwable cause) {
-            this.cause = cause;
-            return this;
-        }
-
-        public SerializationException build() {
-            if (message == null) {
-                throw new IllegalStateException("Message is required");
-            }
-            return new SerializationException(message, nodePath, expectedType, actualValue, cause);
-        }
     }
 }
