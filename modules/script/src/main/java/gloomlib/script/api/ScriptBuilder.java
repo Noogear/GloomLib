@@ -487,13 +487,13 @@ public final class ScriptBuilder {
      * @return 编译就绪且无拆装箱性能损耗的代理实例
      */
     public <T> T compileInterface(Class<T> expectedInterfaceType) {
-        ScriptUnit unit = new ScriptUnit(scriptId, payloadClazz.getName(), 0, vars.build(), flow.build());
+        ScriptUnit unit = new ScriptUnit(scriptId, payloadClazz.getName(), 0, vars.build(), flow.build(), false);
         return new CompilationPipeline().compileInterface(unit, expectedInterfaceType);
     }
 
 
     private CompiledScript buildCompiledScript(Class<?> expectedReturnType) {
-        ScriptUnit unit = new ScriptUnit(scriptId, payloadClazz.getName(), 0, vars.build(), flow.build());
+        ScriptUnit unit = new ScriptUnit(scriptId, payloadClazz.getName(), 0, vars.build(), flow.build(), false);
         return new CompilationPipeline().compile(unit, expectedReturnType);
     }
 

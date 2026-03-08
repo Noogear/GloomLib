@@ -43,6 +43,8 @@ public final class ScriptParser {
         String payloadClassStr = (String) root.get("event");
         int priority = ScriptParser.ValueParser.parseInteger(
                 String.valueOf(root.getOrDefault("priority", "0")), 0);
+        boolean ignoreCancelled = Boolean.parseBoolean(
+                String.valueOf(root.getOrDefault("ignore-cancelled", "true")));
 
         // 变量声明
         Map<String, String> varMap = (Map<String, String>) root.getOrDefault("variables", Map.of());
@@ -71,7 +73,7 @@ public final class ScriptParser {
         // 流程列表
         List<Map<String, Object>> flowList = (List<Map<String, Object>>) root.getOrDefault("flow", List.of());
 
-        return new ScriptUnit(idStr, payloadClassStr, priority, vars.build(), parseFlowNodes(flowList, idStr));
+        return new ScriptUnit(idStr, payloadClassStr, priority, vars.build(), parseFlowNodes(flowList, idStr), ignoreCancelled);
     }
 
     /**

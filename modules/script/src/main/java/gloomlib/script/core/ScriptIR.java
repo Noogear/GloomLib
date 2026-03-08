@@ -364,13 +364,14 @@ public final class ScriptIR {
             String payloadClass,
             int priority,
             ImmutableList<VarDecl> vars,
-            ImmutableList<FlowNode> flow) {
+            ImmutableList<FlowNode> flow,
+            boolean ignoreCancelled) {
         public ScriptUnit withFlow(ImmutableList<FlowNode> newFlow) {
-            return new ScriptUnit(id, payloadClass, priority, vars, newFlow);
+            return new ScriptUnit(id, payloadClass, priority, vars, newFlow, ignoreCancelled);
         }
 
         public ScriptUnit withVars(ImmutableList<VarDecl> newVars) {
-            return new ScriptUnit(id, payloadClass, priority, newVars, flow);
+            return new ScriptUnit(id, payloadClass, priority, newVars, flow, ignoreCancelled);
         }
     }
 

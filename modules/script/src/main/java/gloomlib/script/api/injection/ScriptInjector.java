@@ -55,8 +55,9 @@ public final class ScriptInjector {
 
         Consumer<Object> handler = compiled.newHandler();
         int priority = compiled.ir().priority();
+        boolean ignoreCancelled = compiled.ir().ignoreCancelled();
 
-        Object token = host.registerEvent(payloadClass, priority, handler);
+        Object token = host.registerEvent(payloadClass, priority, ignoreCancelled, handler);
         RegisteredScript reg = new RegisteredScript(token, payloadClass, handler);
         registered.add(reg);
         return reg;

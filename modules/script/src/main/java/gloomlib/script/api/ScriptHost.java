@@ -21,6 +21,22 @@ public interface ScriptHost {
     Object registerEvent(Class<?> payloadClass, int priority, Consumer<Object> handler);
 
     /**
+     * 向宿主环境注册事件监听，支持指定是否忽略已取消事件。
+     *
+     * <p>默认实现委托给三参重载（不过滤已取消事件），平台实现应覆盖此方法以充分利用
+     * 宿主事件系统提供的 {@code ignoreCancelled} 能力。</p>
+     *
+     * @param payloadClass    监听的荷载类
+     * @param priority        事件优先级
+     * @param ignoreCancelled 为 {@code true} 时，已被其他监听器取消的事件不会传入 handler
+     * @param handler         编译后生成的热回调函数
+     * @return 注册标识/凭证 token
+     */
+    default Object registerEvent(Class<?> payloadClass, int priority, boolean ignoreCancelled, Consumer<Object> handler) {
+        return registerEvent(payloadClass, priority, handler);
+    }
+
+    /**
      * 卸载由注册时返回的凭证代表的事件回调。
      *
      * @param registrationToken 之前 registerEvent 返回的标识
