@@ -4,6 +4,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.DoubleBinaryOperator;
 import java.util.function.DoubleUnaryOperator;
 import java.util.function.Function;
@@ -65,13 +66,25 @@ public enum MathFunction {
 
         @Override
         public double apply(double[] args) {
-            return Math.random() * args[0];
+            return ThreadLocalRandom.current().nextDouble() * args[0];
         }
 
         @Override
         public void emit(MethodVisitor mv, int argCount) {
-            // args[0] 已在栈顶；先调用 Math.random()，再 DMUL
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Math", "random", "()D", false);
+            // args[0] 已在栈顶
+            // 1. ThreadLocalRandom.current() → TLR 实例入栈
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC,
+                    "java/util/concurrent/ThreadLocalRandom",
+                    "current",
+                    "()Ljava/util/concurrent/ThreadLocalRandom;",
+                    false);
+            // 2. TLR.nextDouble() → 弹出 TLR，double 入栈
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
+                    "java/util/concurrent/ThreadLocalRandom",
+                    "nextDouble",
+                    "()D",
+                    false);
+            // 3. args[0] * random
             mv.visitInsn(Opcodes.DMUL);
         }
     };

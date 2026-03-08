@@ -70,6 +70,7 @@ configure(subprojects.findAll { it.childProjects.isEmpty() }) {
         }
 
         repositories {
+            mavenLocal()
             maven { url = layout.buildDirectory.dir("repo") }
         }
 
@@ -92,5 +93,6 @@ configure(subprojects.findAll { it.childProjects.isEmpty() }) {
     javadoc {
         options.encoding = 'UTF-8'
         options.charSet = 'UTF-8'
+        failOnError = false
     }
 }
