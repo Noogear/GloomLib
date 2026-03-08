@@ -6,6 +6,7 @@ import gloomlib.configuration.api.annotation.PostLoad;
 import gloomlib.configuration.api.annotation.PreLoad;
 import gloomlib.configuration.api.exception.LoadContext;
 import gloomlib.configuration.api.util.ConfigurationLogger;
+import gloomlib.configuration.api.util.FileCache;
 import gloomlib.configuration.core.util.ReflectionUtils;
 import gloomlib.configuration.core.util.YamlLineIndex;
 import org.bukkit.configuration.InvalidConfigurationException;
@@ -13,8 +14,6 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,17 +22,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Service for loading, saving, and reloading configuration files.
  * <p>
- * This service handles file I/O, caching, template processing, and lifecycle hooks.
+ * Uses {@link FileCache} for file-level freshness tracking and content caching,
+ * with a separate cache for parsed {@link YamlConfiguration} objects.
  * </p>
  */
 public final class ConfigurationLoader {
 
-    /**
-     * Maximum line width for YAML output.
-     * Lines longer than this will be wrapped to improve readability.
-     */
     private static final int YAML_MAX_WIDTH = 250;
-    private static final Map<String, FileCacheEntry> FILE_CACHE = new ConcurrentHashMap<>();
+    private static final FileCache FILE_CACHE = new FileCache();
+    private static final Map<String, YamlConfiguration> YAML_CACHE = new ConcurrentHashMap<>();
 
     private final ConfigurationSynchronizer synchronizer;
     private final VersionManager versionManager;
@@ -132,7 +129,14 @@ public final class ConfigurationLoader {
             throw new IllegalStateException("Config file does not exist: " + file);
         }
 
-        String content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+        String content;
+        try {
+            content = FILE_CACHE.read(file);
+        } catch (IOException e) {
+            ConfigurationLogger.error("Reload failed: " + e.getMessage(), e);
+            throw e;
+        }
+
         YamlConfiguration yaml = new YamlConfiguration();
         try {
             yaml.loadFromString(content);
@@ -141,7 +145,7 @@ public final class ConfigurationLoader {
             throw e;
         }
 
-        FILE_CACHE.put(file.getAbsolutePath(), new FileCacheEntry(file.lastModified(), file.length(), yaml, content));
+        YAML_CACHE.put(file.getAbsolutePath(), yaml);
         instance.setYaml(yaml);
         populateInstance(instance, yaml, file);
     }
@@ -164,8 +168,11 @@ public final class ConfigurationLoader {
 
         yaml.options().width(YAML_MAX_WIDTH);
         yaml.save(file);
-        // saveToString() serialises from memory — no extra file read
-        FILE_CACHE.put(file.getAbsolutePath(), new FileCacheEntry(file.lastModified(), file.length(), yaml, yaml.saveToString()));
+        // Update caches after save
+        String savedContent = yaml.saveToString();
+        FILE_CACHE.put(file,
+                new FileCache.Entry(file.lastModified(), file.length(), savedContent));
+        YAML_CACHE.put(file.getAbsolutePath(), yaml);
     }
 
     /**
@@ -177,16 +184,16 @@ public final class ConfigurationLoader {
      */
     YamlConfiguration loadYaml(File file) throws Exception {
         String path = file.getAbsolutePath();
-        FileCacheEntry cached = FILE_CACHE.get(path);
-        if (cached != null && cached.isFresh(file)) {
-            return cached.yaml;
+        if (FILE_CACHE.isFresh(file)) {
+            YamlConfiguration cached = YAML_CACHE.get(path);
+            if (cached != null) return cached;
         }
 
         String content;
         try {
-            content = Files.readString(file.toPath(), StandardCharsets.UTF_8);
-        } catch (java.io.IOException e) {
-            throw new java.io.IOException("Failed to read config file: " + file.getName(), e);
+            content = FILE_CACHE.read(file);
+        } catch (IOException e) {
+            throw new IOException("Failed to read config file: " + file.getName(), e);
         }
 
         YamlConfiguration yaml = new YamlConfiguration();
@@ -196,7 +203,7 @@ public final class ConfigurationLoader {
             ConfigurationLogger.error("YAML Syntax Error in '" + file.getName() + "': " + e.getMessage(), e);
             throw e;
         }
-        FILE_CACHE.put(path, new FileCacheEntry(file.lastModified(), file.length(), yaml, content));
+        YAML_CACHE.put(path, yaml);
         return yaml;
     }
 
@@ -213,9 +220,9 @@ public final class ConfigurationLoader {
         ReflectionUtils.runHooks(instance, PreLoad.class);
 
         AtomicBoolean isDirty = new AtomicBoolean(false);
-        FileCacheEntry entry = FILE_CACHE.get(file.getAbsolutePath());
+        String cachedContent = FILE_CACHE.getCachedContent(file);
         LoadContext.set(file.getName(), YamlLineIndex.buildFromString(
-                entry != null ? entry.content() : ""
+                cachedContent != null ? cachedContent : ""
         ));
         try {
             synchronizer.syncSection(yaml, instance, isDirty);
@@ -249,19 +256,6 @@ public final class ConfigurationLoader {
             if (!file.createNewFile()) {
                 throw new IOException("Failed to create file: " + file.getAbsolutePath());
             }
-        }
-    }
-
-    /**
-     * Cache entry for YAML files.
-     *
-     * @param lastModified the last modified timestamp
-     * @param size         the file size
-     * @param yaml         the loaded YAML configuration
-     */
-    private record FileCacheEntry(long lastModified, long size, YamlConfiguration yaml, String content) {
-        boolean isFresh(File file) {
-            return file.lastModified() == lastModified && file.length() == size;
         }
     }
 }

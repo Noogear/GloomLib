@@ -68,6 +68,8 @@ public final class ActionRegistry {
      * 扫描指定类中带 {@link ScriptAction} 注解的静态方法并注册。
      * <p>
      * 自动从方法签名推导 ASM owner/descriptor/invokeType/paramCount。
+     * 若参数类型为原始 {@link Enum}（"开放枚举"），必须同时标注 {@link EnumClass}
+     * 指定具体枚举类，否则抛出 {@link IllegalArgumentException}。
      */
     public void scanAndRegister(Class<?>... providerClasses) {
         for (Class<?> clazz : providerClasses) {
@@ -87,15 +89,30 @@ public final class ActionRegistry {
                 Class<?>[] paramTypes = method.getParameterTypes();
                 java.lang.reflect.Type[] genericTypes = method.getGenericParameterTypes();
                 com.google.common.reflect.TypeToken<?>[] genericParamTypes = new com.google.common.reflect.TypeToken<?>[paramCount];
+                Class<?>[] enumHints = new Class<?>[paramCount];
+                java.lang.reflect.Parameter[] params = method.getParameters();
                 for (int i = 0; i < paramCount; i++) {
                     genericParamTypes[i] = com.google.common.reflect.TypeToken.of(genericTypes[i]);
+                    EnumClass hint = params[i].getAnnotation(EnumClass.class);
+                    if (hint != null) {
+                        Preconditions.checkArgument(
+                                hint.value().isEnum(),
+                                "@EnumClass value must be a concrete enum class, but got '%s' on parameter %d of %s",
+                                hint.value().getSimpleName(), i, method);
+                        enumHints[i] = hint.value();
+                    } else if (paramTypes[i] == Enum.class) {
+                        throw new IllegalArgumentException(
+                                "Parameter " + i + " of @ScriptAction '" + actionName
+                                + "' has type Enum without @EnumClass annotation. "
+                                + "Add @EnumClass(<YourEnum>.class) to specify the concrete enum type.");
+                    }
                 }
                 Class<?> returnType = method.getReturnType();
 
                 register(actionName, new ActionDef(
                         owner, method.getName(), descriptor,
                         Opcodes.INVOKESTATIC, paramCount, paramTypes, genericParamTypes, returnType, true,
-                        annotation.consumesPayload()));
+                        annotation.consumesPayload(), enumHints));
             }
         }
     }
@@ -138,6 +155,42 @@ public final class ActionRegistry {
     }
 
     /**
+     * 标注一个方法参数，当参数类型为原始 {@link Enum}（即"开放枚举"）时，
+     * 告知框架在编译期使用的具体枚举类。
+     *
+     * <h3>使用场景</h3>
+     * <p>
+     * 当一个 Action 需要接受来自不同 Event 的不同枚举字段时，可将参数类型声明为
+     * {@code Enum<?>}，并为每个参数标注 {@code @EnumClass} 指定具体类。
+     * 框架在编译期（字节码生成阶段）读取此注解，发射 {@code GETSTATIC}，
+     * 因此运行期性能与具体枚举参数完全相同（零开销）。
+     *
+     * <h3>字面量参数</h3>
+     * <p>
+     * 若 YAML args 传入字面量（如 {@code ENDER_PEARL}），框架使用 {@code @EnumClass}
+     * 声明的类进行编译期合法性校验，并在字节码中发射精确的 {@code GETSTATIC}。
+     *
+     * <h3>变量引用参数</h3>
+     * <p>
+     * 若 YAML args 传入变量引用（如 {@code {event.cause}}），框架忽略 {@code @EnumClass}
+     * 直接加载变量（变量精确类型在编译期已知），注解此时仅作文档提示。
+     *
+     * <pre>{@code
+     * @ScriptAction("fireEvent")
+     * public static void fireEvent(
+     *     Event event,
+     *     @EnumClass(PlayerTeleportEvent.TeleportCause.class) Enum<?> cause
+     * ) { ... }
+     * }</pre>
+     */
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.PARAMETER)
+    public @interface EnumClass {
+        /** 该参数位置期望的具体枚举类（必须是 {@code isEnum() == true} 的类）。 */
+        Class<? extends Enum<?>> value();
+    }
+
+    /**
      * 标注一个静态方法为脚本动作。
      * <p>
      * 方法必须为 {@code public static}，注册表将从方法签名自动推导
@@ -173,6 +226,10 @@ public final class ActionRegistry {
 
     /**
      * 动作定义，存储目标方法的字节码调用信息。
+     *
+     * <p>{@code enumHints} 是与 {@code paramTypes} 等长的数组：
+     * 当某参数类型为原始 {@link Enum}（开放枚举）时，对应槽位存放由
+     * {@link EnumClass} 注解提供的具体枚举类；其余槽位为 {@code null}。
      */
     public record ActionDef(
             String owner,
@@ -184,24 +241,44 @@ public final class ActionRegistry {
             com.google.common.reflect.TypeToken<?>[] genericParamTypes,
             Class<?> returnType,
             boolean isBuiltin,
-            boolean consumesPayload) {
+            boolean consumesPayload,
+            Class<?>[] enumHints) {
 
         /**
-         * 简易构造（非 builtin，consumesPayload=true）。
+         * 简易构造（非 builtin，consumesPayload=true，无开放枚举参数）。
          */
         public ActionDef(String owner, String method, String descriptor, int invokeType, int paramCount,
                          Class<?>[] paramTypes, com.google.common.reflect.TypeToken<?>[] genericParamTypes,
                          Class<?> returnType) {
-            this(owner, method, descriptor, invokeType, paramCount, paramTypes, genericParamTypes, returnType, false, true);
+            this(owner, method, descriptor, invokeType, paramCount, paramTypes, genericParamTypes,
+                    returnType, false, true, new Class<?>[paramCount]);
         }
 
         /**
-         * 简易构造（指定 isBuiltin，consumesPayload=true）。
+         * 简易构造（指定 isBuiltin，consumesPayload=true，无开放枚举参数）。
          */
         public ActionDef(String owner, String method, String descriptor, int invokeType, int paramCount,
                          Class<?>[] paramTypes, com.google.common.reflect.TypeToken<?>[] genericParamTypes,
                          Class<?> returnType, boolean isBuiltin) {
-            this(owner, method, descriptor, invokeType, paramCount, paramTypes, genericParamTypes, returnType, isBuiltin, true);
+            this(owner, method, descriptor, invokeType, paramCount, paramTypes, genericParamTypes,
+                    returnType, isBuiltin, true, new Class<?>[paramCount]);
+        }
+
+        /**
+         * 简易构造（指定 isBuiltin + consumesPayload，无开放枚举参数）。
+         */
+        public ActionDef(String owner, String method, String descriptor, int invokeType, int paramCount,
+                         Class<?>[] paramTypes, com.google.common.reflect.TypeToken<?>[] genericParamTypes,
+                         Class<?> returnType, boolean isBuiltin, boolean consumesPayload) {
+            this(owner, method, descriptor, invokeType, paramCount, paramTypes, genericParamTypes,
+                    returnType, isBuiltin, consumesPayload, new Class<?>[paramCount]);
+        }
+
+        /**
+         * 返回指定参数位置的开放枚举提示类；若该参数非开放枚举则返回 {@code null}。
+         */
+        public Class<?> enumHint(int paramIndex) {
+            return (enumHints != null && paramIndex < enumHints.length) ? enumHints[paramIndex] : null;
         }
     }
 }

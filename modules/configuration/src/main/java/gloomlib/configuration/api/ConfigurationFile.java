@@ -135,4 +135,35 @@ public abstract class ConfigurationFile extends ConfigurationPart {
         }
         return ConfigBackup.backupAsync(file);
     }
+
+    // ── Smart Reload ─────────────────────────────────────────────────────
+
+    private transient long lastModified;
+    private transient long lastSize;
+
+    /**
+     * Reloads only if the file has been modified since the last reload.
+     * Tracks freshness via {@code lastModified} timestamp and file size.
+     *
+     * @return {@code true} if the file was changed and reloaded
+     */
+    public boolean smartReload() {
+        if (file == null || !file.exists()) return false;
+        if (file.lastModified() == lastModified && file.length() == lastSize) return false;
+        reload();
+        lastModified = file.lastModified();
+        lastSize = file.length();
+        return true;
+    }
+
+    /**
+     * Refreshes the internal timestamp cache without reloading.
+     * Call this after the initial {@link ConfigurationManager#load} to prime the freshness state.
+     */
+    public void refreshTimestamp() {
+        if (file != null && file.exists()) {
+            lastModified = file.lastModified();
+            lastSize = file.length();
+        }
+    }
 }

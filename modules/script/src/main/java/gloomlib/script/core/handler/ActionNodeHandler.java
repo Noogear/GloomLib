@@ -162,6 +162,21 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
                                     "Action '%s' expects an enum value of %s at argument %d, but got invalid constant '%s'.",
                                     action, reqType.getSimpleName(), methodParamIndex, argStr));
                 }
+            } else if (reqType == Enum.class) {
+                // 开放枚举参数（参数类型为原始 Enum，由 @EnumClass 提供具体类提示）
+                // 字面量路径：使用 hint 校验常量合法性；变量引用路径由 validateTypes 处理
+                Class<?> hint = def.enumHint(methodParamIndex);
+                if (hint != null && !ScriptIR.isSingleVar(argStr)) {
+                    try {
+                        @SuppressWarnings({"unchecked", "rawtypes", "unused"})
+                        Object ignored = Enum.valueOf((Class<Enum>) hint, argStr.toUpperCase());
+                    } catch (IllegalArgumentException e) {
+                        throw ctx.error(String.format(
+                                "Action '%s' expects an enum constant of %s (declared via @EnumClass) at argument %d,"
+                                        + " but got invalid value '%s'.",
+                                action, hint.getSimpleName(), methodParamIndex, argStr));
+                    }
+                }
             }
         }
 
@@ -346,7 +361,8 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
                         Class<?> castTarget = (narrowed != null && reqType.isAssignableFrom(narrowed))
                                 ? narrowed : reqType;
                         ASMUtils.emitLoadBoxed(mv, slot, varType);
-                        if (castTarget != Object.class) {
+                        // Enum.class 是所有枚举的公共父类，无需 CHECKCAST（等同于 Object.class 的逻辑）
+                        if (castTarget != Object.class && castTarget != Enum.class) {
                             mv.visitTypeInsn(Opcodes.CHECKCAST,
                                     org.objectweb.asm.Type.getInternalName(castTarget));
                         }
@@ -359,9 +375,10 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
                 // 纯点链引用 {entity.name} → 直接发射窄化属性加载（不经过 StringConcat）
                 String inner = arg.substring(1, arg.length() - 1);
                 BytecodeCompiler.emitNarrowedPropertyLoad(mv, ctx, inner);
-                // 若方法要求具体子类型则追加 CHECKCAST
+                // 若方法要求具体子类型则追加 CHECKCAST；
+                // Enum.class 是公共父类，等同于 Object.class，无需 CHECKCAST
                 Class<?> unwrappedReq = com.google.common.primitives.Primitives.unwrap(reqType);
-                if (!unwrappedReq.isPrimitive() && reqType != Object.class) {
+                if (!unwrappedReq.isPrimitive() && reqType != Object.class && reqType != Enum.class) {
                     mv.visitTypeInsn(Opcodes.CHECKCAST,
                             org.objectweb.asm.Type.getInternalName(reqType));
                 }
@@ -371,10 +388,13 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
                 BytecodeCompiler.emitStringConcat(mv, arg, ctx);
             } else {
                 Class<?> unwrappedType = com.google.common.primitives.Primitives.unwrap(reqType);
-                if (unwrappedType.isEnum()) {
-                    // 枚举自动寻址
-                    mv.visitFieldInsn(Opcodes.GETSTATIC, org.objectweb.asm.Type.getInternalName(unwrappedType),
-                            arg.toUpperCase(), org.objectweb.asm.Type.getDescriptor(unwrappedType));
+                // 解析有效枚举类：具体枚举参数直接使用，开放枚举（Enum.class）使用 @EnumClass 提示。
+                // 两种路径均发射 GETSTATIC，运行期零开销。
+                Class<?> effectiveEnumType = unwrappedType.isEnum() ? unwrappedType
+                        : (unwrappedType == Enum.class ? def.enumHint(methodParamIndex) : null);
+                if (effectiveEnumType != null) {
+                    mv.visitFieldInsn(Opcodes.GETSTATIC, org.objectweb.asm.Type.getInternalName(effectiveEnumType),
+                            arg.toUpperCase(), org.objectweb.asm.Type.getDescriptor(effectiveEnumType));
                 } else if (unwrappedType.isPrimitive()) {
                     // 直接发射原始类型常量，无装箱需求
                     Object parsed = unwrappedType == boolean.class

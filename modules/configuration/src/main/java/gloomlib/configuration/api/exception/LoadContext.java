@@ -1,6 +1,7 @@
 package gloomlib.configuration.api.exception;
 
 import gloomlib.configuration.core.util.YamlLineIndex;
+import gloomlib.diagnostic.SourceLocation;
 
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,34 @@ public final class LoadContext {
         Ctx ctx = CURRENT.get();
         if (ctx == null || path == null || path.isEmpty()) return 0;
         return ctx.lineIndex().getOrDefault(String.join(".", path), 0);
+    }
+
+    /**
+     * Creates a {@link SourceLocation} from the current loading context and YAML key path.
+     * Includes file name and line number when a context is active.
+     *
+     * @param path YAML key path
+     * @return SourceLocation with file:line and dotpath, or path-only fallback
+     */
+    public static SourceLocation location(List<String> path) {
+        if (path == null || path.isEmpty()) return SourceLocation.UNKNOWN;
+        String fn = filename();
+        String dotPath = String.join(".", path);
+        if (fn != null) {
+            int line = lineFor(path);
+            String source = line > 0
+                    ? fn + ":" + line + " (" + dotPath + ")"
+                    : fn + " (" + dotPath + ")";
+            return new SourceLocation(source, 0, 0);
+        }
+        return SourceLocation.ofYamlPath(path);
+    }
+
+    /**
+     * Varargs convenience overload of {@link #location(List)}.
+     */
+    public static SourceLocation location(String... pathParts) {
+        return location(List.of(pathParts));
     }
 
     private record Ctx(String filename, Map<String, Integer> lineIndex) {

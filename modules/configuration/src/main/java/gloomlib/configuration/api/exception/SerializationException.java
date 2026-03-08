@@ -121,22 +121,7 @@ public class SerializationException extends DiagnosticException {
 
 
     private static SourceLocation pathLocation(List<String> path) {
-        if (path == null || path.isEmpty()) return SourceLocation.UNKNOWN;
-
-        String filename = LoadContext.filename();
-        String dotPath = String.join(".", path);
-
-        if (filename != null) {
-            int line = LoadContext.lineFor(path);
-            // Encode both file:line and dotpath into the source string so that
-            // Diagnostic.format() prints: "at config.yml:15 (classes.warrior.health)"
-            String source = line > 0
-                    ? filename + ":" + line + " (" + dotPath + ")"
-                    : filename + " (" + dotPath + ")";
-            return new SourceLocation(source, 0, 0);
-        }
-
-        return SourceLocation.ofYamlPath(path);
+        return LoadContext.location(path);
     }
 
     private static List<String> appendedPath(List<String> path, String key) {

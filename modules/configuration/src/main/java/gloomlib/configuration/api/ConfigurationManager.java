@@ -143,12 +143,38 @@ public class ConfigurationManager {
         loader.save(instance, file);
     }
 
+    // ── Directory-based configuration loading ────────────────────────────────
 
+    /**
+     * Creates a {@link DirectoryConfiguration} that loads all YAML files from a directory
+     * and merges their top-level keys into a single {@code Map<String, V>}.
+     *
+     * <p>Call {@link DirectoryConfiguration#load()} after creation to trigger loading.</p>
+     *
+     * @param valueType the class of each top-level entry value
+     * @param directory the directory containing YAML files
+     * @param <V>       the value type
+     * @return a new directory configuration (not yet loaded)
+     */
+    public static <V> DirectoryConfiguration<V> loadDirectory(Class<V> valueType, File directory) {
+        return new DirectoryConfiguration<>(valueType, directory, null, synchronizer, deserializationService);
+    }
 
-
-
-
-
-
+    /**
+     * Creates a {@link DirectoryConfiguration} with a {@link ResourceProvider} for
+     * automatic default resource copying when the directory is empty.
+     *
+     * <p>Call {@link DirectoryConfiguration#load()} after creation to trigger loading.</p>
+     *
+     * @param valueType the class of each top-level entry value
+     * @param directory the directory containing YAML files
+     * @param resources provider for copying default resources from the JAR
+     * @param <V>       the value type
+     * @return a new directory configuration (not yet loaded)
+     */
+    public static <V> DirectoryConfiguration<V> loadDirectory(
+            Class<V> valueType, File directory, ResourceProvider resources) {
+        return new DirectoryConfiguration<>(valueType, directory, resources, synchronizer, deserializationService);
+    }
 }
 
