@@ -300,6 +300,145 @@ public final class ScriptBuilder {
 
 
     /**
+     * 追加一个 COLLECT 节点（集合谓词操作），检查集合变量中是否存在满足条件的元素。
+     * <p>
+     * 等价于 {@code exists} 操作：任一元素满足全部 match → 继续执行，否则 early return。
+     *
+     * @param variable     集合变量名（必须为 COLLECTION 类型）
+     * @param matchBuilder 子条件构建器
+     */
+    public ScriptBuilder collectExists(String variable, Consumer<MatchBuilder> matchBuilder) {
+        flow.add(buildCollectNode(variable, "exists", false, null, matchBuilder, null));
+        return this;
+    }
+
+    /**
+     * 追加一个 COLLECT exists 节点，带 on_fail 回调。
+     */
+    public ScriptBuilder collectExists(String variable, Consumer<MatchBuilder> matchBuilder,
+                                       Consumer<ScriptBuilder> onFail) {
+        flow.add(buildCollectNode(variable, "exists", false, null, matchBuilder, onFail));
+        return this;
+    }
+
+    /**
+     * 追加一个 COLLECT !exists 节点：集合中无任何元素满足条件时继续执行。
+     */
+    public ScriptBuilder collectNotExists(String variable, Consumer<MatchBuilder> matchBuilder) {
+        flow.add(buildCollectNode(variable, "exists", true, null, matchBuilder, null));
+        return this;
+    }
+
+    /**
+     * 追加一个 COLLECT count 节点：统计满足条件的元素数量，存入指定变量。
+     *
+     * @param variable     集合变量名
+     * @param store        结果存入的变量名（int 类型）
+     * @param matchBuilder 子条件构建器
+     */
+    public ScriptBuilder collectCount(String variable, String store, Consumer<MatchBuilder> matchBuilder) {
+        flow.add(buildCollectNode(variable, "count", false, store, matchBuilder, null));
+        return this;
+    }
+
+    /**
+     * 追加一个 COLLECT index 节点：查找首个匹配元素的索引（-1 表示未找到），存入指定变量。
+     *
+     * @param variable     集合变量名
+     * @param store        结果存入的变量名（int 类型）
+     * @param matchBuilder 子条件构建器
+     */
+    public ScriptBuilder collectIndex(String variable, String store, Consumer<MatchBuilder> matchBuilder) {
+        flow.add(buildCollectNode(variable, "index", false, store, matchBuilder, null));
+        return this;
+    }
+
+    /**
+     * 追加一个 COLLECT all 节点：全部元素满足条件时继续执行，否则 early return。
+     *
+     * @param variable     集合变量名
+     * @param matchBuilder 子条件构建器
+     */
+    public ScriptBuilder collectAll(String variable, Consumer<MatchBuilder> matchBuilder) {
+        flow.add(buildCollectNode(variable, "all", false, null, matchBuilder, null));
+        return this;
+    }
+
+    /**
+     * 追加一个 COLLECT all 节点，带 on_fail 回调。
+     */
+    public ScriptBuilder collectAll(String variable, Consumer<MatchBuilder> matchBuilder,
+                                    Consumer<ScriptBuilder> onFail) {
+        flow.add(buildCollectNode(variable, "all", false, null, matchBuilder, onFail));
+        return this;
+    }
+
+    /**
+     * 追加一个 COLLECT !all 节点：有任一元素不满足条件时继续执行。
+     */
+    public ScriptBuilder collectNotAll(String variable, Consumer<MatchBuilder> matchBuilder) {
+        flow.add(buildCollectNode(variable, "all", true, null, matchBuilder, null));
+        return this;
+    }
+
+    /**
+     * 追加一个 COLLECT find 节点：返回首个匹配元素本身（未找到则 null），存入指定变量。
+     *
+     * @param variable     集合变量名
+     * @param store        结果存入的变量名（Object 类型）
+     * @param matchBuilder 子条件构建器
+     */
+    public ScriptBuilder collectFind(String variable, String store, Consumer<MatchBuilder> matchBuilder) {
+        flow.add(buildCollectNode(variable, "find", false, store, matchBuilder, null));
+        return this;
+    }
+
+    /**
+     * 追加一个 COLLECT filter 节点：收集所有匹配元素为新 List，存入指定变量。
+     *
+     * @param variable     集合变量名
+     * @param store        结果存入的变量名（List 类型）
+     * @param matchBuilder 子条件构建器
+     */
+    public ScriptBuilder collectFilter(String variable, String store, Consumer<MatchBuilder> matchBuilder) {
+        flow.add(buildCollectNode(variable, "filter", false, store, matchBuilder, null));
+        return this;
+    }
+
+    private FlowNode buildCollectNode(String variable, String op, boolean negate,
+                                      String store, Consumer<MatchBuilder> matchBuilder,
+                                      Consumer<ScriptBuilder> onFail) {
+        MatchBuilder mb = new MatchBuilder();
+        matchBuilder.accept(mb);
+
+        ImmutableMap.Builder<String, Object> attrs = ImmutableMap.builder();
+        attrs.put("variable", variable);
+        attrs.put("collectOp", op.toUpperCase());
+        attrs.put("collectNegate", negate);
+        attrs.put("matchConditions", mb.conditions.build());
+        if (store != null) {
+            IRType returnType = switch (op.toUpperCase()) {
+                case "FIND" -> IRType.OBJECT;
+                case "FILTER" -> IRType.COLLECTION;
+                default -> IRType.INT;
+            };
+            attrs.put("store", store);
+            attrs.put("returnType", returnType);
+        }
+
+        if (onFail != null) {
+            ScriptBuilder failBuilder = new ScriptBuilder(payloadClazz);
+            failBuilder.id(this.scriptId + "-fail");
+            failBuilder.actionRegistry = this.actionRegistry;
+            onFail.accept(failBuilder);
+            attrs.put("onFailNodes", failBuilder.flow.build());
+        }
+
+        return new FlowNode(FlowNodeType.COLLECT, attrs.build());
+    }
+
+
+    /**
      * 追加一个要触发的动作节点（Action）。
      *
      * @param actionName 在 ActionRegistry 中已经注册好的 @ScriptAction 的名字（比如
@@ -572,6 +711,58 @@ public final class ScriptBuilder {
 
         private ImmutableMap<String, ImmutableList<FlowNode>> buildCases() {
             return cases.build();
+        }
+    }
+
+    /**
+     * COLLECT 节点的 match 子条件构建器。
+     */
+    public static final class MatchBuilder {
+        private final ImmutableList.Builder<FlowNode> conditions = ImmutableList.builder();
+
+        private MatchBuilder() {
+        }
+
+        /**
+         * 添加一个子条件。
+         *
+         * @param op    操作符（如 "contains", ">", "=="）
+         * @param value 比对值
+         */
+        public MatchBuilder match(String op, Object value) {
+            conditions.add(buildMatchCondition(op, value));
+            return this;
+        }
+
+        /**
+         * 添加一个无值的子条件（如 "null"）。
+         */
+        public MatchBuilder match(String op) {
+            conditions.add(buildMatchCondition(op, null));
+            return this;
+        }
+
+        private static FlowNode buildMatchCondition(String op, Object value) {
+            validateOperator(op);
+            ImmutableMap.Builder<String, Object> attrs = ImmutableMap.builder();
+            attrs.put("op", op);
+
+            double numericValue = 0.0;
+            if (value != null) {
+                Object normalizedValue = value;
+                if (value instanceof String s) {
+                    Object parsed = ScriptParser.ValueParser.parseNumber(s);
+                    if (parsed instanceof Number) {
+                        normalizedValue = parsed;
+                    }
+                }
+                attrs.put("value", normalizedValue);
+                attrs.put("valueType", ScriptParser.ValueParser.inferType(normalizedValue));
+                if (normalizedValue instanceof Number n) {
+                    numericValue = n.doubleValue();
+                }
+            }
+            return new FlowNode(FlowNodeType.CHECK, attrs.build(), numericValue, 0);
         }
     }
 }

@@ -10,6 +10,7 @@ import gloomlib.script.core.optimizer.ScriptOptimizer;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -463,15 +464,12 @@ public final class CompilationPipeline {
             }
 
             // 自动为所有会产生局部变量的节点（如 Action, Math 等 VariableProducer）开辟存储槽位，免去显式声明的麻烦
+            Map<String, ScriptIR.IRType> producerTypes = new LinkedHashMap<>();
             for (ScriptIR.FlowNode node : unit.flow()) {
                 ScriptIR.FlowNodeHandler handler = node.type().handler();
                 if (handler instanceof ScriptIR.VariableProducer producer) {
                     String store = producer.getProducedVariable(node);
-                    if (store != null) {
-                        if (!registeredVars.add(store)) {
-                            throw ScriptCompileException.create(unit.id(), node,
-                                    "Duplicate store variable name: '" + store + "'");
-                        }
+                    if (store != null && !registeredVars.contains(store)) {
                         ScriptIR.IRType type;
                         if (node.type() == gloomlib.script.core.ScriptIR.FlowNodeType.ACTION) {
                             type = node.getRequiredAttr("returnType");
@@ -481,9 +479,23 @@ public final class CompilationPipeline {
                             type = node.getAttrOrDefault("returnType",
                                     gloomlib.script.core.ScriptIR.IRType.OBJECT);
                         }
-                        builder.addVar(store, type);
+                        // 多路径类型合并：同名变量在不同分支中产出时，取宽类型
+                        producerTypes.merge(store, type, ScriptIR.IRType::merge);
                     }
                 }
+                // COLLECT 的 store 是副作用产出，不可内联，但需要分配槽位
+                if (node.type() == ScriptIR.FlowNodeType.COLLECT) {
+                    String store = node.getAttrOrDefault("store", null);
+                    if (store != null && !registeredVars.contains(store)) {
+                        ScriptIR.IRType storeType = node.getAttrOrDefault("returnType",
+                                ScriptIR.IRType.INT);
+                        producerTypes.merge(store, storeType, ScriptIR.IRType::merge);
+                    }
+                }
+            }
+            for (Map.Entry<String, ScriptIR.IRType> entry : producerTypes.entrySet()) {
+                registeredVars.add(entry.getKey());
+                builder.addVar(entry.getKey(), entry.getValue());
             }
 
             return builder.build();

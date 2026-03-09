@@ -8,6 +8,7 @@ import gloomlib.script.core.ScriptIR.ConditionEmitter;
 import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.FlowNodeType;
 import gloomlib.script.core.ScriptIR.NodeCapability;
+import gloomlib.script.core.ScriptIR.NodeMutator;
 import gloomlib.script.core.codegen.ASMUtils;
 import gloomlib.script.core.parser.ScriptParser;
 import org.objectweb.asm.Label;
@@ -28,7 +29,8 @@ import java.util.Map;
  * 支持任意嵌套：ANY 内可包含 ALL，ALL 内可包含 ANY。
  */
 public final class CompositeCheckHandler implements gloomlib.script.core.ScriptIR.FlowNodeHandler,
-        gloomlib.script.core.ScriptIR.NodeMutator {
+        gloomlib.script.core.ScriptIR.NodeMutator,
+        gloomlib.script.core.ScriptIR.ConstantFolder {
 
     static {
         FlowNodeType.registerHandler(FlowNodeType.ANY, CompositeCheckHandler::new);
@@ -131,8 +133,8 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
         }
 
         // 全部不满足 → on_fail + 提前退出（返回类型和方法签名一致）
-        emitOnFail(node, mv, ctx);
-        CheckNodeHandler.emitEarlyReturn(mv, ctx);
+        ASMUtils.emitOnFail(node, mv, ctx);
+        ASMUtils.emitEarlyReturn(mv, ctx);
 
         mv.visitLabel(passLabel);
         // any 内部快照不传出到父级
@@ -181,8 +183,8 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
 
         // 失败路径
         mv.visitLabel(failLabel);
-        emitOnFail(node, mv, ctx);
-        CheckNodeHandler.emitEarlyReturn(mv, ctx);
+        ASMUtils.emitOnFail(node, mv, ctx);
+        ASMUtils.emitEarlyReturn(mv, ctx);
 
         mv.visitLabel(continueLabel);
         // all 内部快照不传出到父级
@@ -266,12 +268,28 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
         }
     }
 
-    private void emitOnFail(FlowNode node, MethodVisitor mv, CompilationContext ctx) {
-        ImmutableList<FlowNode> onFailNodes = node.getAttrOrDefault("onFailNodes", null);
-        if (onFailNodes != null) {
-            for (FlowNode failNode : onFailNodes) {
-                failNode.type().handler().emit(failNode, mv, ctx);
+    @Override
+    public Boolean evaluateFold(FlowNode node, CompilationContext ctx) {
+        ImmutableList<FlowNode> children = node.getAttrOrDefault("children", null);
+        if (children == null || children.isEmpty()) return null;
+
+        boolean isAny = node.type() == FlowNodeType.ANY;
+        if (isAny) {
+            // ANY: 任一子条件恒真 → ANY 恒真；全部恒假 → ANY 恒假
+            boolean allDead = true;
+            for (FlowNode child : children) {
+                if (child.hasFlag(FlowNode.FLAG_FOLDED)) return Boolean.TRUE;
+                if (!child.hasFlag(FlowNode.FLAG_DEAD)) allDead = false;
             }
+            return allDead ? Boolean.FALSE : null;
+        } else {
+            // ALL: 任一子条件恒假 → ALL 恒假；全部恒真 → ALL 恒真
+            boolean allFolded = true;
+            for (FlowNode child : children) {
+                if (child.hasFlag(FlowNode.FLAG_DEAD)) return Boolean.FALSE;
+                if (!child.hasFlag(FlowNode.FLAG_FOLDED)) allFolded = false;
+            }
+            return allFolded ? Boolean.TRUE : null;
         }
     }
 
@@ -297,24 +315,35 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
 
     @Override
     public FlowNode mapChildren(FlowNode node, java.util.function.Function<FlowNode, FlowNode> mapper) {
-        ImmutableList<FlowNode> children = node.getAttrOrDefault("children", null);
-        if (children == null) {
-            return node;
-        }
+        FlowNode result = node;
 
-        boolean changed = false;
-        ImmutableList.Builder<FlowNode> remapped = ImmutableList.builder();
-        for (FlowNode child : children) {
-            FlowNode mappedChild = mapper.apply(child);
-            remapped.add(mappedChild);
-            if (mappedChild != child) {
-                changed = true;
+        ImmutableList<FlowNode> children = node.getAttrOrDefault("children", null);
+        if (children != null) {
+            ImmutableList<FlowNode> mapped = children.stream()
+                    .map(mapper).collect(ImmutableList.toImmutableList());
+            if (!mapped.equals(children)) {
+                result = result.withAttr("children", mapped);
             }
         }
 
-        if (changed) {
-            return node.withAttr("children", remapped.build());
+        ImmutableList<FlowNode> onFailNodes = node.getAttrOrDefault("onFailNodes", null);
+        if (onFailNodes != null) {
+            ImmutableList<FlowNode> mapped = onFailNodes.stream()
+                    .map(mapper).collect(ImmutableList.toImmutableList());
+            if (!mapped.equals(onFailNodes)) {
+                result = result.withAttr("onFailNodes", mapped);
+            }
         }
-        return node;
+
+        return result;
+    }
+
+    @Override
+    public FlowNode filterChildren(FlowNode node, java.util.function.Predicate<FlowNode> keep,
+                                   java.util.function.Function<FlowNode, FlowNode> mapper) {
+        FlowNode result = node;
+        result = NodeMutator.filterAttr(result, "children", keep, mapper);
+        result = NodeMutator.filterAttr(result, "onFailNodes", keep, mapper);
+        return result;
     }
 }

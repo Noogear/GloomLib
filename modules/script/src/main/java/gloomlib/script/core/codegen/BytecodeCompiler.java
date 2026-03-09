@@ -193,17 +193,28 @@ public final class BytecodeCompiler implements Opcodes {
 
     /**
      * 发射窄化点链属性读取，并返回最终 accessor 的真实返回类型（供调用方决定 invokedynamic 描述符）。
+     * <p>
+     * 支持安全访问模式 {@code entity?.name}：变量为 null 时短路返回 null，
+     * 而非抛出 NPE 或编译异常。生成的字节码等价于：
+     * <pre>{@code
+     *   var v = ALOAD slot;
+     *   if (v == null) { push null; goto end; }
+     *   CHECKCAST + accessor chain...
+     *   end:
+     * }</pre>
      *
      * @return 末端 accessor 的 {@code TypeToken}；若无 accessor 则返回 {@code TypeToken.of(narrowed)}
      */
     public static com.google.common.reflect.TypeToken<?> emitNarrowedPropertyLoad(
             MethodVisitor mv, CompilationContext ctx, String part) {
-        String[] kv = ScriptIR.splitDotted(part);
+        boolean safeAccess = ScriptIR.isSafeAccess(part);
+        String normalized = ScriptIR.normalizeDotted(part);
+        String[] kv = ScriptIR.splitDotted(normalized);
         String varName = kv[0];
         String propPath = kv[1];
 
         Class<?> narrowed = ctx.getNarrowedClass(varName);
-        if (narrowed == null) {
+        if (narrowed == null && !safeAccess) {
             throw gloomlib.script.api.ScriptCompileException.parse(
                     "Dotted template {" + part + "}: variable '" + varName +
                             "' has no narrowed type. Add 'check: op: instanceof' before this action.");
@@ -211,6 +222,39 @@ public final class BytecodeCompiler implements Opcodes {
 
         int slot = ctx.getSlot(varName);
         mv.visitVarInsn(ALOAD, slot);
+
+        if (safeAccess) {
+            // 安全访问：null 短路 → push null, goto end
+            org.objectweb.asm.Label nullLabel = new org.objectweb.asm.Label();
+            org.objectweb.asm.Label endLabel = new org.objectweb.asm.Label();
+            mv.visitInsn(DUP);
+            mv.visitJumpInsn(IFNULL, nullLabel);
+
+            if (narrowed != null) {
+                mv.visitTypeInsn(CHECKCAST, org.objectweb.asm.Type.getInternalName(narrowed));
+            }
+
+            List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
+                    ScriptParser.PropertyResolver.resolveAccessors(
+                            com.google.common.reflect.TypeToken.of(narrowed != null ? narrowed : ctx.payloadClass()),
+                            propPath);
+            for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : accessors) {
+                acr.emitLoad(mv);
+            }
+            mv.visitJumpInsn(GOTO, endLabel);
+
+            // null 分支：弹掉栈顶 null，推一个 null
+            mv.visitLabel(nullLabel);
+            mv.visitInsn(POP);
+            mv.visitInsn(ACONST_NULL);
+
+            mv.visitLabel(endLabel);
+
+            return accessors.isEmpty()
+                    ? com.google.common.reflect.TypeToken.of(narrowed != null ? narrowed : Object.class)
+                    : accessors.get(accessors.size() - 1).returnType();
+        }
+
         mv.visitTypeInsn(CHECKCAST, org.objectweb.asm.Type.getInternalName(narrowed));
 
         List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
@@ -225,6 +269,7 @@ public final class BytecodeCompiler implements Opcodes {
     }
 
     private static boolean isTemplatePart(String fullTemplate, String part) {
+        // 支持安全访问语法：{entity?.name} → part = "entity?.name"
         return fullTemplate.contains("{" + part + "}");
     }
 

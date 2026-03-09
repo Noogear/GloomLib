@@ -240,6 +240,22 @@ public final class ASMUtils {
         }
     }
 
+    /**
+     * 根据数组组件的基本类型返回对应的 array load opcode（如 IALOAD、DALOAD）。
+     * 非基本类型返回 AALOAD。
+     */
+    public static int arrayLoadOpcode(Class<?> componentType) {
+        if (componentType == int.class) return Opcodes.IALOAD;
+        if (componentType == long.class) return Opcodes.LALOAD;
+        if (componentType == double.class) return Opcodes.DALOAD;
+        if (componentType == float.class) return Opcodes.FALOAD;
+        if (componentType == boolean.class) return Opcodes.BALOAD;
+        if (componentType == byte.class) return Opcodes.BALOAD;
+        if (componentType == short.class) return Opcodes.SALOAD;
+        if (componentType == char.class) return Opcodes.CALOAD;
+        return Opcodes.AALOAD;
+    }
+
 
     /**
      * 发射：obj.hashCode()
@@ -298,5 +314,46 @@ public final class ASMUtils {
             case Opcodes.IFNONNULL -> Opcodes.IFNULL;
             default -> throw new IllegalArgumentException("Cannot invert opcode: " + opcode);
         };
+    }
+
+    /**
+     * 根据方法目标返回类型发射早退 return 指令。
+     * void 方法发 RETURN；Object/Array 方法先 ACONST_NULL 再 ARETURN；原生类型方法发对应零值。
+     */
+    public static void emitEarlyReturn(MethodVisitor mv, gloomlib.script.core.CompilationContext ctx) {
+        org.objectweb.asm.Type ret = ctx.targetReturnType();
+        if (ret.getSort() == org.objectweb.asm.Type.VOID) {
+            mv.visitInsn(Opcodes.RETURN);
+        } else if (ret.getSort() == org.objectweb.asm.Type.OBJECT
+                || ret.getSort() == org.objectweb.asm.Type.ARRAY) {
+            mv.visitInsn(Opcodes.ACONST_NULL);
+            mv.visitInsn(Opcodes.ARETURN);
+        } else if (ret.getSort() == org.objectweb.asm.Type.DOUBLE) {
+            mv.visitInsn(Opcodes.DCONST_0);
+            mv.visitInsn(Opcodes.DRETURN);
+        } else if (ret.getSort() == org.objectweb.asm.Type.LONG) {
+            mv.visitInsn(Opcodes.LCONST_0);
+            mv.visitInsn(Opcodes.LRETURN);
+        } else if (ret.getSort() == org.objectweb.asm.Type.FLOAT) {
+            mv.visitInsn(Opcodes.FCONST_0);
+            mv.visitInsn(Opcodes.FRETURN);
+        } else {
+            mv.visitInsn(Opcodes.ICONST_0);
+            mv.visitInsn(Opcodes.IRETURN);
+        }
+    }
+
+    /**
+     * 发射 on_fail 动作列表（供所有带 on_fail 语义的 FlowNodeHandler 共用）。
+     */
+    public static void emitOnFail(gloomlib.script.core.ScriptIR.FlowNode node, MethodVisitor mv,
+                                  gloomlib.script.core.CompilationContext ctx) {
+        com.google.common.collect.ImmutableList<gloomlib.script.core.ScriptIR.FlowNode> onFailNodes =
+                node.getAttrOrDefault("onFailNodes", null);
+        if (onFailNodes != null) {
+            for (gloomlib.script.core.ScriptIR.FlowNode failNode : onFailNodes) {
+                failNode.type().handler().emit(failNode, mv, ctx);
+            }
+        }
     }
 }

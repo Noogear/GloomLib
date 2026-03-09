@@ -17,12 +17,69 @@ import java.util.*;
  * 脚本核心优化器。
  * <p>
  * 优化按序执行：常量折叠 → 值域传播 → 死代码消除 → 分支重排 → 变量下沉与内联预估 → 变量缓存推算
- * 此外包含分析型 Pass：常量提取、活跃变量分析。
+ * 此后执行混合型 Pass（常量提取）和分析型 Pass（活跃变量分析）。
  * <p>
  * 使用 {@link FlowNode#flags} 位掩码存储优化标记，实现零装箱分配。
+ * <p>
+ * 每个 Pass 实现为 {@link OptimizationPass} 接口，支持独立组合和扩展。
+ *
+ * <h3>Pass 设计规范</h3>
+ * <ol>
+ *   <li><b>返回值契约</b>：如果 Pass 修改了 IR 结构（包括节点属性），
+ *       必须返回修改后的 {@link ScriptUnit}，不得丢弃。
+ *       建议优先使用方法引用 {@code this::methodName}，避免手动 lambda 丢失返回值。</li>
+ *   <li><b>子节点遍历</b>：引用计数和分析型 Pass 必须通过 {@link ScriptIR.NodeTraverser}
+ *       递归遍历子节点（ANY/ALL/COLLECT 等复合结构），与 {@code liveVarAnalysis} 保持一致。
+ *       不递归会导致子节点中的变量引用被遗漏。</li>
+ *   <li><b>变量收集</b>：统计变量引用次数时，应使用 {@code getAllConsumedVariables()}
+ *       而非 {@code getConsumedVariable()}，以覆盖 {@code valueNode} 等次级引用源。</li>
+ * </ol>
  */
 @SuppressWarnings("null")
 public final class ScriptOptimizer {
+
+    // ---- 转换型 Pass 实例（按执行顺序排列） ----
+
+    private final OptimizationPass constantFoldingPass = this::constantFolding;
+    private final OptimizationPass valueRangePropagationPass = this::valueRangePropagation;
+    private final OptimizationPass deadCodeEliminationPass = this::deadCodeElimination;
+    private final OptimizationPass branchReorderingPass = this::branchReordering;
+    private final OptimizationPass variableInliningPass = this::variableInlining;
+    private final OptimizationPass variableCachingPass = this::variableCaching;
+
+    // ---- 混合型 Pass（修改 IR 结构 + 写入 ctx）——必须返回修改后的 unit ----
+
+    private final OptimizationPass constantHoistingPass = this::constantHoisting;
+
+    // ---- 分析型 Pass 实例（结果写入 ctx，不改变返回的 IR 结构） ----
+
+    private final OptimizationPass liveVarAnalysisPass = (unit, ctx) -> {
+        liveVarAnalysis(unit, ctx);
+        return unit;
+    };
+
+    /**
+     * 转换型 Pass 列表（按执行顺序）。外部可通过此列表实现自定义 Pass 注入。
+     */
+    private final List<OptimizationPass> transformPasses = List.of(
+            constantFoldingPass,
+            valueRangePropagationPass,
+            deadCodeEliminationPass,
+            branchReorderingPass,
+            variableInliningPass,
+            variableCachingPass
+    );
+
+    /**
+     * 分析型 Pass 列表（结果存入 ctx，供 BytecodeCompiler 使用）。
+     * <p>
+     * 注意：constantHoisting 虽然也写入 ctx，但因为同时修改了节点属性（_hoistedField），
+     * 已归入混合型 Pass。任何新增的同时修改 IR 和 ctx 的 Pass 都应放入 transformPasses。
+     */
+    private final List<OptimizationPass> analysisPasses = List.of(
+            constantHoistingPass,
+            liveVarAnalysisPass
+    );
 
     /**
      * 判断节点是否为"纯守卫"——无外部副作用、仅作条件分支控制的节点。
@@ -39,53 +96,104 @@ public final class ScriptOptimizer {
 
 
     public ScriptUnit optimize(ScriptUnit unit, CompilationContext ctx) {
-        unit = constantFolding(unit, ctx);
-        unit = valueRangePropagation(unit, ctx);
-        unit = deadCodeElimination(unit, ctx);
-
-        unit = branchReordering(unit, ctx);
-        unit = variableInlining(unit, ctx); // ★ 内联剔除独立声明的 Action 且单次使用的 store
-        unit = variableCaching(unit, ctx);
-
-        // 分析 Pass（结果存入 ctx，供 BytecodeCompiler 使用）
-        constantHoisting(unit, ctx);
-        liveVarAnalysis(unit, ctx);
+        for (OptimizationPass pass : transformPasses) {
+            unit = pass.apply(unit, ctx);
+        }
+        for (OptimizationPass pass : analysisPasses) {
+            unit = pass.apply(unit, ctx);
+        }
         return unit;
     }
 
 
     private ScriptUnit constantFolding(ScriptUnit unit, CompilationContext ctx) {
+        return unit.withFlow(foldNodes(unit.flow(), ctx));
+    }
+
+    /**
+     * 递归常量折叠：对节点列表执行折叠，并通过 {@link ScriptIR.NodeMutator}
+     * 递归进入 ANY/ALL/COLLECT 等复合节点的子树。
+     */
+    private ImmutableList<FlowNode> foldNodes(ImmutableList<FlowNode> nodes, CompilationContext ctx) {
         ImmutableList.Builder<FlowNode> optimized = ImmutableList.builder();
-        for (FlowNode node : unit.flow()) {
-            if (node.type().handler() instanceof ScriptIR.ConstantFolder folder) {
-                Boolean result = folder.evaluateFold(node, ctx);
+        for (FlowNode node : nodes) {
+            FlowNode processed = foldNodeRecursive(node, ctx);
+            if (processed.type().handler() instanceof ScriptIR.ConstantFolder folder) {
+                Boolean result = folder.evaluateFold(processed, ctx);
                 if (result == null) {
-                    optimized.add(node);
+                    optimized.add(processed);
                 } else if (result) {
-                    optimized.add(node.withFlag(FlowNode.FLAG_FOLDED));
+                    optimized.add(processed.withFlag(FlowNode.FLAG_FOLDED));
                 } else {
+                    // 恒假复合节点：保留 onFail 动作（若存在）
+                    ImmutableList<FlowNode> onFail = processed.getAttrOrDefault("onFailNodes", null);
+                    if (onFail != null) {
+                        optimized.addAll(onFail);
+                    }
                     optimized.add(FlowNode.earlyReturn());
                     break;
                 }
             } else {
-                optimized.add(node);
+                optimized.add(processed);
             }
         }
-        return unit.withFlow(optimized.build());
+        return optimized.build();
+    }
+
+    private FlowNode foldNodeRecursive(FlowNode node, CompilationContext ctx) {
+        if (node.type().handler() instanceof ScriptIR.NodeMutator mutator) {
+            return mutator.mapChildren(node, child -> {
+                FlowNode folded = foldNodeRecursive(child, ctx);
+                if (folded.type().handler() instanceof ScriptIR.ConstantFolder folder) {
+                    Boolean result = folder.evaluateFold(folded, ctx);
+                    if (result != null) {
+                        if (result) {
+                            return folded.withFlag(FlowNode.FLAG_FOLDED);
+                        }
+                        // 恒假且无 onFail 时才标记 FLAG_DEAD
+                        ImmutableList<FlowNode> onFail = folded.getAttrOrDefault("onFailNodes", null);
+                        if (onFail == null || onFail.isEmpty()) {
+                            return folded.withFlag(FlowNode.FLAG_DEAD);
+                        }
+                    }
+                }
+                return folded;
+            });
+        }
+        return node;
     }
 
 
     private ScriptUnit deadCodeElimination(ScriptUnit unit, CompilationContext ctx) {
+        return unit.withFlow(eliminateDeadNodes(unit.flow()));
+    }
+
+    /**
+     * 递归死代码消除：移除 FLAG_FOLDED 节点，并通过 {@link ScriptIR.NodeMutator}
+     * 递归清理 ANY/ALL/COLLECT 等复合节点子树中被折叠的节点。
+     */
+    private ImmutableList<FlowNode> eliminateDeadNodes(ImmutableList<FlowNode> nodes) {
         ImmutableList.Builder<FlowNode> optimized = ImmutableList.builder();
-        for (FlowNode node : unit.flow()) {
+        for (FlowNode node : nodes) {
             if (node.hasFlag(FlowNode.FLAG_FOLDED))
                 continue;
-            optimized.add(node);
+            optimized.add(dceNodeRecursive(node));
             if (node.type().handler().capabilities().contains(NodeCapability.TERMINATES_FLOW)) {
                 break;
             }
         }
-        return unit.withFlow(optimized.build());
+        return optimized.build();
+    }
+
+    private FlowNode dceNodeRecursive(FlowNode node) {
+        if (node.type().handler() instanceof ScriptIR.NodeMutator mutator) {
+            return mutator.filterChildren(node, this::isLiveChild, this::dceNodeRecursive);
+        }
+        return node;
+    }
+
+    private boolean isLiveChild(FlowNode child) {
+        return !child.hasFlag(FlowNode.FLAG_FOLDED) && !child.hasFlag(FlowNode.FLAG_DEAD);
     }
 
 
@@ -99,9 +207,18 @@ public final class ScriptOptimizer {
      */
     private ScriptUnit valueRangePropagation(ScriptUnit unit, CompilationContext ctx) {
         Map<String, ValueRange> ranges = new HashMap<>();
+        return unit.withFlow(propagateRanges(unit.flow(), ranges));
+    }
+
+    /**
+     * 递归值域传播：在节点列表上执行 VRP，并通过 {@link ScriptIR.NodeMutator}
+     * 递归进入 ANY/ALL/COLLECT 子树，将外层已知约束传递给内层 CHECK。
+     */
+    private ImmutableList<FlowNode> propagateRanges(ImmutableList<FlowNode> nodes,
+                                                    Map<String, ValueRange> ranges) {
         ImmutableList.Builder<FlowNode> optimized = ImmutableList.builder();
 
-        for (FlowNode node : unit.flow()) {
+        for (FlowNode node : nodes) {
             // 常量 MATH 产出 → 向后续 CHECK 注入精确值域约束
             if (node.type().handler() instanceof ScriptIR.VariableProducer producer) {
                 String var = producer.getProducedVariable(node);
@@ -111,16 +228,40 @@ public final class ScriptOptimizer {
                     ranges.put(var, new ValueRange(d, d, constVal, true));
                 }
             }
-            if (node.type().handler() instanceof ScriptIR.RangePropagator propagator) {
-                String var = propagator.getConstrainedVariable(node);
+
+            // 递归进入复合节点子树，共享当前值域快照
+            FlowNode processed = vrpNodeRecursive(node, ranges);
+
+            // 递归 VRP 后，检查复合节点整体是否可折叠（基于子节点 FLAG_DEAD/FLAG_FOLDED 标记）
+            if (processed.type().handler() instanceof ScriptIR.ConstantFolder folder
+                    && !(processed.type().handler() instanceof ScriptIR.RangePropagator)) {
+                Boolean foldResult = folder.evaluateFold(processed, null);
+                if (foldResult != null) {
+                    if (foldResult) {
+                        optimized.add(processed.withFlag(FlowNode.FLAG_FOLDED));
+                        continue;
+                    } else {
+                        // 恒假复合节点：保留 onFail 动作（若存在），再插入 earlyReturn
+                        ImmutableList<FlowNode> onFail = processed.getAttrOrDefault("onFailNodes", null);
+                        if (onFail != null) {
+                            optimized.addAll(onFail);
+                        }
+                        optimized.add(FlowNode.earlyReturn());
+                        break;
+                    }
+                }
+            }
+
+            if (processed.type().handler() instanceof ScriptIR.RangePropagator propagator) {
+                String var = propagator.getConstrainedVariable(processed);
                 if (var != null) {
                     ValueRange range = ranges.getOrDefault(var, ValueRange.UNCONSTRAINED);
 
                     // 尝试用现有约束折叠
-                    Boolean foldResult = propagator.tryFoldWithRange(node, range);
+                    Boolean foldResult = propagator.tryFoldWithRange(processed, range);
                     if (foldResult != null) {
                         if (foldResult) {
-                            optimized.add(node.withFlag(FlowNode.FLAG_FOLDED));
+                            optimized.add(processed.withFlag(FlowNode.FLAG_FOLDED));
                             continue;
                         } else {
                             optimized.add(FlowNode.earlyReturn());
@@ -129,12 +270,49 @@ public final class ScriptOptimizer {
                     }
 
                     // 未折叠 → 更新约束
-                    ranges.put(var, propagator.updateRange(node, range));
+                    ranges.put(var, propagator.updateRange(processed, range));
                 }
             }
-            optimized.add(node);
+            optimized.add(processed);
         }
-        return unit.withFlow(optimized.build());
+        return optimized.build();
+    }
+
+    private FlowNode vrpNodeRecursive(FlowNode node, Map<String, ValueRange> outerRanges) {
+        if (node.type().handler() instanceof ScriptIR.NodeMutator mutator) {
+            // 子树使用外层约束的只读快照（子树内的约束不回传到外层）
+            Map<String, ValueRange> childRanges = new HashMap<>(outerRanges);
+            return mutator.mapChildren(node, child -> {
+                FlowNode processed = vrpNodeRecursive(child, childRanges);
+                if (processed.type().handler() instanceof ScriptIR.RangePropagator propagator) {
+                    String var = propagator.getConstrainedVariable(processed);
+                    if (var != null) {
+                        ValueRange range = childRanges.getOrDefault(var, ValueRange.UNCONSTRAINED);
+                        Boolean foldResult = propagator.tryFoldWithRange(processed, range);
+                        if (foldResult != null) {
+                            return foldResult ? processed.withFlag(FlowNode.FLAG_FOLDED)
+                                              : processed.withFlag(FlowNode.FLAG_DEAD);
+                        }
+                        childRanges.put(var, propagator.updateRange(processed, range));
+                    }
+                } else if (processed.type().handler() instanceof ScriptIR.ConstantFolder folder) {
+                    // 内层复合节点（ANY/ALL）子条件被递归标记后，评估整体折叠
+                    Boolean foldResult = folder.evaluateFold(processed, null);
+                    if (foldResult != null) {
+                        if (foldResult) {
+                            return processed.withFlag(FlowNode.FLAG_FOLDED);
+                        }
+                        // 恒假且无 onFail 时才标记 FLAG_DEAD（有 onFail 的复合节点不能在 1:1 mapper 中折叠）
+                        ImmutableList<FlowNode> onFail = processed.getAttrOrDefault("onFailNodes", null);
+                        if (onFail == null || onFail.isEmpty()) {
+                            return processed.withFlag(FlowNode.FLAG_DEAD);
+                        }
+                    }
+                }
+                return processed;
+            });
+        }
+        return node;
     }
 
 
@@ -253,6 +431,28 @@ public final class ScriptOptimizer {
         }
     }
 
+    /**
+     * 递归统计节点树中所有变量引用次数。
+     * <p>
+     * 与 {@link #collectLiveVars} 保持相同的递归策略：
+     * 使用 {@code getAllConsumedVariables} + {@link ScriptIR.NodeTraverser} 遍历子节点。
+     */
+    private void countVariableRefs(FlowNode node, Multiset<String> refs) {
+        if (node.type().handler() instanceof ScriptIR.VariableConsumer consumer) {
+            for (String var : consumer.getAllConsumedVariables(node)) {
+                if (var != null) {
+                    refs.add(var);
+                }
+            }
+        }
+
+        if (node.type().handler() instanceof ScriptIR.NodeTraverser traverser) {
+            for (FlowNode child : traverser.traverseChildren(node)) {
+                countVariableRefs(child, refs);
+            }
+        }
+    }
+
 
     /**
      * 指令下沉与窥孔内联融合优化 (Variable Sinking & Inlining)
@@ -272,12 +472,17 @@ public final class ScriptOptimizer {
         }
 
         // 1. 全域使用次数分析 (含预声明的 vars 与中间态)
-        Multiset<String> refs = HashMultiset.create();
+        //    规范：deepRefs 递归覆盖子节点 + getAllConsumedVariables，用于安全判断。
+        //    topLevelSinkableRefs 仅统计顶层 getConsumedVariable()，用于判断可下沉性。
+        //    属性下沉条件 = deepRefs == 1 && topLevelSinkableRefs == 1（唯一引用且可通过 inlineAction 应用）。
+        Multiset<String> deepRefs = HashMultiset.create();
+        Multiset<String> topLevelSinkableRefs = HashMultiset.create();
         for (FlowNode node : oldFlow) {
+            countVariableRefs(node, deepRefs);
             if (node.type().handler() instanceof ScriptIR.VariableConsumer consumer) {
                 String var = consumer.getConsumedVariable(node);
                 if (var != null) {
-                    refs.add(var);
+                    topLevelSinkableRefs.add(var);
                 }
             }
         }
@@ -292,8 +497,8 @@ public final class ScriptOptimizer {
                 optimizedVars.add(v);
                 continue;
             }
-            if (refs.count(v.name()) == 1) {
-                // 单次引用，从 CSE 数组中踢出，转入待下放池
+            if (topLevelSinkableRefs.count(v.name()) == 1 && deepRefs.count(v.name()) == 1) {
+                // 唯一引用且该引用位于可下沉的顶层消费者 → 从 CSE 数组中踢出，转入待下放池
                 sinkingVars.put(v.name(), v);
             } else {
                 optimizedVars.add(v);
@@ -312,7 +517,7 @@ public final class ScriptOptimizer {
             // 生产者的动作调用会被完全跳过（减少不必要的副作用执行）。
             if (current.type().handler() instanceof ScriptIR.VariableProducer producer) {
                 String storeTarget = producer.getProducedVariable(current);
-                if (storeTarget != null && refs.count(storeTarget) == 1) {
+                if (storeTarget != null && deepRefs.count(storeTarget) == 1) {
                     // 前瞻扫描：跳过纯守卫节点，寻找唯一的消费者
                     int consumerIdx = -1;
                     for (int j = i + 1; j < oldFlow.size() && j <= i + 8; j++) {

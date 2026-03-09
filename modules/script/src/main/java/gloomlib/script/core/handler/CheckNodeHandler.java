@@ -11,6 +11,7 @@ import gloomlib.script.core.ScriptIR.FlowNodeType;
 import gloomlib.script.core.ScriptIR.IRType;
 import gloomlib.script.core.ScriptIR.NodeCapability;
 import gloomlib.script.core.codegen.ASMUtils;
+import gloomlib.script.core.codegen.BytecodeCompiler;
 import gloomlib.script.core.codegen.CheckOpEmitters;
 import gloomlib.script.core.optimizer.ScriptOptimizer;
 import gloomlib.script.core.parser.ScriptParser;
@@ -41,34 +42,6 @@ public final class CheckNodeHandler
     }
 
     public static void init() {
-    }
-
-    /**
-     * 根据上下文目标返回类型发射早退 return 指令。
-     * <p>
-     * void 方法发 RETURN；Object/Array 方法先 ACONST_NULL 再 ARETURN；原生类型方法发对应零值。
-     */
-    static void emitEarlyReturn(MethodVisitor mv, CompilationContext ctx) {
-        org.objectweb.asm.Type ret = ctx.targetReturnType();
-        if (ret.getSort() == org.objectweb.asm.Type.VOID) {
-            mv.visitInsn(Opcodes.RETURN);
-        } else if (ret.getSort() == org.objectweb.asm.Type.OBJECT
-                || ret.getSort() == org.objectweb.asm.Type.ARRAY) {
-            mv.visitInsn(Opcodes.ACONST_NULL);
-            mv.visitInsn(Opcodes.ARETURN);
-        } else if (ret.getSort() == org.objectweb.asm.Type.DOUBLE) {
-            mv.visitInsn(Opcodes.DCONST_0);
-            mv.visitInsn(Opcodes.DRETURN);
-        } else if (ret.getSort() == org.objectweb.asm.Type.LONG) {
-            mv.visitInsn(Opcodes.LCONST_0);
-            mv.visitInsn(Opcodes.LRETURN);
-        } else if (ret.getSort() == org.objectweb.asm.Type.FLOAT) {
-            mv.visitInsn(Opcodes.FCONST_0);
-            mv.visitInsn(Opcodes.FRETURN);
-        } else {
-            mv.visitInsn(Opcodes.ICONST_0);
-            mv.visitInsn(Opcodes.IRETURN);
-        }
     }
 
     /**
@@ -189,10 +162,10 @@ public final class CheckNodeHandler
         mv.visitJumpInsn(jumpOp, continueLabel);
 
         // 分支失败处理：执行所有的 on_fail 动作
-        emitOnFail(node, mv, ctx);
+        ASMUtils.emitOnFail(node, mv, ctx);
 
         // 根据方法的实际返回类型决定 return 指令（避免 void RETURN 在 Object 方法中非法）
-        emitEarlyReturn(mv, ctx);
+        ASMUtils.emitEarlyReturn(mv, ctx);
         mv.visitLabel(continueLabel);
 
         // instanceof 成功路径：将变量窄化为目标类型，供后续节点使用。
@@ -240,17 +213,10 @@ public final class CheckNodeHandler
             String sinkingProp = conditionAction.getAttrOrDefault("_sinking_property", null);
             if (sinkingProp != null) {
                 int tempSlot = ctx.nextSlot();
-                mv.visitVarInsn(Opcodes.ALOAD, 1);
-                java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors = gloomlib.script.core.parser.ScriptParser.PropertyResolver
-                        .resolveAccessors(
-                                com.google.common.reflect.TypeToken.of(ctx.payloadClass()), sinkingProp);
-                for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : accessors) {
-                    acr.emitLoad(mv);
-                }
+                BytecodeCompiler.emitSunkPropertyLoad(mv, ctx, sinkingProp);
 
                 IRType exactType = conditionAction.getRequiredAttr("returnType");
-                int storeOp = ASMUtils.storeOpcode(exactType);
-                mv.visitVarInsn(storeOp, tempSlot);
+                mv.visitVarInsn(ASMUtils.storeOpcode(exactType), tempSlot);
 
                 jumpOp = emitSinkingCheck(mv, op, tempSlot, exactType, node, ctx);
             } else {
@@ -275,18 +241,6 @@ public final class CheckNodeHandler
             jumpOp = ASMUtils.invertJump(jumpOp);
 
         return jumpOp;
-    }
-
-    /**
-     * 发射 on_fail 动作列表。供 {@link CompositeCheckHandler} 复用。
-     */
-    void emitOnFail(FlowNode node, MethodVisitor mv, CompilationContext ctx) {
-        ImmutableList<FlowNode> onFailNodes = node.getAttrOrDefault("onFailNodes", null);
-        if (onFailNodes != null) {
-            for (FlowNode failNode : onFailNodes) {
-                failNode.type().handler().emit(failNode, mv, ctx);
-            }
-        }
     }
 
     private int emitSinkingCheck(MethodVisitor mv, CheckOp op, int slot, IRType type, FlowNode node,

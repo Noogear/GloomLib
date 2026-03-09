@@ -21,9 +21,9 @@ public final class ScriptIR {
 
     /**
      * 模板字符串占位符正则。
-     * 支持普通变量 {@code {hp}} 和窄化点链 {@code {entity.name}}。
+     * 支持普通变量 {@code {hp}}、窄化点链 {@code {entity.name}} 和安全访问 {@code {entity?.name}}。
      */
-    private static final Pattern TEMPLATE_PATTERN = Pattern.compile("\\{([\\w.]+)}");
+    private static final Pattern TEMPLATE_PATTERN = Pattern.compile("\\{([\\w]+(?:[?]?\\.[\\w]+)*)}");
 
 
     private ScriptIR() {
@@ -31,21 +31,21 @@ public final class ScriptIR {
 
     /**
      * 判断字符串是否为纯单变量引用，如 "{dmg}"（全部内容就是一个占位符，无其他文本）。
-     * 注意：点链引用 "{entity.name}" 不属于单变量。
+     * 注意：点链引用 "{entity.name}" 和安全访问 "{entity?.name}" 不属于单变量。
      */
     public static boolean isSingleVar(String s) {
         if (s == null || s.length() <= 2) return false;
         if (s.charAt(0) != '{' || s.charAt(s.length() - 1) != '}') return false;
         if (s.indexOf('{', 1) != -1) return false;
-        // 含点号的是点链引用，不是单变量
+        // 含点号或问号的是点链引用/安全访问，不是单变量
         String inner = s.substring(1, s.length() - 1);
-        return !inner.contains(".");
+        return !inner.contains(".") && !inner.contains("?");
     }
 
     /**
-     * 判断字符串是否为纯单点链引用，如 "{entity.name}"。
+     * 判断字符串是否为纯单点链引用，如 "{entity.name}" 或安全访问 "{entity?.name}"。
      * <p>
-     * 与 {@link #isSingleVar} 互斥：副内容包含 {@code .} 的为点链引用，不包含的为单变量。
+     * 与 {@link #isSingleVar} 互斥：内容包含 {@code .} 的为点链引用，不包含的为单变量。
      */
     public static boolean isDottedSingleRef(String s) {
         if (s == null || s.length() <= 2) return false;
@@ -64,19 +64,35 @@ public final class ScriptIR {
     }
 
     /**
-     * 判断模板 part 是否为窄化点链引用，如 {@code "entity.name"}。
+     * 判断模板 part 是否为窄化点链引用，如 {@code "entity.name"} 或 {@code "entity?.name"}。
      */
     public static boolean isDottedPart(String part) {
         return part != null && part.contains(".");
     }
 
     /**
+     * 判断点链引用是否为安全访问模式（含 {@code ?.}）。
+     */
+    public static boolean isSafeAccess(String part) {
+        return part != null && part.contains("?.");
+    }
+
+    /**
+     * 将安全访问表达式中的 {@code ?.} 规范化为 {@code .}，用于属性解析。
+     */
+    public static String normalizeDotted(String part) {
+        return part.replace("?.", ".");
+    }
+
+    /**
      * 拆分窄化点链引用为 [varName, propertyPath]。
+     * 支持安全访问语法：{@code "entity?.name"} → {@code ["entity", "name"]}。
      * 例： {@code "entity.name"} → {@code ["entity", "name"]}。
      */
     public static String[] splitDotted(String part) {
-        int dot = part.indexOf('.');
-        return new String[]{part.substring(0, dot), part.substring(dot + 1)};
+        String normalized = normalizeDotted(part);
+        int dot = normalized.indexOf('.');
+        return new String[]{normalized.substring(0, dot), normalized.substring(dot + 1)};
     }
 
     /**
@@ -146,6 +162,7 @@ public final class ScriptIR {
         SWITCH("variable"),
         ANY,
         ALL,
+        COLLECT("variable"),
         MATH("expr");
 
         /**
@@ -332,6 +349,35 @@ public final class ScriptIR {
      */
     public interface NodeMutator extends NodeTraverser {
         FlowNode mapChildren(FlowNode node, java.util.function.Function<FlowNode, FlowNode> mapper);
+
+        /**
+         * 过滤并映射子节点：保留满足 predicate 的子节点，对保留的子节点应用 mapper。
+         * <p>
+         * 由各 handler 自行根据自身属性布局实现（如 "children"、"matchConditions"、"onFailNodes"），
+         * 避免优化器硬编码属性名称。
+         */
+        FlowNode filterChildren(FlowNode node, java.util.function.Predicate<FlowNode> keep,
+                                java.util.function.Function<FlowNode, FlowNode> mapper);
+
+        /**
+         * 对节点的指定子列表属性执行过滤+映射。
+         * 供 {@link #filterChildren} 实现复用。
+         */
+        static FlowNode filterAttr(FlowNode node, String attrKey,
+                                   java.util.function.Predicate<FlowNode> keep,
+                                   java.util.function.Function<FlowNode, FlowNode> mapper) {
+            ImmutableList<FlowNode> list = node.getAttrOrDefault(attrKey, null);
+            if (list == null) return node;
+            boolean changed = false;
+            ImmutableList.Builder<FlowNode> filtered = ImmutableList.builder();
+            for (FlowNode child : list) {
+                if (!keep.test(child)) { changed = true; continue; }
+                FlowNode mapped = mapper.apply(child);
+                filtered.add(mapped);
+                if (mapped != child) changed = true;
+            }
+            return changed ? node.withAttr(attrKey, filtered.build()) : node;
+        }
     }
 
     /**
@@ -418,9 +464,13 @@ public final class ScriptIR {
          */
         public static final int FLAG_DEAD_VAR = 1 << 3;
         /**
+         * 标记：复合节点子条件恒假（用于递归折叠标记，区别于 FLAG_FOLDED 的恒真）
+         */
+        public static final int FLAG_DEAD = 1 << 4;
+        /**
          * 标记：由优化器自动注入，非用户显式定义
          */
-        public static final int FLAG_OPTIMIZER_INJECTED = 1 << 4;
+        public static final int FLAG_OPTIMIZER_INJECTED = 1 << 5;
 
         /**
          * 仅 attrs 的简易构造（用于非数值节点）。
@@ -563,7 +613,10 @@ public final class ScriptIR {
                 long.class, LONG,
                 double.class, DOUBLE,
                 float.class, DOUBLE,
-                boolean.class, BOOLEAN);
+                boolean.class, BOOLEAN,
+                byte.class, INT,
+                short.class, INT,
+                char.class, INT);
         private final BaseType baseType;
         private final com.google.common.reflect.TypeToken<?> typeToken;
         private IRType(BaseType baseType, com.google.common.reflect.TypeToken<?> typeToken) {
@@ -615,6 +668,63 @@ public final class ScriptIR {
 
         public boolean isContainer() {
             return baseType == BaseType.COLLECTION || baseType == BaseType.STRING;
+        }
+
+        /**
+         * 对 COLLECTION 类型解析泛型元素类型（如 {@code List<String>} → {@code STRING}）。
+         * 非集合类型返回 OBJECT。
+         */
+        public IRType elementType() {
+            if (baseType != BaseType.COLLECTION) return OBJECT;
+            Class<?> raw = typeToken.getRawType();
+            // 数组：直接取组件类型
+            if (raw.isArray()) {
+                Class<?> comp = raw.getComponentType();
+                return comp != null ? fromClass(comp) : OBJECT;
+            }
+            // Collection<E>：解析泛型参数
+            try {
+                com.google.common.reflect.TypeToken<?> elementToken = typeToken.resolveType(
+                        java.util.Collection.class.getTypeParameters()[0]);
+                // 未解析的泛型变量（如 raw Collection 的 E）→ 退化为 OBJECT
+                if (elementToken.getType() instanceof java.lang.reflect.TypeVariable<?>) {
+                    return OBJECT;
+                }
+                return fromToken(elementToken);
+            } catch (Exception e) {
+                return OBJECT;
+            }
+        }
+
+        /**
+         * 合并两个类型，用于多路径（如 SWITCH/ANY）中同名变量的类型统一。
+         * <p>
+         * 规则：
+         * <ul>
+         *   <li>相同类型 → 返回自身</li>
+         *   <li>数值类型 → 按宽度提升（INT → LONG → DOUBLE）</li>
+         *   <li>其他不兼容 → 退化为 OBJECT</li>
+         * </ul>
+         * 零运行时开销：仅在编译期执行一次。
+         */
+        public IRType merge(IRType other) {
+            if (this.equals(other)) return this;
+            if (this.isNumeric() && other.isNumeric()) {
+                // 按宽度提升：INT < LONG < DOUBLE
+                int thisOrd = numericWidthOrdinal(this.baseType);
+                int otherOrd = numericWidthOrdinal(other.baseType);
+                return thisOrd >= otherOrd ? this : other;
+            }
+            return OBJECT;
+        }
+
+        private static int numericWidthOrdinal(BaseType base) {
+            return switch (base) {
+                case INT -> 0;
+                case LONG -> 1;
+                case DOUBLE -> 2;
+                default -> -1;
+            };
         }
 
         public com.google.common.reflect.TypeToken<?> getToken() {

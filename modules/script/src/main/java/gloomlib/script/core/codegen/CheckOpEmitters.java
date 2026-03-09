@@ -136,7 +136,8 @@ public final class CheckOpEmitters {
         String hoistedField = node.getAttrOrDefault("_hoistedField", null);
         if (hoistedField != null) {
             // 外置常量池路径：invokedynamic → ConstantCallSite，JIT 折叠为常量
-            mv.visitInvokeDynamicInsn(hoistedField, "()Ljava/util/regex/Pattern;",
+            // name 参数不可包含 '/' 等保留字符（JVMS §4.2.2），实际键通过 bsm args 传递
+            mv.visitInvokeDynamicInsn("const", "()Ljava/util/regex/Pattern;",
                     BytecodeCompiler.CONST_BOOTSTRAP_HANDLE, hoistedField);
             mv.visitVarInsn(Opcodes.ALOAD, slot);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/util/regex/Pattern", "matcher",
@@ -221,7 +222,7 @@ public final class CheckOpEmitters {
 
         if (hoistedField != null) {
             // 外置常量池路径：invokedynamic → ConstantCallSite
-            mv.visitInvokeDynamicInsn(hoistedField, "()Ljava/util/Set;",
+            mv.visitInvokeDynamicInsn("const", "()Ljava/util/Set;",
                     BytecodeCompiler.CONST_BOOTSTRAP_HANDLE, hoistedField);
         } else {
             // 退化路径：动态创建 Set.of()
@@ -292,7 +293,7 @@ public final class CheckOpEmitters {
                 // 从 RANGE_x 数组中获取边界值
                 // var >= arr[0]
                 mv.visitVarInsn(Opcodes.DLOAD, slot);
-                mv.visitInvokeDynamicInsn(hoistedField, "()[D",
+                mv.visitInvokeDynamicInsn("const", "()[D",
                         BytecodeCompiler.CONST_BOOTSTRAP_HANDLE, hoistedField);
                 ASMUtils.emitIntConst(mv, 0);
                 mv.visitInsn(Opcodes.DALOAD);
@@ -301,7 +302,7 @@ public final class CheckOpEmitters {
 
                 // var <= arr[1]
                 mv.visitVarInsn(Opcodes.DLOAD, slot);
-                mv.visitInvokeDynamicInsn(hoistedField, "()[D",
+                mv.visitInvokeDynamicInsn("const", "()[D",
                         BytecodeCompiler.CONST_BOOTSTRAP_HANDLE, hoistedField);
                 ASMUtils.emitIntConst(mv, 1);
                 mv.visitInsn(Opcodes.DALOAD);
