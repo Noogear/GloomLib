@@ -1,4 +1,4 @@
-package gloomlib.configuration.core.util;
+package gloomlib.diagnostic;
 
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.nodes.MappingNode;
@@ -85,10 +85,9 @@ public final class YamlLineIndex {
      */
     private static int getLine(ScalarNode node) {
         try {
-            Object mark = node.getStartMark(); // Mark or Optional<Mark>
+            Object mark = node.getStartMark();
             if (mark == null) return 0;
 
-            // SnakeYAML 2.x: Optional<Mark>
             if (mark instanceof java.util.Optional<?> opt) {
                 return opt.map(m -> {
                     try {
@@ -99,7 +98,6 @@ public final class YamlLineIndex {
                 }).orElse(0);
             }
 
-            // SnakeYAML 1.x: Mark directly
             return ((org.yaml.snakeyaml.error.Mark) mark).getLine() + 1;
         } catch (Exception e) {
             return 0;

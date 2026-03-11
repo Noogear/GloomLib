@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import org.objectweb.asm.Label;
 
 /**
  * 编译上下文，管理变量槽位分配、类型信息传播、常量池和反射缓存。
@@ -85,6 +86,23 @@ public final class CompilationContext {
      * 使用 {@link #snapshotNarrowed()} / {@link #restoreNarrowed} 在 any/all 分支边界做快照隔离。
      */
     private final Map<String, Class<?>> narrowedClasses = new HashMap<>();
+    /**
+     * 谓词模式的失败跳转标签。
+     * <p>
+     * 非 null 时，{@link gloomlib.script.core.codegen.ASMUtils#emitEarlyReturn} 发射
+     * {@code GOTO predicateFailLabel} 而非 {@code RETURN}，将 CHECK 的"脚本终止"语义
+     * 转换为"当前元素不匹配"的循环迭代语义。
+     */
+    private Label predicateFailLabel;
+    /**
+     * 动态变量槽位叠加层（用于 COLLECT match 内联谓词的元素属性变量）。
+     * 优先级高于 {@link #varSlots} 和 {@link #aliasSlots}。
+     */
+    private final Map<String, Integer> dynamicSlots = new HashMap<>();
+    /**
+     * 动态变量类型叠加层（与 {@link #dynamicSlots} 配套）。
+     */
+    private final Map<String, ScriptIR.IRType> dynamicTypes = new HashMap<>();
     /**
      * 目标接口的内部名称（如 java/util/function/ToIntFunction）
      */
@@ -157,7 +175,9 @@ public final class CompilationContext {
     }
 
     public int getSlot(String varName) {
-        Integer slot = varSlots.get(varName);
+        Integer slot = dynamicSlots.get(varName);
+        if (slot != null) return slot;
+        slot = varSlots.get(varName);
         if (slot == null) slot = aliasSlots.get(varName);
         if (slot == null) {
             throw ScriptCompileException.create(scriptId, null,
@@ -172,6 +192,8 @@ public final class CompilationContext {
     }
 
     public ScriptIR.IRType getType(String varName) {
+        ScriptIR.IRType type = dynamicTypes.get(varName);
+        if (type != null) return type;
         return typeTable.getOrDefault(varName, ScriptIR.IRType.OBJECT);
     }
 
@@ -232,6 +254,32 @@ public final class CompilationContext {
 
     public int nextSlot() {
         return nextSlot;
+    }
+
+    // ======================== 谓词模式（Predicate Mode）========================
+
+    public Label getPredicateFailLabel() {
+        return predicateFailLabel;
+    }
+
+    public void setPredicateFailLabel(Label label) {
+        this.predicateFailLabel = label;
+    }
+
+    /**
+     * 注册一个动态变量（内联谓词作用域内的元素属性变量）。
+     */
+    public void registerDynamicVar(String name, int slot, ScriptIR.IRType type) {
+        dynamicSlots.put(name, slot);
+        dynamicTypes.put(name, type);
+    }
+
+    /**
+     * 清除所有动态变量（退出内联谓词作用域时调用）。
+     */
+    public void clearDynamicVars() {
+        dynamicSlots.clear();
+        dynamicTypes.clear();
     }
 
     public void putBranchWeights(String switchId, double[] weights) {

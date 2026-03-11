@@ -29,7 +29,14 @@ import java.util.Set;
  * <h3>线程安全</h3>
  * 不可变（{@code attrs} 引用不变），线程安全。
  */
-public record ParseContext(Map<String, Object> attrs, String scriptId) {
+public record ParseContext(Map<String, Object> attrs, String scriptId, int lineNumber) {
+
+    /**
+     * 无行号的简易构造。
+     */
+    public ParseContext(Map<String, Object> attrs, String scriptId) {
+        this(attrs, scriptId, 0);
+    }
 
 
     /**
@@ -78,7 +85,7 @@ public record ParseContext(Map<String, Object> attrs, String scriptId) {
      * <p>用于在 handler 内部递归解析子节点时传播来源信息。
      */
     public ParseContext withAttrs(Map<String, Object> newAttrs) {
-        return new ParseContext(newAttrs, scriptId);
+        return new ParseContext(newAttrs, scriptId, lineNumber);
     }
 
 
@@ -88,7 +95,7 @@ public record ParseContext(Map<String, Object> attrs, String scriptId) {
      * 自动完成以下工作：
      * <ul>
      *   <li>从 {@code attrs} 生成紧凑的伪 YAML 代码片段；</li>
-     *   <li>从 {@code __line__} 属性提取行号；</li>
+     *   <li>使用 {@code lineNumber} 字段定位行号；</li>
      *   <li>若 {@code scriptId} 不为 {@code null}，将文件名 + 行号写入 {@link SourceLocation}。</li>
      * </ul>
      *
@@ -100,13 +107,8 @@ public record ParseContext(Map<String, Object> attrs, String scriptId) {
      * @param message 错误描述（纯英文，供日志/控制台输出）
      */
     public ScriptCompileException error(String message) {
-        int line = 0;
-        Object lineObj = attrs.get("__line__");
-        if (lineObj instanceof Integer i) line = i;
-        else if (lineObj instanceof Number n) line = n.intValue();
-
         SourceLocation loc = (scriptId != null)
-                ? new SourceLocation(scriptId, line, 0)
+                ? new SourceLocation(scriptId, lineNumber, 0)
                 : SourceLocation.UNKNOWN;
 
         String snippet = SourceView.mapSnippet(attrs);

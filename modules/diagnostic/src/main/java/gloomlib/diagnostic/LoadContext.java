@@ -1,20 +1,13 @@
-package gloomlib.configuration.api.exception;
-
-import gloomlib.configuration.core.util.YamlLineIndex;
-import gloomlib.diagnostic.SourceLocation;
+package gloomlib.diagnostic;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * ThreadLocal context for the currently-loading configuration file.
+ * ThreadLocal context for the currently-loading file (configuration or script).
  *
- * <p>Set by {@link gloomlib.configuration.core.service.ConfigurationLoader} before
- * deserialization begins, and cleared in a {@code finally} block after.
+ * <p>Set before deserialization/parsing begins and cleared in a {@code finally} block after.
  * This avoids threading extra parameters through every deserialization method.
- *
- * <p>{@link SerializationException} factory methods read this context to include
- * real file name and line numbers in {@link gloomlib.diagnostic.SourceLocation}.
  */
 public final class LoadContext {
 
@@ -26,8 +19,8 @@ public final class LoadContext {
     /**
      * Sets the current loading context.
      *
-     * @param filename  the config file name (e.g. {@code "config.yml"})
-     * @param lineIndex dotpath → 1-based line, from {@link YamlLineIndex#build}
+     * @param filename  the file name (e.g. {@code "config.yml"})
+     * @param lineIndex dotpath → 1-based line, from {@link YamlLineIndex#buildFromString}
      */
     public static void set(String filename, Map<String, Integer> lineIndex) {
         CURRENT.set(new Ctx(filename, lineIndex));
@@ -41,9 +34,7 @@ public final class LoadContext {
     }
 
     /**
-     * Returns the current config file name, or {@code null} if no context is active.
-     * When null, {@link gloomlib.configuration.api.exception.SerializationException}
-     * falls back to path-only location.
+     * Returns the current file name, or {@code null} if no context is active.
      */
     public static String filename() {
         Ctx ctx = CURRENT.get();
@@ -63,7 +54,7 @@ public final class LoadContext {
     }
 
     /**
-     * Creates a {@link SourceLocation} from the current loading context and YAML key path.
+     * Creates a {@link SourceLocation} from the current context and YAML key path.
      * Includes file name and line number when a context is active.
      *
      * @param path YAML key path

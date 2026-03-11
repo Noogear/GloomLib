@@ -17,12 +17,21 @@ import gloomlib.script.core.ScriptIR;
 import gloomlib.script.core.ScriptIR.*;
 import gloomlib.script.core.parser.accessor.PropertyAccessor;
 
+import java.io.StringReader;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
 
 /**
  * YAML 脚本解析器，合并入口解析、流程节点分发、值类型推导和属性链解析。
@@ -47,7 +56,7 @@ public final class ScriptParser {
                 String.valueOf(root.getOrDefault("ignore-cancelled", "true")));
 
         // 变量声明
-        Map<String, String> varMap = (Map<String, String>) root.getOrDefault("variables", Map.of());
+        Map<String, Object> varMap = (Map<String, Object>) root.getOrDefault("variables", Map.of());
         Class<?> payloadClazz;
         try {
             payloadClazz = Class.forName(payloadClassStr);
@@ -58,9 +67,9 @@ public final class ScriptParser {
         }
 
         ImmutableList.Builder<VarDecl> vars = ImmutableList.builder();
-        for (Map.Entry<String, String> entry : varMap.entrySet()) {
+        for (Map.Entry<String, Object> entry : varMap.entrySet()) {
             String name = entry.getKey();
-            String property = entry.getValue();
+            String property = String.valueOf(entry.getValue());
             if ("$self".equals(property)) {
                 // payload 别名：跳过属性解析，类型在 buildContext 中用 payload 实际类填充
                 vars.add(new VarDecl(name, "$self", ScriptIR.IRType.OBJECT));
@@ -103,6 +112,17 @@ public final class ScriptParser {
      */
     public static FlowNode parseFlowNode(ParseContext ctx) {
         Map<String, Object> attrs = ctx.attrs();
+
+        // 提取并移除临时行号标记，然后设入 ParseContext
+        int lineNumber = ctx.lineNumber();
+        Object lineObj = attrs.get("__line__");
+        if (lineObj instanceof Number num) {
+            lineNumber = num.intValue();
+            attrs = new java.util.HashMap<>(attrs);
+            attrs.remove("__line__");
+            ctx = new ParseContext(attrs, ctx.scriptId(), lineNumber);
+        }
+
         String typeStr = (String) attrs.get("type");
         FlowNodeType type = null;
 
@@ -130,7 +150,7 @@ public final class ScriptParser {
                     String k = entry.getKey();
                     if (!FlowNodeType.reservedKeys().contains(k)
                             && !k.equals("store") && !k.equals("args")
-                            && !k.equals("type") && !k.equals("__line__")) {
+                            && !k.equals("type")) {
                         inferredAction = k;
                         inferredArgs = entry.getValue();
                         break;
@@ -154,7 +174,12 @@ public final class ScriptParser {
         if (type == null) {
             type = FlowNodeType.fromYaml(typeStr);
         }
-        return type.handler().parse(ctx);
+        FlowNode node = type.handler().parse(ctx);
+        // 将提取的行号写入 FlowNode
+        if (lineNumber > 0 && node.lineNumber() <= 0) {
+            node = new FlowNode(node.type(), node.attrs(), node.numericValue(), node.flags(), lineNumber);
+        }
+        return node;
     }
 
     /**
@@ -375,12 +400,20 @@ public final class ScriptParser {
 
                         result.add(new gloomlib.script.core.parser.accessor.MapAccessor(key, valueType));
                         currentType = valueType;
+                    } else if (currentType.getRawType().isArray()) {
+                        // 数组索引访问：arr[i]
+                        int index = Integer.parseInt(indexStr);
+                        com.google.common.reflect.TypeToken<?> elementType =
+                                com.google.common.reflect.TypeToken.of(currentType.getRawType().getComponentType());
+                        result.add(new gloomlib.script.core.parser.accessor.ArrayAccessor(index, elementType));
+                        currentType = elementType;
                     } else {
                         throw new DiagnosticException(
                                 Diagnostic.simple(
                                         scriptId != null ? new SourceLocation(scriptId, 0, 0) : SourceLocation.UNKNOWN,
                                         DiagnosticCategory.TYPE,
-                                        "Type " + currentType + " is not a supported collection for indexing: " + part));
+                                        "Type " + currentType + " does not support index access '" + part
+                                                + "'. Supported: List (numeric index), Map (string key), array (numeric index)."));
                     }
                 } else {
                     // 普通属性
@@ -465,5 +498,67 @@ public final class ScriptParser {
                             "No getter found for '" + property + "' on " + clazz.getName()));
         }
 
+    }
+
+    // ── YAML 解析 ────────────────────────────────────────────────────────────────
+
+    /**
+     * 将 YAML 字符串解析为 {@code Map<String, Object>}，自动为流程节点注入 {@code __line__} 行号。
+     * <p>
+     * 行号仅注入到<b>序列中的映射子节点</b>（即 {@code flow}、{@code on_fail}、{@code any/all}
+     * 列表中的流程节点 Map），数据 Map（如 {@code variables}、{@code cases}）不会被注入，
+     * 从而保证迭代安全。
+     * <p>
+     * 使用示例：
+     * <pre>
+     * Map&lt;String, Object&gt; root = ScriptParser.parseYaml(yamlContent);
+     * root.put("id", fileName);
+     * injector.inject(root);
+     * </pre>
+     *
+     * @param yaml YAML 文本
+     * @return 根映射节点对应的 Map，可直接传入 {@link #parse(Map)} 或 {@link
+     *         gloomlib.script.api.injection.ScriptInjector#inject(Map)}
+     * @throws IllegalArgumentException 如果根节点不是 MappingNode
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> parseYaml(String yaml) {
+        Node rootNode = new Yaml().compose(new StringReader(yaml));
+        if (!(rootNode instanceof MappingNode)) {
+            throw new IllegalArgumentException("YAML root element must be a mapping");
+        }
+        return (Map<String, Object>) convertNode(rootNode, false);
+    }
+
+    /**
+     * 递归转换 SnakeYAML AST 节点为 Java 对象。
+     *
+     * @param injectLine 是否为该节点注入 {@code __line__}（仅序列中的映射子节点为 true）
+     */
+    private static Object convertNode(Node node, boolean injectLine) {
+        if (node instanceof ScalarNode scalar) {
+            String value = scalar.getValue();
+            if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
+                return Boolean.parseBoolean(value);
+            }
+            return value;
+        } else if (node instanceof SequenceNode sequence) {
+            List<Object> list = new ArrayList<>(sequence.getValue().size());
+            for (Node child : sequence.getValue()) {
+                list.add(convertNode(child, child instanceof MappingNode));
+            }
+            return list;
+        } else if (node instanceof MappingNode mapping) {
+            Map<String, Object> map = new LinkedHashMap<>(mapping.getValue().size() + 1);
+            if (injectLine) {
+                map.put("__line__", mapping.getStartMark().getLine() + 1);
+            }
+            for (NodeTuple tuple : mapping.getValue()) {
+                String key = ((ScalarNode) tuple.getKeyNode()).getValue();
+                map.put(key, convertNode(tuple.getValueNode(), false));
+            }
+            return map;
+        }
+        return null;
     }
 }

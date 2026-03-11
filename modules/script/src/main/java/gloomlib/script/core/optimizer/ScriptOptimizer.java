@@ -407,6 +407,27 @@ public final class ScriptOptimizer {
      * <p>
      * 复用 {@link HashMultiset} 统计模式。
      */
+
+    /**
+     * 检查顶层流程中是否存在某个 ACTION 节点将 {@code varName} 作为点链引用参数使用。
+     * <p>
+     * 例：{@code varName="cause"} 匹配 {@code "{cause.name}"} 这类参数。
+     * 用于扩展属性下沉：当变量仅在顶层 ACTION 的点链参数中出现一次时可安全下沉。
+     */
+    private static boolean hasTopLevelDottedRefTo(ImmutableList<FlowNode> flow, String varName) {
+        for (FlowNode node : flow) {
+            if (node.type() != ScriptIR.FlowNodeType.ACTION) continue;
+            ImmutableList<String> args = node.getAttrOrDefault("args", ImmutableList.of());
+            for (String arg : args) {
+                if (ScriptIR.isDottedSingleRef(arg)) {
+                    String inner = arg.substring(1, arg.length() - 1);
+                    if (varName.equals(ScriptIR.splitDotted(inner)[0])) return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private void liveVarAnalysis(ScriptUnit unit, CompilationContext ctx) {
         Multiset<String> refs = HashMultiset.create();
         for (FlowNode node : unit.flow()) {
@@ -500,6 +521,11 @@ public final class ScriptOptimizer {
             if (topLevelSinkableRefs.count(v.name()) == 1 && deepRefs.count(v.name()) == 1) {
                 // 唯一引用且该引用位于可下沉的顶层消费者 → 从 CSE 数组中踢出，转入待下放池
                 sinkingVars.put(v.name(), v);
+            } else if (deepRefs.count(v.name()) == 1 && topLevelSinkableRefs.count(v.name()) == 0
+                    && hasTopLevelDottedRefTo(oldFlow, v.name())) {
+                // 扩展：仅在顶层 ACTION 节点的点链参数（如 {cause.name}）中使用一次
+                // 将此变量下沉到该 ACTION 的参数发射点，避免在守卫失败路径上执行无效的 getter
+                sinkingVars.put(v.name(), v);
             } else {
                 optimizedVars.add(v);
             }
@@ -555,6 +581,16 @@ public final class ScriptOptimizer {
 
             if (current.type().handler() instanceof ScriptIR.VariableConsumer consumer) {
                 String reqVar = consumer.getConsumedVariable(current);
+                // 扩展：若主 getConsumedVariable 未命中，且当前节点为顶层 ACTION，
+                // 则尝试从点链参数中寻找可下沉变量（如 {cause.name} 中的 cause）
+                if (reqVar == null && current.type() == ScriptIR.FlowNodeType.ACTION) {
+                    for (String cVar : consumer.getAllConsumedVariables(current)) {
+                        if (sinkingVars.containsKey(cVar)) {
+                            reqVar = cVar;
+                            break;
+                        }
+                    }
+                }
                 if (reqVar != null && sinkingVars.containsKey(reqVar)) {
                     gloomlib.script.core.ScriptIR.VarDecl decl = sinkingVars.get(reqVar);
 

@@ -318,9 +318,18 @@ public final class ASMUtils {
 
     /**
      * 根据方法目标返回类型发射早退 return 指令。
-     * void 方法发 RETURN；Object/Array 方法先 ACONST_NULL 再 ARETURN；原生类型方法发对应零值。
+     * <p>
+     * 谓词模式下（{@code ctx.getPredicateFailLabel() != null}）发射 GOTO failLabel，
+     * 将"脚本终止"语义转换为"当前元素不匹配，跳到下一迭代"。
+     * <p>
+     * 普通模式下：void 方法发 RETURN；Object/Array 方法先 ACONST_NULL 再 ARETURN；原生类型方法发对应零值。
      */
     public static void emitEarlyReturn(MethodVisitor mv, gloomlib.script.core.CompilationContext ctx) {
+        org.objectweb.asm.Label predicateFail = ctx.getPredicateFailLabel();
+        if (predicateFail != null) {
+            mv.visitJumpInsn(Opcodes.GOTO, predicateFail);
+            return;
+        }
         org.objectweb.asm.Type ret = ctx.targetReturnType();
         if (ret.getSort() == org.objectweb.asm.Type.VOID) {
             mv.visitInsn(Opcodes.RETURN);

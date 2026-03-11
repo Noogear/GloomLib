@@ -21,9 +21,9 @@ import java.util.stream.Collectors;
 public enum CheckOp {
 
     // ──────── 空值/类型检测 ────────
-    NULL("null", Category.NULL_CHECK, EnumSet.of(BaseType.OBJECT, BaseType.STRING, BaseType.COLLECTION, BaseType.ENUM)),
+    NULL("null", Category.NULL_CHECK, EnumSet.of(BaseType.OBJECT, BaseType.STRING, BaseType.COLLECTION, BaseType.ENUM, BaseType.MAP)),
 
-    INSTANCEOF("instanceof", Category.TYPE_CHECK, EnumSet.of(BaseType.OBJECT, BaseType.STRING, BaseType.COLLECTION, BaseType.ENUM)),
+    INSTANCEOF("instanceof", Category.TYPE_CHECK, EnumSet.of(BaseType.OBJECT, BaseType.STRING, BaseType.COLLECTION, BaseType.ENUM, BaseType.MAP)),
 
     // ──────── 相等 ────────
     EQ("==", Category.EQUALITY, EnumSet.of(BaseType.INT, BaseType.LONG, BaseType.DOUBLE, BaseType.STRING, BaseType.BOOLEAN, BaseType.OBJECT, BaseType.ENUM)),
@@ -42,7 +42,7 @@ public enum CheckOp {
     MATCHES("matches", Category.STRING_OP, EnumSet.of(BaseType.STRING)),
 
     // ──────── 包含/成员 ────────
-    CONTAINS("contains", Category.MEMBERSHIP, EnumSet.of(BaseType.STRING, BaseType.COLLECTION)),
+    CONTAINS("contains", Category.MEMBERSHIP, EnumSet.of(BaseType.STRING, BaseType.COLLECTION, BaseType.MAP)),
     IN("in", Category.MEMBERSHIP, EnumSet.of(BaseType.STRING, BaseType.INT, BaseType.ENUM)),
 
     // ──────── 范围 ────────
@@ -185,16 +185,33 @@ public enum CheckOp {
      * @throws ScriptCompileException 类型不兼容时
      */
     public void validateType(String variable, IRType type) {
+        // 特例：CONTAINS 用于数组——虽然 COLLECTION 在 supportedTypes 中会提前通过，
+        // 但数组不实现 Collection 接口，必须在 supportsType 之前拦截并引导到 COLLECT exists
+        if (this == CONTAINS && type.base() == BaseType.COLLECTION && type.getToken().getRawType().isArray()) {
+            throw ScriptCompileException.type(null,
+                    String.format(
+                            "Operator 'contains' is not supported directly on array variable '%s'. "
+                                    + "Use COLLECT node with op 'exists' to check array membership.",
+                            variable));
+        }
+
         if (supportsType(type)) {
             return;
         }
 
-        // 特例：== 用于 COLLECTION 虽然不在 supportedTypes 中，但给出更精确的提示
+        // 特例：== 用于 COLLECTION/MAP 虽然不在 supportedTypes 中，但给出更精确的提示
         if (this == EQ && type.base() == BaseType.COLLECTION) {
             throw ScriptCompileException.type(null,
                     String.format(
                             "Operator '==' on COLLECTION variable '%s' compares by reference, which is almost certainly not what you want. "
                                     + "Hint: did you mean 'contains' to check membership?",
+                            variable));
+        }
+        if (this == EQ && type.base() == BaseType.MAP) {
+            throw ScriptCompileException.type(null,
+                    String.format(
+                            "Operator '==' on MAP variable '%s' compares by reference, which is almost certainly not what you want. "
+                                    + "Hint: did you mean 'contains' to check key membership?",
                             variable));
         }
 

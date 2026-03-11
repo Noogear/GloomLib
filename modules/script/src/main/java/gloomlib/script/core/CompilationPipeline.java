@@ -117,16 +117,15 @@ public final class CompilationPipeline {
 
     /**
      * 递归计算单个节点的结构哈希。
-     * 忽略: numericValue, attrs["value"], attrs["args"], attrs["valueList"],
-     * attrs["__line__"]
+     * 忽略: numericValue, attrs["value"], attrs["args"], attrs["valueList"]
      */
     private static int structuralHashNode(ScriptIR.FlowNode node) {
         int h = node.type().hashCode();
         for (Map.Entry<String, Object> entry : node.attrs().entrySet()) {
             String key = entry.getKey();
-            // 跳过字面量值和行号——这些不影响结构
+            // 跳过字面量值——这些不影响结构
             if ("value".equals(key) || "args".equals(key) || "valueList".equals(key)
-                    || "__line__".equals(key) || "valueType".equals(key)) {
+                    || "valueType".equals(key)) {
                 continue;
             }
             h = 31 * h + key.hashCode();
@@ -264,6 +263,8 @@ public final class CompilationPipeline {
                                         CompilationContext ctx, String scriptId) {
         if ("payload".equals(varName))
             return;
+        if (varName.startsWith("$"))
+            return; // 动态变量（如 $it）由处理器在 emit 时注入，跳过静态校验
         try {
             ctx.getSlot(varName);
         } catch (gloomlib.diagnostic.DiagnosticException e) {
@@ -498,7 +499,36 @@ public final class CompilationPipeline {
                 builder.addVar(entry.getKey(), entry.getValue());
             }
 
-            return builder.build();
+            CompilationContext ctx = builder.build();
+
+            // 静态类型预填：将所有编译期已知静态类型的变量预注册进 narrowedClasses，
+            // 使点链模板 {x.y} 无需显式 instanceof check 即可访问静态已知类型的属性。
+            // 若后续 instanceof check 指向更具体的子类，primeNarrowings / CheckNodeHandler.emit() 会覆盖。
+            //
+            // 覆盖三类变量：
+            //   1. variables 声明变量：由 PropertyResolver 通过 getter 推断出精确返回类型
+            //   2. $self payload 别名：直接对应 payload 具体类（EntityDamageByEntityEvent 等）
+            //   3. VariableProducer 产生的变量：action 返回值的精确类型
+            for (ScriptIR.VarDecl var : unit.vars()) {
+                if (var.isPayloadAlias()) {
+                    // $self 别名 → payload 具体类（如 EntityDamageByEntityEvent）
+                    ctx.narrowType(var.name(), payloadClass);
+                } else {
+                    Class<?> rawClass = var.type().getToken().getRawType();
+                    if (rawClass != null && rawClass != Object.class && rawClass != Enum.class) {
+                        ctx.narrowType(var.name(), rawClass);
+                    }
+                }
+            }
+            // VariableProducer 产生的变量（如 Action 返回值 store: result）
+            for (Map.Entry<String, ScriptIR.IRType> entry : producerTypes.entrySet()) {
+                Class<?> rawClass = entry.getValue().getToken().getRawType();
+                if (rawClass != null && rawClass != Object.class && rawClass != Enum.class) {
+                    ctx.narrowType(entry.getKey(), rawClass);
+                }
+            }
+
+            return ctx;
         } catch (ClassNotFoundException e) {
             throw ScriptCompileException.parse("Payload class not found: " + unit.payloadClass());
         }

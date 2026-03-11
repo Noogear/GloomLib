@@ -114,7 +114,7 @@ public class ScriptCompileException extends DiagnosticException {
      * <p>
      * 构建逻辑：
      * <ol>
-     *   <li>从节点提取行号（{@code __line__} 属性）→ {@link SourceLocation}</li>
+     *   <li>从节点提取行号（{@code lineNumber} 字段）→ {@link SourceLocation}</li>
      *   <li>使用脚本 ID 作为 source 标识（默认 {@code &lt;script&gt;}）</li>
      *   <li>从节点 attrs 生成伪 YAML 片段（{@link SourceView#nodeSnippet}）→ snippet</li>
      * </ol>

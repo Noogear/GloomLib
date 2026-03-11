@@ -144,7 +144,7 @@ public final class ScriptIR {
      * 基础枚举核心，用于支持 switch 查表等干净的原始匹配逻辑。
      */
     public enum BaseType {
-        INT, LONG, DOUBLE, STRING, ENUM, OBJECT, BOOLEAN, COLLECTION
+        INT, LONG, DOUBLE, STRING, ENUM, OBJECT, BOOLEAN, COLLECTION, MAP
     }
 
     /**
@@ -353,7 +353,7 @@ public final class ScriptIR {
         /**
          * 过滤并映射子节点：保留满足 predicate 的子节点，对保留的子节点应用 mapper。
          * <p>
-         * 由各 handler 自行根据自身属性布局实现（如 "children"、"matchConditions"、"onFailNodes"），
+         * 由各 handler 自行根据自身属性布局实现（如 "children"、"matchFlow"、"onFailNodes"），
          * 避免优化器硬编码属性名称。
          */
         FlowNode filterChildren(FlowNode node, java.util.function.Predicate<FlowNode> keep,
@@ -446,7 +446,8 @@ public final class ScriptIR {
             FlowNodeType type,
             ImmutableMap<String, Object> attrs,
             double numericValue,
-            int flags) {
+            int flags,
+            int lineNumber) {
         /**
          * 标记：已常量折叠
          */
@@ -473,10 +474,17 @@ public final class ScriptIR {
         public static final int FLAG_OPTIMIZER_INJECTED = 1 << 5;
 
         /**
+         * 无行号的 4-arg 构造。
+         */
+        public FlowNode(FlowNodeType type, ImmutableMap<String, Object> attrs, double numericValue, int flags) {
+            this(type, attrs, numericValue, flags, -1);
+        }
+
+        /**
          * 仅 attrs 的简易构造（用于非数值节点）。
          */
         public FlowNode(FlowNodeType type, ImmutableMap<String, Object> attrs) {
-            this(type, attrs, 0.0, 0);
+            this(type, attrs, 0.0, 0, -1);
         }
 
         /**
@@ -496,26 +504,17 @@ public final class ScriptIR {
             return new FlowNode(FlowNodeType.ACTION,
                     ImmutableMap.of(
                             "_sinking_property", decl.property(),
+                            "_var_name", decl.name(),
                             "returnType", decl.type()));
         }
 
         /**
-         * 提取隐式传入的行号上下文。
+         * 提取节点所在的 YAML 行号。
          *
-         * @return 节点所在的 YAML 配置文件中的行号。如果没有，则返回 -1（极好的解耦兼容性）。
+         * @return 1-based 行号，-1 表示未知
          */
         public int getLineNumber() {
-            Object line = attrs.get("__line__");
-            if (line instanceof Number num) {
-                return num.intValue();
-            }
-            if (line instanceof String str) {
-                try {
-                    return Integer.parseInt(str);
-                } catch (NumberFormatException ignored) {
-                }
-            }
-            return -1;
+            return lineNumber;
         }
 
         /**
@@ -562,18 +561,18 @@ public final class ScriptIR {
         }
 
         public FlowNode withFlag(int flag) {
-            return new FlowNode(type, attrs, numericValue, flags | flag);
+            return new FlowNode(type, attrs, numericValue, flags | flag, lineNumber);
         }
 
         public FlowNode withNumericValue(double value) {
-            return new FlowNode(type, attrs, value, flags);
+            return new FlowNode(type, attrs, value, flags, lineNumber);
         }
 
         public FlowNode withAttr(String key, Object value) {
             return new FlowNode(type, ImmutableMap.<String, Object>builder()
                     .putAll(attrs)
                     .put(key, value)
-                    .buildKeepingLast(), numericValue, flags);
+                    .buildKeepingLast(), numericValue, flags, lineNumber);
         }
 
         public FlowNode withoutAttr(String key) {
@@ -586,7 +585,7 @@ public final class ScriptIR {
                     builder.put(entry);
                 }
             }
-            return new FlowNode(type, builder.build(), numericValue, flags);
+            return new FlowNode(type, builder.build(), numericValue, flags, lineNumber);
         }
     }
 
@@ -608,6 +607,8 @@ public final class ScriptIR {
                 com.google.common.reflect.TypeToken.of(Boolean.class));
         public static final IRType COLLECTION = new IRType(BaseType.COLLECTION,
                 com.google.common.reflect.TypeToken.of(java.util.Collection.class));
+        public static final IRType MAP = new IRType(BaseType.MAP,
+                com.google.common.reflect.TypeToken.of(java.util.Map.class));
         private static final java.util.Map<Class<?>, IRType> PRIMITIVE_MAP = java.util.Map.of(
                 int.class, INT,
                 long.class, LONG,
@@ -636,6 +637,8 @@ public final class ScriptIR {
                 return new IRType(BaseType.ENUM, token);
             if (java.util.Collection.class.isAssignableFrom(clazz) || clazz.isArray())
                 return new IRType(BaseType.COLLECTION, token);
+            if (java.util.Map.class.isAssignableFrom(clazz))
+                return new IRType(BaseType.MAP, token);
             return new IRType(BaseType.OBJECT, token);
         }
 
@@ -667,33 +670,48 @@ public final class ScriptIR {
         }
 
         public boolean isContainer() {
-            return baseType == BaseType.COLLECTION || baseType == BaseType.STRING;
+            return baseType == BaseType.COLLECTION || baseType == BaseType.STRING || baseType == BaseType.MAP;
         }
 
         /**
-         * 对 COLLECTION 类型解析泛型元素类型（如 {@code List<String>} → {@code STRING}）。
-         * 非集合类型返回 OBJECT。
+         * 解析集合/映射类型的元素类型：
+         * <ul>
+         *   <li>COLLECTION + 数组 → 组件类型</li>
+         *   <li>COLLECTION + {@code Collection<E>} → E</li>
+         *   <li>MAP ({@code Map<K, V>}) → V</li>
+         *   <li>其他 → OBJECT</li>
+         * </ul>
          */
         public IRType elementType() {
-            if (baseType != BaseType.COLLECTION) return OBJECT;
-            Class<?> raw = typeToken.getRawType();
-            // 数组：直接取组件类型
-            if (raw.isArray()) {
-                Class<?> comp = raw.getComponentType();
-                return comp != null ? fromClass(comp) : OBJECT;
-            }
-            // Collection<E>：解析泛型参数
-            try {
-                com.google.common.reflect.TypeToken<?> elementToken = typeToken.resolveType(
-                        java.util.Collection.class.getTypeParameters()[0]);
-                // 未解析的泛型变量（如 raw Collection 的 E）→ 退化为 OBJECT
-                if (elementToken.getType() instanceof java.lang.reflect.TypeVariable<?>) {
+            if (baseType == BaseType.COLLECTION) {
+                Class<?> raw = typeToken.getRawType();
+                if (raw.isArray()) {
+                    Class<?> comp = raw.getComponentType();
+                    return comp != null ? fromClass(comp) : OBJECT;
+                }
+                try {
+                    com.google.common.reflect.TypeToken<?> elementToken = typeToken.resolveType(
+                            java.util.Collection.class.getTypeParameters()[0]);
+                    if (elementToken.getType() instanceof java.lang.reflect.TypeVariable<?>) {
+                        return OBJECT;
+                    }
+                    return fromToken(elementToken);
+                } catch (Exception e) {
                     return OBJECT;
                 }
-                return fromToken(elementToken);
-            } catch (Exception e) {
-                return OBJECT;
+            } else if (baseType == BaseType.MAP) {
+                try {
+                    com.google.common.reflect.TypeToken<?> vToken = typeToken.resolveType(
+                            java.util.Map.class.getTypeParameters()[1]);
+                    if (vToken.getType() instanceof java.lang.reflect.TypeVariable<?>) {
+                        return OBJECT;
+                    }
+                    return fromToken(vToken);
+                } catch (Exception e) {
+                    return OBJECT;
+                }
             }
+            return OBJECT;
         }
 
         /**

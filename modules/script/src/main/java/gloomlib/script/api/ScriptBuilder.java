@@ -415,7 +415,7 @@ public final class ScriptBuilder {
         attrs.put("variable", variable);
         attrs.put("collectOp", op.toUpperCase());
         attrs.put("collectNegate", negate);
-        attrs.put("matchConditions", mb.conditions.build());
+        attrs.put("matchFlow", mb.conditions.build());
         if (store != null) {
             IRType returnType = switch (op.toUpperCase()) {
                 case "FIND" -> IRType.OBJECT;
@@ -724,13 +724,13 @@ public final class ScriptBuilder {
         }
 
         /**
-         * 添加一个子条件。
+         * 添加一个子条件（对元素自身 $it 进行比对）。
          *
          * @param op    操作符（如 "contains", ">", "=="）
          * @param value 比对值
          */
         public MatchBuilder match(String op, Object value) {
-            conditions.add(buildMatchCondition(op, value));
+            conditions.add(buildMatchCondition("$it", op, value));
             return this;
         }
 
@@ -738,13 +738,34 @@ public final class ScriptBuilder {
          * 添加一个无值的子条件（如 "null"）。
          */
         public MatchBuilder match(String op) {
-            conditions.add(buildMatchCondition(op, null));
+            conditions.add(buildMatchCondition("$it", op, null));
             return this;
         }
 
-        private static FlowNode buildMatchCondition(String op, Object value) {
+        /**
+         * 添加一个属性级子条件（对元素的属性进行比对）。
+         *
+         * @param variable 属性路径（如 "type.name"、"amount"），或 "$it" 表示元素自身
+         * @param op       操作符
+         * @param value    比对值
+         */
+        public MatchBuilder check(String variable, String op, Object value) {
+            conditions.add(buildMatchCondition(variable, op, value));
+            return this;
+        }
+
+        /**
+         * 添加一个属性级无值子条件。
+         */
+        public MatchBuilder check(String variable, String op) {
+            conditions.add(buildMatchCondition(variable, op, null));
+            return this;
+        }
+
+        private static FlowNode buildMatchCondition(String variable, String op, Object value) {
             validateOperator(op);
             ImmutableMap.Builder<String, Object> attrs = ImmutableMap.builder();
+            attrs.put("variable", variable);
             attrs.put("op", op);
 
             double numericValue = 0.0;

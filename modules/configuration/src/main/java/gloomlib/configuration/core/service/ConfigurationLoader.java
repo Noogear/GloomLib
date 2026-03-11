@@ -4,11 +4,11 @@ import gloomlib.configuration.api.ConfigurationFile;
 import gloomlib.configuration.api.annotation.Header;
 import gloomlib.configuration.api.annotation.PostLoad;
 import gloomlib.configuration.api.annotation.PreLoad;
-import gloomlib.configuration.api.exception.LoadContext;
 import gloomlib.configuration.api.util.ConfigurationLogger;
 import gloomlib.configuration.api.util.FileCache;
 import gloomlib.configuration.core.util.ReflectionUtils;
-import gloomlib.configuration.core.util.YamlLineIndex;
+import gloomlib.diagnostic.LoadContext;
+import gloomlib.diagnostic.YamlLineIndex;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 

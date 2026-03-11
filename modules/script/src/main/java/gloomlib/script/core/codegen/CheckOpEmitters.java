@@ -85,8 +85,13 @@ public final class CheckOpEmitters {
             mv.visitLdcInsn(value);
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "contains",
                     "(Ljava/lang/CharSequence;)Z", false);
-        } else if (type == IRType.COLLECTION) {
-            // Collection.contains(Object)
+        } else if (type.base() == gloomlib.script.core.ScriptIR.BaseType.MAP) {
+            // Map.containsKey(Object) — 'contains' on Map checks key membership
+            if (value instanceof String s) mv.visitLdcInsn(s);
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Map", "containsKey",
+                    "(Ljava/lang/Object;)Z", true);
+        } else if (type.base() == gloomlib.script.core.ScriptIR.BaseType.COLLECTION) {
+            // Collection.contains(Object) — array is rejected at validateType; only Collection instances reach here
             if (value instanceof String s) mv.visitLdcInsn(s);
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Collection", "contains",
                     "(Ljava/lang/Object;)Z", true);

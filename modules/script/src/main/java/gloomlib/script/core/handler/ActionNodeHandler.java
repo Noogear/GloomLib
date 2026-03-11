@@ -457,15 +457,42 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
         // Find which arg needs replacing
         ImmutableList<String> args = node.getAttrOrDefault("args", ImmutableList.of());
         int targetIndex = -1;
+        // 精确匹配：若 hook 携带 _var_name（虚拟生产者路径），只匹配与下沉变量同名的参数，
+        // 避免把 {target}、{source} 等无关单变量误判为注入点。
+        // 若 hook 无 _var_name（真实生产者 Path A），保持原有"取首个单变量"逻辑。
+        String sinkingVarName = inlineHook.getAttrOrDefault("_var_name", null);
         for (int i = 0; i < args.size(); i++) {
             String arg = args.get(i);
             if (ScriptIR.isSingleVar(arg)) {
-                targetIndex = i;
-                break;
+                if (sinkingVarName == null || sinkingVarName.equals(baseVarOf(arg))) {
+                    targetIndex = i;
+                    break;
+                }
             }
         }
 
-        return node.withAttr("conditionAction", inlineHook).withAttr("_sink_arg_index", targetIndex);
+        // 点链引用下沉：若未找到单变量引用，尝试匹配 {varName.prop} 形式的参数
+        // 例：showIndicator [..., "{cause.name}"] 中 cause 是可下沉变量，
+        // 则将 _sinking_property 从 "cause" 延伸为 "cause.name" 以启用完整链式属性加载
+        FlowNode effectiveHook = inlineHook;
+        if (targetIndex < 0) {
+            if (sinkingVarName != null) {
+                for (int i = 0; i < args.size(); i++) {
+                    String arg = args.get(i);
+                    if (ScriptIR.isDottedSingleRef(arg) && sinkingVarName.equals(baseVarOf(arg))) {
+                        targetIndex = i;
+                        // 构造完整属性路径：baseProp.suffix（如 "cause" + "." + "name" = "cause.name"）
+                        String inner = arg.substring(1, arg.length() - 1);
+                        String suffix = inner.substring(sinkingVarName.length() + 1);
+                        String baseProp = inlineHook.getAttrOrDefault("_sinking_property", "");
+                        effectiveHook = inlineHook.withAttr("_sinking_property", baseProp + "." + suffix);
+                        break;
+                    }
+                }
+            }
+        }
+
+        return node.withAttr("conditionAction", effectiveHook).withAttr("_sink_arg_index", targetIndex);
     }
 
     @Override

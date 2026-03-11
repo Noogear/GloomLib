@@ -2,7 +2,6 @@ package gloomlib.script.core.handler;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import gloomlib.script.core.CheckOp;
 import gloomlib.script.core.CompilationContext;
 import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.ScriptIR;
@@ -11,23 +10,29 @@ import gloomlib.script.core.ScriptIR.FlowNodeType;
 import gloomlib.script.core.ScriptIR.IRType;
 import gloomlib.script.core.ScriptIR.NodeCapability;
 import gloomlib.script.core.codegen.ASMUtils;
-import gloomlib.script.core.codegen.BytecodeCompiler;
-import gloomlib.script.core.codegen.CheckOpEmitters;
 import gloomlib.script.core.parser.ScriptParser;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
 /**
  * COLLECT 节点处理器——集合谓词操作。
  * <p>
- * 对 COLLECTION 类型变量进行迭代，使用 {@code match} 子条件对每个元素执行判定，
+ * 对 COLLECTION 类型变量进行迭代，使用 {@code match} 内联谓词子脚本对每个元素执行判定，
  * 根据 {@code op} 聚合结果。
+ * <p>
+ * <b>match 内联谓词架构</b>：match 字段是一个完整的流节点列表（与脚本顶层 flow 格式相同），
+ * 以当前迭代的集合元素作为"虚拟 payload"。任一节点的 early return 被转换为
+ * GOTO failLabel（元素不匹配），全部通过则落入后续指令（元素匹配）。
+ * 这使得 match 天然支持 CHECK、SWITCH、ANY/ALL 组合等全部流节点类型，复用整个脚本引擎的
+ * 编译基础设施，零重复代码。
  * <p>
  * 操作分为三类行为模式：
  * <ul>
@@ -50,13 +55,11 @@ import java.util.Map;
  *     </ul>
  *   </li>
  * </ul>
- * <p>
- * match 子条件复用 {@link CheckOp} + {@link CheckOpEmitters} 的全部操作符体系，零重复代码。
- * 字节码等价于手写 Java 的 Iterator 循环 + 条件短路。
  */
 @SuppressWarnings("null")
 public final class CollectNodeHandler
-        implements ScriptIR.FlowNodeHandler, ScriptIR.NodeMutator, ScriptIR.VariableConsumer {
+        implements ScriptIR.FlowNodeHandler, ScriptIR.NodeMutator, ScriptIR.VariableConsumer,
+        ScriptIR.BranchReorderer {
 
     static {
         FlowNodeType.registerHandler(FlowNodeType.COLLECT, CollectNodeHandler::new);
@@ -134,7 +137,6 @@ public final class CollectNodeHandler
 
 
     @Override
-    @SuppressWarnings("unchecked")
     public FlowNode parse(ParseContext ctx) {
         // variable：集合变量名
         String variable = ctx.get("variable");
@@ -146,24 +148,13 @@ public final class CollectNodeHandler
         String rawOp = ctx.get("op");
         CollectOp.Resolved resolved = CollectOp.resolve(rawOp);
 
-        // match：子条件列表
+        // match：内联谓词子脚本（完整流节点列表）
         List<?> matchRaw = ctx.get("match");
         if (matchRaw == null || matchRaw.isEmpty()) {
-            throw ctx.error("COLLECT node requires a non-empty 'match' list of conditions.");
+            throw ctx.error("COLLECT node requires a non-empty 'match' list.");
         }
-
-        ImmutableList.Builder<FlowNode> matchConditions = ImmutableList.builder();
-        List<FlowNode> condList = new ArrayList<>();
-        for (Object item : matchRaw) {
-            if (item instanceof Map<?, ?> rawMap) {
-                condList.add(parseMatchCondition(ctx, (Map<String, Object>) rawMap));
-            } else {
-                throw ctx.error("Invalid match condition in COLLECT node: " + item);
-            }
-        }
-        // 子条件重排：按操作符开销升序排列，廉价检查优先以最大化短路概率
-        condList.sort(java.util.Comparator.comparingInt(CollectNodeHandler::matchConditionCost));
-        matchConditions.addAll(condList);
+        ImmutableList<FlowNode> matchFlow = ScriptParser.parseFlow(matchRaw);
+        validateMatchFlow(matchFlow, ctx);
 
         // store：结果存储变量名
         String store = ctx.get("store");
@@ -180,7 +171,7 @@ public final class CollectNodeHandler
         attrs.put("variable", variable);
         attrs.put("collectOp", resolved.op().name());
         attrs.put("collectNegate", resolved.negate());
-        attrs.put("matchConditions", matchConditions.build());
+        attrs.put("matchFlow", matchFlow);
         if (store != null) {
             IRType returnType = switch (resolved.op()) {
                 case FIND -> IRType.OBJECT;
@@ -200,49 +191,12 @@ public final class CollectNodeHandler
         return new FlowNode(FlowNodeType.COLLECT, attrs.build());
     }
 
-    /**
-     * 解析单个 match 子条件为轻量 CHECK FlowNode。
-     * <p>
-     * 复用 {@link CheckOp#resolve} 进行操作符验证和规范化，
-     * 复用 {@link ScriptParser.ValueParser} 进行值类型推导。
-     */
-    private FlowNode parseMatchCondition(ParseContext parentCtx, Map<String, Object> matchAttrs) {
-        String op = (String) matchAttrs.get("op");
-        if (op == null) {
-            throw parentCtx.error("Match condition requires an 'op' field.");
-        }
-        // 验证并规范化操作符
-        CheckOp.Resolved resolved = CheckOp.resolve(op);
-        op = resolved.toSymbol();
-
-        Object value = matchAttrs.get("value");
-        ImmutableMap.Builder<String, Object> attrs = ImmutableMap.builder();
-        attrs.put("op", op);
-
-        double numericValue = 0.0;
-        if (value != null) {
-            if (value instanceof String s) {
-                value = ScriptParser.ValueParser.parseNumber(s);
-            }
-            attrs.put("value", value);
-            attrs.put("valueType", ScriptParser.ValueParser.inferType(value));
-            if (value instanceof Number n) {
-                numericValue = n.doubleValue();
-            }
-            if (value instanceof List<?> list) {
-                attrs.put("valueList", ImmutableList.copyOf(list));
-            }
-        }
-
-        return new FlowNode(FlowNodeType.CHECK, attrs.build(), numericValue, 0);
-    }
-
 
     @Override
     public void emit(FlowNode node, MethodVisitor mv, CompilationContext ctx) {
         CollectOp collectOp = CollectOp.valueOf(node.<String>getRequiredAttr("collectOp"));
         boolean negate = node.<Boolean>getAttrOrDefault("collectNegate", false);
-        ImmutableList<FlowNode> matchConditions = node.getRequiredAttr("matchConditions");
+        ImmutableList<FlowNode> matchFlow = node.getRequiredAttr("matchFlow");
 
         int collectionSlot;
         IRType collectionType;
@@ -251,7 +205,7 @@ public final class CollectNodeHandler
             String sinkingProp = conditionAction.getAttrOrDefault("_sinking_property", null);
             collectionSlot = ctx.nextSlot();
             if (sinkingProp != null) {
-                BytecodeCompiler.emitSunkPropertyLoad(mv, ctx, sinkingProp);
+                gloomlib.script.core.codegen.BytecodeCompiler.emitSunkPropertyLoad(mv, ctx, sinkingProp);
             } else {
                 conditionAction.type().handler().emit(conditionAction, mv, ctx);
             }
@@ -267,7 +221,8 @@ public final class CollectNodeHandler
         CollectionKind kind = detectKind(collectionType);
 
         // 解析元素类型（在 MAP 转换前完成，因为转换后 kind 变为 ITERABLE）
-        IRType elementType = resolveElementType(collectionType, kind);
+        // 委托给 IRType.elementType()：COLLECTION/MAP/ARRAY 三路逻辑统一维护于 IRType
+        IRType elementType = collectionType.elementType();
 
         // MAP → 提取 values() 转为 ITERABLE（使用独立临时槽位，避免覆盖命名变量）
         if (kind == CollectionKind.MAP) {
@@ -287,17 +242,17 @@ public final class CollectNodeHandler
 
         switch (collectOp) {
             case EXISTS -> emitQuantifier(node, mv, ctx, collectionSlot, elementType,
-                    kind, matchConditions, negate, componentType, true);
+                    kind, matchFlow, negate, componentType, true);
             case ALL -> emitQuantifier(node, mv, ctx, collectionSlot, elementType,
-                    kind, matchConditions, negate, componentType, false);
+                    kind, matchFlow, negate, componentType, false);
             case COUNT -> emitFullScan(node, mv, ctx, collectionSlot, elementType,
-                    kind, matchConditions, componentType, false);
+                    kind, matchFlow, componentType, false);
             case FILTER -> emitFullScan(node, mv, ctx, collectionSlot, elementType,
-                    kind, matchConditions, componentType, true);
+                    kind, matchFlow, componentType, true);
             case INDEX -> emitFirstMatch(node, mv, ctx, collectionSlot, elementType,
-                    kind, matchConditions, componentType, false);
+                    kind, matchFlow, componentType, false);
             case FIND -> emitFirstMatch(node, mv, ctx, collectionSlot, elementType,
-                    kind, matchConditions, componentType, true);
+                    kind, matchFlow, componentType, true);
         }
     }
 
@@ -308,36 +263,28 @@ public final class CollectNodeHandler
      * <p>
      * {@code exists}（isExists=true）：∃ 语义——匹配成功时短路跳 pass，遍历完无匹配跳 fail。
      * {@code all}（isExists=false）：∀ 语义——匹配失败时短路跳 fail，遍历完全通过跳 pass。
-     *
-     * @param negate    取反标志（{@code !exists} / {@code !all}），交换 pass/fail 最终指向
-     * @param isExists  {@code true} = exists 模式, {@code false} = all 模式
      */
     private void emitQuantifier(FlowNode node, MethodVisitor mv, CompilationContext ctx,
                                 int collectionSlot, IRType elementType,
                                 CollectionKind kind,
-                                ImmutableList<FlowNode> matchConditions, boolean negate,
+                                ImmutableList<FlowNode> matchFlow, boolean negate,
                                 Class<?> componentType, boolean isExists) {
         Label failLabel = new Label();
         Label passLabel = new Label();
         Label loopLabel = new Label();
 
-        // all 空集合 → 空真（pass），exists 空集合 → fail
         Label emptyTarget = isExists ? (negate ? passLabel : failLabel)
                 : (negate ? failLabel : passLabel);
-        // all 遍历完毕 → 全通过（pass），exists 遍历完毕 → 无匹配（fail）
         Label exhaustedTarget = isExists ? (negate ? passLabel : failLabel)
                 : (negate ? failLabel : passLabel);
 
         int baseTemp = Math.max(ctx.nextSlot(), collectionSlot + 1);
-        boolean needsUnbox = elementType.isPrimitive() && hasAnyNumericOp(matchConditions);
 
         if (kind == CollectionKind.ARRAY) {
             int lengthSlot = baseTemp;
             int indexSlot = baseTemp + 1;
             int elementSlot = baseTemp + 2;
-            int primitiveSlot = needsUnbox ? baseTemp + 3 : -1;
 
-            // length = array.length; if 0 → empty target
             mv.visitVarInsn(Opcodes.ALOAD, collectionSlot);
             mv.visitInsn(Opcodes.ARRAYLENGTH);
             mv.visitInsn(Opcodes.DUP);
@@ -354,26 +301,17 @@ public final class CollectNodeHandler
 
             emitExtractElement(mv, kind, collectionSlot, indexSlot, elementSlot,
                     elementType, componentType);
-            if (needsUnbox) {
-                emitUnboxToSlot(mv, elementSlot, primitiveSlot, elementType);
-            }
 
             if (isExists) {
-                // exists: 子条件不满足 → nextLabel → 继续循环；全通过 → 短路 pass
                 Label nextLabel = new Label();
-                emitMatchConditions(mv, matchConditions, elementSlot, elementType,
-                        primitiveSlot, nextLabel, ctx);
+                emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 3);
                 mv.visitJumpInsn(Opcodes.GOTO, negate ? failLabel : passLabel);
                 mv.visitLabel(nextLabel);
             } else {
-                // all: 子条件不满足 → 短路 fail；全通过 → 继续循环
                 Label matchFailLabel = new Label();
-                emitMatchConditions(mv, matchConditions, elementSlot, elementType,
-                        primitiveSlot, matchFailLabel, ctx);
-                // 全通过 → i++, 继续循环
+                emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, matchFailLabel, baseTemp + 3);
                 mv.visitIincInsn(indexSlot, 1);
                 mv.visitJumpInsn(Opcodes.GOTO, loopLabel);
-                // 不满足 → 短路跳到失败
                 mv.visitLabel(matchFailLabel);
                 mv.visitJumpInsn(Opcodes.GOTO, negate ? passLabel : failLabel);
             }
@@ -384,7 +322,6 @@ public final class CollectNodeHandler
         } else { // ITERABLE
             int iterSlot = baseTemp;
             int elementSlot = baseTemp + 1;
-            int primitiveSlot = needsUnbox ? baseTemp + 2 : -1;
 
             mv.visitVarInsn(Opcodes.ALOAD, collectionSlot);
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Collection", "isEmpty",
@@ -404,20 +341,13 @@ public final class CollectNodeHandler
 
             emitExtractElement(mv, kind, iterSlot, -1, elementSlot,
                     elementType, null);
-            if (needsUnbox) {
-                emitUnboxToSlot(mv, elementSlot, primitiveSlot, elementType);
-            }
 
             if (isExists) {
-                // exists: 不满足 → 跳回循环头；全通过 → 短路 pass
-                emitMatchConditions(mv, matchConditions, elementSlot, elementType,
-                        primitiveSlot, loopLabel, ctx);
+                emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, loopLabel, baseTemp + 2);
                 mv.visitJumpInsn(Opcodes.GOTO, negate ? failLabel : passLabel);
             } else {
-                // all: 不满足 → 短路 fail；全通过 → 继续循环
                 Label matchFailLabel = new Label();
-                emitMatchConditions(mv, matchConditions, elementSlot, elementType,
-                        primitiveSlot, matchFailLabel, ctx);
+                emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, matchFailLabel, baseTemp + 2);
                 mv.visitJumpInsn(Opcodes.GOTO, loopLabel);
                 mv.visitLabel(matchFailLabel);
                 mv.visitJumpInsn(Opcodes.GOTO, negate ? passLabel : failLabel);
@@ -436,16 +366,11 @@ public final class CollectNodeHandler
 
     /**
      * 发射 index / find 首匹配的字节码。
-     * <p>
-     * 遍历集合，找到第一个满足全部 match 的元素后短路退出，存储结果到 store 变量。
-     *
-     * @param returnElement {@code true} = find（存元素引用, null 为未找到），
-     *                      {@code false} = index（存 int 索引, -1 为未找到）
      */
     private void emitFirstMatch(FlowNode node, MethodVisitor mv, CompilationContext ctx,
                                 int collectionSlot, IRType elementType,
                                 CollectionKind kind,
-                                ImmutableList<FlowNode> matchConditions,
+                                ImmutableList<FlowNode> matchFlow,
                                 Class<?> componentType, boolean returnElement) {
         String store = node.getRequiredAttr("store");
         Label loopLabel = new Label();
@@ -453,8 +378,6 @@ public final class CollectNodeHandler
         Label doneLabel = new Label();
 
         int baseTemp = Math.max(ctx.nextSlot(), collectionSlot + 1);
-        boolean needsUnbox = elementType.isPrimitive() && hasAnyNumericOp(matchConditions);
-
         int resultSlot;
 
         if (kind == CollectionKind.ARRAY) {
@@ -462,9 +385,7 @@ public final class CollectNodeHandler
             int indexSlot = baseTemp + 1;
             int elementSlot = baseTemp + 2;
             resultSlot = baseTemp + 3;
-            int primitiveSlot = needsUnbox ? baseTemp + 4 : -1;
 
-            // 初始化 result
             if (returnElement) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
@@ -487,14 +408,9 @@ public final class CollectNodeHandler
 
             emitExtractElement(mv, kind, collectionSlot, indexSlot, elementSlot,
                     elementType, componentType);
-            if (needsUnbox) {
-                emitUnboxToSlot(mv, elementSlot, primitiveSlot, elementType);
-            }
 
-            emitMatchConditions(mv, matchConditions, elementSlot, elementType,
-                    primitiveSlot, nextLabel, ctx);
+            emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 4);
 
-            // 全部通过 → 存结果, 短路退出
             if (returnElement) {
                 mv.visitVarInsn(Opcodes.ALOAD, elementSlot);
                 mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
@@ -513,9 +429,7 @@ public final class CollectNodeHandler
             int elementSlot = baseTemp + 1;
             resultSlot = baseTemp + 2;
             int idxSlot = returnElement ? -1 : baseTemp + 3;
-            int primitiveSlot = needsUnbox ? (returnElement ? baseTemp + 3 : baseTemp + 4) : -1;
 
-            // 初始化 result
             if (returnElement) {
                 mv.visitInsn(Opcodes.ACONST_NULL);
                 mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
@@ -539,14 +453,10 @@ public final class CollectNodeHandler
 
             emitExtractElement(mv, kind, iterSlot, -1, elementSlot,
                     elementType, null);
-            if (needsUnbox) {
-                emitUnboxToSlot(mv, elementSlot, primitiveSlot, elementType);
-            }
 
-            emitMatchConditions(mv, matchConditions, elementSlot, elementType,
-                    primitiveSlot, nextLabel, ctx);
+            int predicateBase = returnElement ? baseTemp + 3 : baseTemp + 4;
+            emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, predicateBase);
 
-            // 全部通过 → 存结果, 短路退出
             if (returnElement) {
                 mv.visitVarInsn(Opcodes.ALOAD, elementSlot);
                 mv.visitVarInsn(Opcodes.ASTORE, resultSlot);
@@ -563,7 +473,6 @@ public final class CollectNodeHandler
             mv.visitJumpInsn(Opcodes.GOTO, loopLabel);
         }
 
-        // 循环结束 → store
         mv.visitLabel(doneLabel);
         int storeSlot = ctx.getSlot(store);
         if (returnElement) {
@@ -579,16 +488,11 @@ public final class CollectNodeHandler
 
     /**
      * 发射 count / filter 全扫描的字节码。
-     * <p>
-     * 遍历全部元素，对每个匹配的元素执行累积操作。
-     *
-     * @param collectToList {@code true} = filter（累积到 ArrayList），
-     *                      {@code false} = count（iinc 计数器）
      */
     private void emitFullScan(FlowNode node, MethodVisitor mv, CompilationContext ctx,
                               int collectionSlot, IRType elementType,
                               CollectionKind kind,
-                              ImmutableList<FlowNode> matchConditions,
+                              ImmutableList<FlowNode> matchFlow,
                               Class<?> componentType, boolean collectToList) {
         String store = node.getRequiredAttr("store");
         Label loopLabel = new Label();
@@ -596,8 +500,6 @@ public final class CollectNodeHandler
         Label doneLabel = new Label();
 
         int baseTemp = Math.max(ctx.nextSlot(), collectionSlot + 1);
-        boolean needsUnbox = elementType.isPrimitive() && hasAnyNumericOp(matchConditions);
-
         int accSlot;
 
         if (kind == CollectionKind.ARRAY) {
@@ -605,9 +507,7 @@ public final class CollectNodeHandler
             int indexSlot = baseTemp + 1;
             int elementSlot = baseTemp + 2;
             accSlot = baseTemp + 3;
-            int primitiveSlot = needsUnbox ? baseTemp + 4 : -1;
 
-            // 初始化累积器
             if (collectToList) {
                 mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
                 mv.visitInsn(Opcodes.DUP);
@@ -633,20 +533,15 @@ public final class CollectNodeHandler
 
             emitExtractElement(mv, kind, collectionSlot, indexSlot, elementSlot,
                     elementType, componentType);
-            if (needsUnbox) {
-                emitUnboxToSlot(mv, elementSlot, primitiveSlot, elementType);
-            }
 
-            emitMatchConditions(mv, matchConditions, elementSlot, elementType,
-                    primitiveSlot, nextLabel, ctx);
+            emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 4);
 
-            // 全部通过 → 累积
             if (collectToList) {
                 mv.visitVarInsn(Opcodes.ALOAD, accSlot);
                 mv.visitVarInsn(Opcodes.ALOAD, elementSlot);
                 mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/List", "add",
                         "(Ljava/lang/Object;)Z", true);
-                mv.visitInsn(Opcodes.POP); // 丢弃 boolean 返回值
+                mv.visitInsn(Opcodes.POP);
             } else {
                 mv.visitIincInsn(accSlot, 1);
             }
@@ -659,9 +554,7 @@ public final class CollectNodeHandler
             int iterSlot = baseTemp;
             int elementSlot = baseTemp + 1;
             accSlot = baseTemp + 2;
-            int primitiveSlot = needsUnbox ? baseTemp + 3 : -1;
 
-            // 初始化累积器
             if (collectToList) {
                 mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
                 mv.visitInsn(Opcodes.DUP);
@@ -686,14 +579,9 @@ public final class CollectNodeHandler
 
             emitExtractElement(mv, kind, iterSlot, -1, elementSlot,
                     elementType, null);
-            if (needsUnbox) {
-                emitUnboxToSlot(mv, elementSlot, primitiveSlot, elementType);
-            }
 
-            emitMatchConditions(mv, matchConditions, elementSlot, elementType,
-                    primitiveSlot, nextLabel, ctx);
+            emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 3);
 
-            // 全部通过 → 累积
             if (collectToList) {
                 mv.visitVarInsn(Opcodes.ALOAD, accSlot);
                 mv.visitVarInsn(Opcodes.ALOAD, elementSlot);
@@ -708,7 +596,6 @@ public final class CollectNodeHandler
             mv.visitJumpInsn(Opcodes.GOTO, loopLabel);
         }
 
-        // 循环结束 → store
         mv.visitLabel(doneLabel);
         int storeSlot = ctx.getSlot(store);
         if (collectToList) {
@@ -717,6 +604,104 @@ public final class CollectNodeHandler
         } else {
             mv.visitVarInsn(Opcodes.ILOAD, accSlot);
             mv.visitVarInsn(Opcodes.ISTORE, storeSlot);
+        }
+    }
+
+
+    // ======================== 内联谓词发射 ========================
+
+    /**
+     * 内联谓词发射：将 matchFlow 中的每个流节点以"谓词模式"发射到当前循环体中。
+     * <p>
+     * 任一节点的 early return → GOTO failLabel（元素不匹配），
+     * 全部通过 → 顺序落入下一条指令（元素匹配）。
+     * <p>
+     * 变量生命周期：
+     * <ol>
+     *   <li>扫描 matchFlow 中所有 CHECK/SWITCH 引用的变量名</li>
+     *   <li>对每个变量名，作为元素属性路径解析类型 & 分配临时槽位</li>
+     *   <li>发射属性提取字节码（元素 → 属性值 → 槽位）</li>
+     *   <li>注册为 {@link CompilationContext} 的动态变量</li>
+     *   <li>设置 {@code predicateFailLabel}，发射全部 matchFlow 节点</li>
+     *   <li>清除动态变量 & 恢复 predicateFailLabel</li>
+     * </ol>
+     *
+     * @param matchFlow   内联谓词流节点列表
+     * @param elementSlot 当前迭代元素的局部变量槽位（始终装箱引用 ASTORE）
+     * @param elementType 元素的 IR 类型
+     * @param failLabel   匹配失败时跳转的标签
+     * @param nextAvail   可用的下一个临时槽位（用于属性变量分配）
+     */
+    private static void emitInlinePredicate(MethodVisitor mv, CompilationContext ctx,
+                                            ImmutableList<FlowNode> matchFlow,
+                                            int elementSlot, IRType elementType,
+                                            Label failLabel, int nextAvail) {
+        // 1. 发现 matchFlow 中引用的所有变量名
+        Set<String> varNames = new LinkedHashSet<>();
+        for (FlowNode node : matchFlow) {
+            discoverVariables(node, varNames);
+        }
+
+        // 2. 注册 $it（元素本身）——根据类型决定是否需要拆箱
+        if (elementType.isPrimitive()) {
+            // 基本类型元素：拆箱到独立槽位供数值操作使用
+            int unboxedSlot = nextAvail;
+            nextAvail += (elementType == IRType.DOUBLE || elementType == IRType.LONG) ? 2 : 1;
+            emitUnboxToSlot(mv, elementSlot, unboxedSlot, elementType);
+            ctx.registerDynamicVar("$it", unboxedSlot, elementType);
+        } else {
+            ctx.registerDynamicVar("$it", elementSlot, elementType);
+        }
+
+        // 3. 为每个属性变量分配槽位并发射提取字节码
+        for (String varName : varNames) {
+            if ("$it".equals(varName)) continue;
+            // 解析元素属性类型
+            Class<?> elementClass = com.google.common.primitives.Primitives.wrap(
+                    elementType.getToken().getRawType());
+            IRType propType = ScriptParser.PropertyResolver.resolveType(elementClass, varName, null);
+            // 发射属性提取：element → accessor chain → store
+            List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
+                    ScriptParser.PropertyResolver.resolveAccessors(
+                            com.google.common.reflect.TypeToken.of(elementClass), varName);
+            mv.visitVarInsn(Opcodes.ALOAD, elementSlot);
+            for (var accessor : accessors) {
+                accessor.emitLoad(mv);
+            }
+            // 根据属性类型决定存储方式
+            int slot = nextAvail;
+            nextAvail += (propType == IRType.DOUBLE || propType == IRType.LONG) ? 2 : 1;
+            mv.visitVarInsn(ASMUtils.storeOpcode(propType), slot);
+            ctx.registerDynamicVar(varName, slot, propType);
+        }
+
+        // 4. 设置谓词失败标签
+        Label prevLabel = ctx.getPredicateFailLabel();
+        ctx.setPredicateFailLabel(failLabel);
+
+        // 5. 发射 match 流节点
+        for (FlowNode node : matchFlow) {
+            node.type().handler().emit(node, mv, ctx);
+        }
+
+        // 6. 恢复上下文
+        ctx.setPredicateFailLabel(prevLabel);
+        ctx.clearDynamicVars();
+    }
+
+    /**
+     * 递归发现流节点树中引用的所有变量名。
+     */
+    private static void discoverVariables(FlowNode node, Set<String> varNames) {
+        String var = node.getAttrOrDefault("variable", null);
+        if (var != null) {
+            varNames.add(var);
+        }
+        // 递归遍历子节点（复合条件 ANY/ALL 的子列表等）
+        if (node.type().handler() instanceof ScriptIR.NodeTraverser traverser) {
+            for (FlowNode child : traverser.traverseChildren(node)) {
+                discoverVariables(child, varNames);
+            }
         }
     }
 
@@ -733,99 +718,35 @@ public final class CollectNodeHandler
         return CollectionKind.ITERABLE;
     }
 
-    /**
-     * 根据集合类型和迭代策略解析元素类型。
-     * <ul>
-     *   <li>ARRAY → 取数组组件类型（{@code String[]} → STRING, {@code int[]} → INT）</li>
-     *   <li>MAP → 解析 {@code Map<K,V>} 的 V 类型参数</li>
-     *   <li>ITERABLE → 委托 {@link IRType#elementType()}</li>
-     * </ul>
-     */
-    private static IRType resolveElementType(IRType collectionType, CollectionKind kind) {
-        if (kind == CollectionKind.MAP) {
-            try {
-                var vt = collectionType.getToken().resolveType(
-                        java.util.Map.class.getTypeParameters()[1]);
-                return (vt.getType() instanceof java.lang.reflect.TypeVariable<?>)
-                        ? IRType.OBJECT : IRType.fromToken(vt);
-            } catch (Exception e) {
-                return IRType.OBJECT;
-            }
-        }
-        // ARRAY 和 ITERABLE 均委托 IRType.elementType()（已统一处理数组/泛型集合）
-        return collectionType.elementType();
-    }
-
-    // ======================== 子条件匹配（提取的公共方法） ========================
-
-    /**
-     * 发射全部 match 子条件的字节码。
-     * <p>
-     * 子条件之间为 ALL 语义：任一不满足 → 跳转到 {@code failLabel}。
-     *
-     * @param elementSlot   元素的引用槽位（始终 ASTORE 的装箱引用）
-     * @param primitiveSlot 元素的基本类型槽位（仅当 elementType 为 primitive 且有数值操作时 ≥ 0）
-     */
-    private static void emitMatchConditions(MethodVisitor mv, ImmutableList<FlowNode> matchConditions,
-                                            int elementSlot, IRType elementType, int primitiveSlot,
-                                            Label failLabel, CompilationContext ctx) {
-        for (FlowNode cond : matchConditions) {
-            CheckOp.Resolved info = CheckOp.resolve(cond.getRequiredAttr("op"));
-
-            int slot;
-            IRType type;
-            if (primitiveSlot >= 0 && needsPrimitiveSlot(info.op())) {
-                // 数值/相等/范围操作 → 使用拆箱后的基本类型槽位
-                slot = primitiveSlot;
-                type = elementType;
-            } else if (elementType.isPrimitive()) {
-                // 引用操作（null/instanceof）作用于装箱引用
-                slot = elementSlot;
-                type = IRType.OBJECT;
-            } else {
-                // 非基本类型元素 → 直接使用引用槽位
-                slot = elementSlot;
-                type = elementType;
-            }
-
-            int jumpOp = CheckOpEmitters.forOp(info.op())
-                    .emit(mv, info.op(), slot, type, cond, ctx);
-            mv.visitJumpInsn(info.negate() ? jumpOp : ASMUtils.invertJump(jumpOp), failLabel);
-        }
-    }
-
     // ======================== 元素提取 ========================
 
     /**
      * 从 Collection/Array 中提取元素并存入 elementSlot（始终装箱引用 ASTORE）。
-     *
-     * @param sourceSlot1 ITERABLE → Iterator 槽位; ARRAY → 数组槽位
-     * @param sourceSlot2 ARRAY → 索引槽位（ITERABLE 时忽略）
      */
     private static void emitExtractElement(MethodVisitor mv, CollectionKind kind,
                                            int sourceSlot1, int sourceSlot2,
                                            int elementSlot, IRType elementType,
                                            Class<?> arrayComponent) {
         if (kind == CollectionKind.ARRAY) {
-            mv.visitVarInsn(Opcodes.ALOAD, sourceSlot1);   // 数组
-            mv.visitVarInsn(Opcodes.ILOAD, sourceSlot2);   // 索引
+            mv.visitVarInsn(Opcodes.ALOAD, sourceSlot1);
+            mv.visitVarInsn(Opcodes.ILOAD, sourceSlot2);
             if (arrayComponent != null && arrayComponent.isPrimitive()) {
                 mv.visitInsn(ASMUtils.arrayLoadOpcode(arrayComponent));
                 if (arrayComponent == float.class) {
-                    mv.visitInsn(Opcodes.F2D); // float → double（IRType 映射 float → DOUBLE）
+                    mv.visitInsn(Opcodes.F2D);
                 }
                 ASMUtils.emitBox(mv, IRType.fromClass(arrayComponent));
             } else {
                 mv.visitInsn(Opcodes.AALOAD);
                 emitElementCast(mv, elementType);
             }
-        } else { // ITERABLE
-            mv.visitVarInsn(Opcodes.ALOAD, sourceSlot1);   // Iterator
+        } else {
+            mv.visitVarInsn(Opcodes.ALOAD, sourceSlot1);
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Iterator", "next",
                     "()Ljava/lang/Object;", true);
             emitElementCast(mv, elementType);
         }
-        mv.visitVarInsn(Opcodes.ASTORE, elementSlot);      // 始终装箱引用
+        mv.visitVarInsn(Opcodes.ASTORE, elementSlot);
     }
 
     /**
@@ -837,8 +758,6 @@ public final class CollectNodeHandler
         ASMUtils.emitUnbox(mv, elementType);
         mv.visitVarInsn(ASMUtils.storeOpcode(elementType), primitiveSlot);
     }
-
-
 
     /**
      * 为已知元素类型发射 CHECKCAST（仅对非 OBJECT 类型）。
@@ -853,50 +772,87 @@ public final class CollectNodeHandler
         }
     }
 
-    // ======================== 操作符分类 ========================
-
     /**
-     * 判断该 CheckOp 是否需要基本类型槽位（ILOAD/DLOAD/LLOAD）来执行。
+     * 验证 matchFlow 仅包含谓词安全的节点类型。
      * <p>
-     * 返回 {@code true} 的操作符在 CheckOpEmitters 中使用类型特定的加载指令，
-     * 无法直接操作装箱引用。
+     * 谓词模式下安全的节点：CHECK（条件判断）、ANY/ALL（复合条件）。
+     * 不安全的节点：RETURN（直接退出方法而非跳过元素）、ACTION（每元素副作用）、
+     * MATH（变量存储语义冲突）、COLLECT（嵌套循环槽位冲突）、SWITCH（复杂分支语义不匹配）。
      */
-    private static boolean needsPrimitiveSlot(CheckOp op) {
-        return switch (op) {
-            case EQ, NEQ, GT, GTE, LT, LTE, IN, BETWEEN -> true;
-            default -> false; // NULL, INSTANCEOF, CONTAINS, STARTS_WITH, ENDS_WITH, MATCHES
-        };
-    }
-
-    /**
-     * 检查 matchConditions 中是否存在需要基本类型槽位的操作。
-     */
-    private static boolean hasAnyNumericOp(ImmutableList<FlowNode> matchConditions) {
-        for (FlowNode cond : matchConditions) {
-            CheckOp.Resolved info = CheckOp.resolve(cond.getRequiredAttr("op"));
-            if (needsPrimitiveSlot(info.op())) return true;
+    private static void validateMatchFlow(ImmutableList<FlowNode> matchFlow, ParseContext ctx) {
+        for (FlowNode node : matchFlow) {
+            validateMatchNode(node, ctx);
         }
-        return false;
     }
 
     /**
-     * 子条件排序开销评估。
-     * <p>
-     * 值越小越廉价，排序后廉价检查优先执行以最大化短路概率。
+     * 递归验证单个节点及其子节点是否为谓词安全类型。
+     * ANY/ALL 的子列表也必须满足约束——否则嵌套的 ACTION/RETURN 仍会导致语义错误。
      */
-    private static int matchConditionCost(FlowNode cond) {
-        CheckOp.Resolved info = CheckOp.resolve(cond.getRequiredAttr("op"));
-        return switch (info.op()) {
-            case NULL -> 0;         // 1 条比较指令
-            case INSTANCEOF -> 1;   // 1 条 INSTANCEOF 指令
-            case EQ, NEQ -> 2;      // 1 次 equals / IF_ICMPxx
-            case GT, GTE, LT, LTE -> 3;
-            case STARTS_WITH, ENDS_WITH -> 4;
-            case CONTAINS -> 5;
-            case IN -> 6;           // Set.contains 或展开比较
-            case BETWEEN -> 7;      // 2 次比较
-            case MATCHES -> 8;      // 正则匹配，最昂贵
+    private static void validateMatchNode(FlowNode node, ParseContext ctx) {
+        switch (node.type()) {
+            case CHECK -> {} // 谓词安全
+            case ANY, ALL -> {
+                // 递归验证复合条件的子节点
+                if (node.type().handler() instanceof ScriptIR.NodeTraverser traverser) {
+                    for (FlowNode child : traverser.traverseChildren(node)) {
+                        validateMatchNode(child, ctx);
+                    }
+                }
+            }
+            case RETURN -> throw ctx.error(
+                    "RETURN node is not allowed inside match — "
+                            + "it would exit the entire script, not skip the element.");
+            case ACTION -> throw ctx.error(
+                    "ACTION node is not allowed inside match — "
+                            + "it would execute side effects for every iterated element.");
+            default -> throw ctx.error(
+                    "Node type '" + node.type() + "' is not supported inside match. "
+                            + "Only CHECK, ANY, and ALL nodes are allowed.");
+        }
+    }
+
+    // ======================== matchFlow 分支重排 ========================
+
+    @Override
+    public FlowNode reorderBranches(FlowNode node, CompilationContext ctx) {
+        ImmutableList<FlowNode> matchFlow = node.getAttrOrDefault("matchFlow", null);
+        if (matchFlow == null || matchFlow.size() <= 1) return node;
+
+        List<FlowNode> sorted = new ArrayList<>(matchFlow);
+        sorted.sort(Comparator.comparingInt(CollectNodeHandler::matchNodeCost));
+
+        ImmutableList<FlowNode> sortedFlow = ImmutableList.copyOf(sorted);
+        if (sortedFlow.equals(matchFlow)) return node;
+        return node.withAttr("matchFlow", sortedFlow);
+    }
+
+    /**
+     * 估算 matchFlow 节点的比较成本，用于将低成本条件前移以实现更早的短路退出。
+     * <p>
+     * 成本因子：属性访问 (+10) > 复合条件 (100) > 正则 (10) > 字符串操作 (6) > 数值比较 (2) > null 检查 (1)
+     */
+    private static int matchNodeCost(FlowNode node) {
+        if (node.type() == FlowNodeType.ANY || node.type() == FlowNodeType.ALL) {
+            return 100;
+        }
+        String variable = node.getAttrOrDefault("variable", null);
+        int propCost = "$it".equals(variable) ? 0 : 10;
+
+        String opStr = node.getAttrOrDefault("op", "==");
+        String rawOp = opStr.startsWith("!") ? opStr.substring(1) : opStr;
+        int opCost = switch (rawOp.toLowerCase()) {
+            case "null" -> 1;
+            case "==", "!=" -> 2;
+            case "<", "<=", ">", ">=" -> 2;
+            case "between" -> 3;
+            case "instanceof" -> 4;
+            case "in" -> 5;
+            case "contains", "starts_with", "ends_with" -> 6;
+            case "matches" -> 10;
+            default -> 5;
         };
+        return propCost + opCost;
     }
 
     @Override
@@ -907,9 +863,9 @@ public final class CollectNodeHandler
     @Override
     public Iterable<FlowNode> traverseChildren(FlowNode node) {
         ArrayList<FlowNode> children = new ArrayList<>();
-        ImmutableList<FlowNode> matchConditions = node.getAttrOrDefault("matchConditions", null);
-        if (matchConditions != null) {
-            children.addAll(matchConditions);
+        ImmutableList<FlowNode> matchFlow = node.getAttrOrDefault("matchFlow", null);
+        if (matchFlow != null) {
+            children.addAll(matchFlow);
         }
         ImmutableList<FlowNode> onFailNodes = node.getAttrOrDefault("onFailNodes", null);
         if (onFailNodes != null) {
@@ -920,14 +876,14 @@ public final class CollectNodeHandler
 
     @Override
     public FlowNode mapChildren(FlowNode node, java.util.function.Function<FlowNode, FlowNode> mapper) {
-        ImmutableList<FlowNode> matchConditions = node.getAttrOrDefault("matchConditions", null);
-        ImmutableList<FlowNode> onFailNodes     = node.getAttrOrDefault("onFailNodes", null);
+        ImmutableList<FlowNode> matchFlow   = node.getAttrOrDefault("matchFlow", null);
+        ImmutableList<FlowNode> onFailNodes = node.getAttrOrDefault("onFailNodes", null);
         FlowNode result = node;
-        if (matchConditions != null) {
-            ImmutableList<FlowNode> mapped = matchConditions.stream()
+        if (matchFlow != null) {
+            ImmutableList<FlowNode> mapped = matchFlow.stream()
                     .map(mapper).collect(ImmutableList.toImmutableList());
-            if (!mapped.equals(matchConditions)) {
-                result = result.withAttr("matchConditions", mapped);
+            if (!mapped.equals(matchFlow)) {
+                result = result.withAttr("matchFlow", mapped);
             }
         }
         if (onFailNodes != null) {
@@ -944,7 +900,7 @@ public final class CollectNodeHandler
     public FlowNode filterChildren(FlowNode node, java.util.function.Predicate<FlowNode> keep,
                                    java.util.function.Function<FlowNode, FlowNode> mapper) {
         FlowNode result = node;
-        result = ScriptIR.NodeMutator.filterAttr(result, "matchConditions", keep, mapper);
+        result = ScriptIR.NodeMutator.filterAttr(result, "matchFlow", keep, mapper);
         result = ScriptIR.NodeMutator.filterAttr(result, "onFailNodes", keep, mapper);
         return result;
     }
