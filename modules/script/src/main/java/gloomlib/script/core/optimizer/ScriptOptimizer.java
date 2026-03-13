@@ -433,6 +433,30 @@ public final class ScriptOptimizer {
         for (FlowNode node : unit.flow()) {
             collectLiveVars(node, refs);
         }
+        // 传递性：属性路径中通过 {varName} 引用的变量（如 DynamicMapAccessor / DynamicListAccessor 的键/索引）
+        // 需要与被引用它的变量一同被提取，否则运行时槽位未初始化会导致 VerifyError。
+        // 核心不动点迭代：只要新加入了 live 变量，就重新扫描，直到不再有新增为止。
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (gloomlib.script.core.ScriptIR.VarDecl var : unit.vars()) {
+                if (!refs.contains(var.name())) continue;
+                // 扫描该变量属性路径中的所有 {dynVar} 引用
+                String prop = var.property();
+                int i = 0;
+                while (i < prop.length()) {
+                    int start = prop.indexOf('{', i);
+                    if (start == -1) break;
+                    int end = prop.indexOf('}', start + 1);
+                    if (end == -1) break;
+                    String dynVar = prop.substring(start + 1, end);
+                    if (refs.add(dynVar, 1) == 0) { // add returns previous count; 0 means newly added
+                        changed = true;
+                    }
+                    i = end + 1;
+                }
+            }
+        }
         ctx.setLiveVars(refs.elementSet());
     }
 

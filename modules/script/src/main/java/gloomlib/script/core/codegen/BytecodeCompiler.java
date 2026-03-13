@@ -132,6 +132,19 @@ public final class BytecodeCompiler implements Opcodes {
                 // 窄化点链：ALOAD slot + CHECKCAST + accessor 链，返回末端类型
                 Class<?> propRaw = emitNarrowedPropertyLoad(mv, ctx, part).getRawType();
                 descriptor.append(concatDescriptorOf(propRaw));
+            } else if (ScriptIR.isIndexedRef(part)) {
+                // 索引访问：ALOAD base + accessor 链（List[n]、Map[key]、Array[i] 等）
+                String baseName = part.substring(0, part.indexOf('['));
+                String indexPath = part.substring(part.indexOf('['));
+                mv.visitVarInsn(ALOAD, ctx.getSlot(baseName));
+                java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
+                        ScriptParser.PropertyResolver.resolveAccessors(
+                                ctx.getType(baseName).getToken(), indexPath, ctx.scriptId());
+                emitAccessorChain(accessors, mv, ctx);
+                Class<?> endRaw = accessors.isEmpty()
+                        ? ctx.getType(baseName).getToken().getRawType()
+                        : accessors.get(accessors.size() - 1).returnType().getRawType();
+                descriptor.append(concatDescriptorOf(endRaw));
             } else {
                 // 普通变量槽：类型感知 LOAD
                 descriptor.append(emitSlotLoad(mv, ctx.getSlot(part), ctx.getType(part)));
@@ -192,6 +205,17 @@ public final class BytecodeCompiler implements Opcodes {
     // ---- 多级 CSE Trie 内部数据结构与辅助方法 ----
 
     /**
+     * 发射 accessor 链。
+     */
+    public static void emitAccessorChain(
+            java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors,
+            MethodVisitor mv, CompilationContext ctx) {
+        for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : accessors) {
+            acr.emitLoad(mv, ctx);
+        }
+    }
+
+    /**
      * 发射窄化点链属性读取，并返回最终 accessor 的真实返回类型（供调用方决定 invokedynamic 描述符）。
      * <p>
      * 支持安全访问模式 {@code entity?.name}：变量为 null 时短路返回 null，
@@ -215,7 +239,8 @@ public final class BytecodeCompiler implements Opcodes {
 
         Class<?> narrowed = ctx.getNarrowedClass(varName);
         if (narrowed == null && !safeAccess) {
-            throw gloomlib.script.api.ScriptCompileException.parse(
+            throw gloomlib.script.api.ScriptCompileException.create(
+                    ctx.scriptId(), null, gloomlib.diagnostic.DiagnosticCategory.SEMANTIC,
                     "Dotted template {" + part + "}: variable '" + varName +
                             "' has no narrowed type. Add 'check: op: instanceof' before this action.");
         }
@@ -237,10 +262,8 @@ public final class BytecodeCompiler implements Opcodes {
             List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
                     ScriptParser.PropertyResolver.resolveAccessors(
                             com.google.common.reflect.TypeToken.of(narrowed != null ? narrowed : ctx.payloadClass()),
-                            propPath);
-            for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : accessors) {
-                acr.emitLoad(mv);
-            }
+                            propPath, ctx.scriptId());
+            emitAccessorChain(accessors, mv, ctx);
             mv.visitJumpInsn(GOTO, endLabel);
 
             // null 分支：弹掉栈顶 null，推一个 null
@@ -259,10 +282,8 @@ public final class BytecodeCompiler implements Opcodes {
 
         List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
                 ScriptParser.PropertyResolver.resolveAccessors(
-                        com.google.common.reflect.TypeToken.of(narrowed), propPath);
-        for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : accessors) {
-            acr.emitLoad(mv);
-        }
+                        com.google.common.reflect.TypeToken.of(narrowed), propPath, ctx.scriptId());
+        emitAccessorChain(accessors, mv, ctx);
         return accessors.isEmpty()
                 ? com.google.common.reflect.TypeToken.of(narrowed)
                 : accessors.get(accessors.size() - 1).returnType();
@@ -274,6 +295,19 @@ public final class BytecodeCompiler implements Opcodes {
     }
 
     /**
+     * 若目标为基本类型但 Accessor 链末端返回的是装箱引用，则发射拆箱指令。
+     * 统一「类型原始但 Accessor 返回引用」场景的拆箱逻辑，消除重复。
+     */
+    public static void emitUnboxIfNeeded(MethodVisitor mv,
+                                         java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors,
+                                         gloomlib.script.core.ScriptIR.IRType targetType) {
+        if (targetType.isPrimitive() && !accessors.isEmpty()
+                && !accessors.get(accessors.size() - 1).returnType().getRawType().isPrimitive()) {
+            ASMUtils.emitUnbox(mv, targetType);
+        }
+    }
+
+    /**
      * 发射属性下沉加载序列：ALOAD 1 + PropertyAccessor 链。
      * 桥接 PropertyResolver 解析与 ASM 字节码发射，与 {@link #emitStringConcat} 同级。
      *
@@ -282,17 +316,37 @@ public final class BytecodeCompiler implements Opcodes {
      * @param sinkingProp 下沉的属性表达式 (e.g. "health")
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
+    private static java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> emitSunkPropertyChain(
+            MethodVisitor mv, CompilationContext ctx, String sinkingProp) {
+        mv.visitVarInsn(Opcodes.ALOAD, 1);
+        java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors = ScriptParser.PropertyResolver
+                .resolveAccessors(
+                        com.google.common.reflect.TypeToken.of((Class) ctx.payloadClass()), sinkingProp,
+                        ctx.scriptId());
+        emitAccessorChain(accessors, mv, ctx);
+        return accessors;
+    }
+
     public static void emitSunkPropertyLoad(MethodVisitor mv, CompilationContext ctx,
                                             String sinkingProp) {
-        mv.visitVarInsn(Opcodes.ALOAD, 1);
+        emitSunkPropertyChain(mv, ctx, sinkingProp);
+    }
 
-        List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors = ScriptParser.PropertyResolver
-                .resolveAccessors(
-                        com.google.common.reflect.TypeToken.of((Class) ctx.payloadClass()), sinkingProp);
-
-        for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : accessors) {
-            acr.emitLoad(mv);
-        }
+    /**
+     * 发射属性下沉加载序列，并自动拆箱（当需要时）。
+     * 委托 {@link #emitSunkPropertyLoad} 发射基础加载，再通过 {@link #emitUnboxIfNeeded} 条件拆箱。
+     *
+     * @param mv          方法访问器
+     * @param ctx         编译上下文
+     * @param sinkingProp 下沉的属性表达式
+     * @param targetType  期望的目标 IRType（用于判断是否需要拆箱）
+     */
+    public static void emitSunkPropertyLoadWithUnbox(MethodVisitor mv, CompilationContext ctx,
+                                                     String sinkingProp,
+                                                     gloomlib.script.core.ScriptIR.IRType targetType) {
+        java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
+                emitSunkPropertyChain(mv, ctx, sinkingProp);
+        emitUnboxIfNeeded(mv, accessors, targetType);
     }
 
     public byte[] compile(ScriptUnit unit, CompilationContext ctx) {
@@ -521,20 +575,22 @@ public final class BytecodeCompiler implements Opcodes {
                 // ---- 多后代分支：缓存本级结果 ----
                 List<gloomlib.script.core.parser.accessor.PropertyAccessor> segAccessors =
                         gloomlib.script.core.parser.ScriptParser.PropertyResolver
-                                .resolveAccessors(sourceType, segment);
+                                .resolveAccessors(sourceType, segment, ctx.scriptId());
                 com.google.common.reflect.TypeToken<?> segType = segAccessors.isEmpty() ? sourceType
                         : segAccessors.get(segAccessors.size() - 1).returnType();
 
                 mv.visitVarInsn(ALOAD, sourceSlot);
-                for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : segAccessors) {
-                    acr.emitLoad(mv);
-                }
+                emitAccessorChain(segAccessors, mv, ctx);
                 int cachedSlot = nextTemp[0]++;
                 mv.visitVarInsn(ASTORE, cachedSlot);
 
                 // 发射在本级终结的变量（如同时声明了 player.inventory 和 player.inventory.size）
                 for (VarDecl t : child.terminals) {
                     mv.visitVarInsn(ALOAD, cachedSlot);
+                    // 缓存槽始终以 ASTORE 保存引用，若目标类型为基本类型需先拆箱
+                    if (t.type().isPrimitive()) {
+                        ASMUtils.emitUnbox(mv, t.type());
+                    }
                     mv.visitVarInsn(ASMUtils.storeOpcode(t.type()), ctx.getSlot(t.name()));
                 }
 
@@ -548,10 +604,9 @@ public final class BytecodeCompiler implements Opcodes {
                 mv.visitVarInsn(ALOAD, sourceSlot);
                 List<gloomlib.script.core.parser.accessor.PropertyAccessor> remAccessors =
                         gloomlib.script.core.parser.ScriptParser.PropertyResolver
-                                .resolveAccessors(sourceType, remaining);
-                for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : remAccessors) {
-                    acr.emitLoad(mv);
-                }
+                                .resolveAccessors(sourceType, remaining, ctx.scriptId());
+                emitAccessorChain(remAccessors, mv, ctx);
+                emitUnboxIfNeeded(mv, remAccessors, singleVar.type());
                 mv.visitVarInsn(ASMUtils.storeOpcode(singleVar.type()), ctx.getSlot(singleVar.name()));
             }
         }

@@ -255,7 +255,7 @@ public final class ReturnNodeHandler implements gloomlib.script.core.ScriptIR.Fl
                 gloomlib.script.core.ScriptIR.IRType returnType = conditionAction.getRequiredAttr("returnType");
                 if (sinkingProp != null) {
                     // 路径 CA：属性下沉（Property Sinking）— virtual producer
-                    BytecodeCompiler.emitSunkPropertyLoad(mv, ctx, sinkingProp);
+                    BytecodeCompiler.emitSunkPropertyLoadWithUnbox(mv, ctx, sinkingProp, returnType);
                 } else {
                     // 路径 CB：生产者内联（Producer Inlining）— inlined ACTION node
                     // 需要直接发射调用并把返回值留在栈顶，而非让 ActionNodeHandler.emit 弹出它

@@ -1,6 +1,7 @@
 package gloomlib.script.core.parser.accessor;
 
 import com.google.common.reflect.TypeToken;
+import gloomlib.script.core.CompilationContext;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Type;
 
@@ -13,7 +14,7 @@ import static org.objectweb.asm.Opcodes.INVOKEINTERFACE;
 public record ListAccessor(int index, TypeToken<?> returnType) implements PropertyAccessor {
 
     @Override
-    public void emitLoad(MethodVisitor mv) {
+    public void emitLoad(MethodVisitor mv, CompilationContext ctx) {
         gloomlib.script.core.codegen.ASMUtils.emitIntConst(mv, index);
 
         // List.get(int)

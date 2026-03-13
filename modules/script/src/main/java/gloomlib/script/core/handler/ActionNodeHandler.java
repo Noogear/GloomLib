@@ -3,6 +3,7 @@ package gloomlib.script.core.handler;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import gloomlib.script.api.action.ActionRegistry;
+import gloomlib.script.api.action.ScriptBuiltinActions;
 import gloomlib.script.core.CompilationContext;
 import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.ScriptIR;
@@ -37,6 +38,7 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
     }
 
     public static void init() {
+        REGISTRY.scanAndRegister(ScriptBuiltinActions.class);
     }
 
     public static ActionRegistry registry() {
@@ -152,7 +154,7 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
                             String.format("Action '%s' expects a boolean (true/false) at argument %d, but got '%s'.",
                                     action, methodParamIndex, argStr));
                 }
-            } else if (reqIRType == IRType.ENUM) {
+            } else if (reqIRType.base() == gloomlib.script.core.ScriptIR.BaseType.ENUM) {
                 try {
                     @SuppressWarnings({"unchecked", "rawtypes", "unused"})
                     Object ignored = Enum.valueOf((Class<Enum>) reqType, argStr);

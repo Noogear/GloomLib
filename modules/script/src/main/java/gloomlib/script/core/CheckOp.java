@@ -1,6 +1,7 @@
 package gloomlib.script.core;
 
 import gloomlib.script.api.ScriptCompileException;
+import gloomlib.script.api.ScriptErrorHandler;
 import gloomlib.script.core.ScriptIR.BaseType;
 import gloomlib.script.core.ScriptIR.IRType;
 import org.objectweb.asm.Opcodes;
@@ -26,9 +27,9 @@ public enum CheckOp {
     INSTANCEOF("instanceof", Category.TYPE_CHECK, EnumSet.of(BaseType.OBJECT, BaseType.STRING, BaseType.COLLECTION, BaseType.ENUM, BaseType.MAP)),
 
     // ──────── 相等 ────────
-    EQ("==", Category.EQUALITY, EnumSet.of(BaseType.INT, BaseType.LONG, BaseType.DOUBLE, BaseType.STRING, BaseType.BOOLEAN, BaseType.OBJECT, BaseType.ENUM)),
+    EQ("==", Category.EQUALITY, EnumSet.of(BaseType.INT, BaseType.LONG, BaseType.DOUBLE, BaseType.STRING, BaseType.BOOLEAN, BaseType.OBJECT, BaseType.ENUM, BaseType.MAP)),
 
-    NEQ("!=", Category.EQUALITY, EnumSet.of(BaseType.INT, BaseType.LONG, BaseType.DOUBLE, BaseType.STRING, BaseType.BOOLEAN, BaseType.OBJECT, BaseType.ENUM)),
+    NEQ("!=", Category.EQUALITY, EnumSet.of(BaseType.INT, BaseType.LONG, BaseType.DOUBLE, BaseType.STRING, BaseType.BOOLEAN, BaseType.OBJECT, BaseType.ENUM, BaseType.MAP)),
 
     // ──────── 数值比较 ────────
     GT(">", Category.NUMERIC, EnumSet.of(BaseType.INT, BaseType.LONG, BaseType.DOUBLE)),
@@ -43,7 +44,11 @@ public enum CheckOp {
 
     // ──────── 包含/成员 ────────
     CONTAINS("contains", Category.MEMBERSHIP, EnumSet.of(BaseType.STRING, BaseType.COLLECTION, BaseType.MAP)),
-    IN("in", Category.MEMBERSHIP, EnumSet.of(BaseType.STRING, BaseType.INT, BaseType.ENUM)),
+    CONTAINS_VALUE("contains_value", Category.MEMBERSHIP, EnumSet.of(BaseType.MAP)),
+    IN("in", Category.MEMBERSHIP, EnumSet.of(BaseType.STRING, BaseType.INT, BaseType.LONG, BaseType.ENUM, BaseType.COLLECTION)),
+
+    // ──────── 空判断 ────────
+    EMPTY("empty", Category.NULL_CHECK, EnumSet.of(BaseType.COLLECTION, BaseType.MAP, BaseType.STRING)),
 
     // ──────── 范围 ────────
     BETWEEN("between", Category.NUMERIC, EnumSet.of(BaseType.INT, BaseType.LONG, BaseType.DOUBLE));
@@ -86,7 +91,13 @@ public enum CheckOp {
             Map.entry("is", "=="),
             Map.entry("not", "!="),
             Map.entry("equal", "=="),
-            Map.entry("equals", "==")
+            Map.entry("equals", "=="),
+            Map.entry("isEmpty", "empty"),
+            Map.entry("is_empty", "empty"),
+            Map.entry("containsvalue", "contains_value"),
+            Map.entry("containsValue", "contains_value"),
+            Map.entry("hasValue", "contains_value"),
+            Map.entry("has_value", "contains_value")
     );
 
 
@@ -185,33 +196,26 @@ public enum CheckOp {
      * @throws ScriptCompileException 类型不兼容时
      */
     public void validateType(String variable, IRType type) {
-        // 特例：CONTAINS 用于数组——虽然 COLLECTION 在 supportedTypes 中会提前通过，
-        // 但数组不实现 Collection 接口，必须在 supportsType 之前拦截并引导到 COLLECT exists
-        if (this == CONTAINS && type.base() == BaseType.COLLECTION && type.getToken().getRawType().isArray()) {
-            throw ScriptCompileException.type(null,
-                    String.format(
-                            "Operator 'contains' is not supported directly on array variable '%s'. "
-                                    + "Use COLLECT node with op 'exists' to check array membership.",
-                            variable));
-        }
+        // 数组属于 COLLECTION BaseType，contains 直接通过 supportsType 校验，
+        // 由 CheckOpEmitters.emitContains 负责生成数组线性搜索字节码。
 
         if (supportsType(type)) {
+            // 非致命提示：Map 的 ==/!= 使用 Map.equals() 语义，确保用户知情
+            if ((this == EQ || this == NEQ) && type.base() == BaseType.MAP) {
+                ScriptErrorHandler.info(
+                        String.format("Operator '%s' on MAP variable '%s' uses Map.equals() semantics "
+                                + "(structural equality). Use 'contains' for key membership or "
+                                + "'contains_value' for value membership.", symbol, variable));
+            }
             return;
         }
 
-        // 特例：== 用于 COLLECTION/MAP 虽然不在 supportedTypes 中，但给出更精确的提示
+        // 特例：== 用于 COLLECTION 虽然不在 supportedTypes 中，但给出更精确的提示
         if (this == EQ && type.base() == BaseType.COLLECTION) {
             throw ScriptCompileException.type(null,
                     String.format(
                             "Operator '==' on COLLECTION variable '%s' compares by reference, which is almost certainly not what you want. "
                                     + "Hint: did you mean 'contains' to check membership?",
-                            variable));
-        }
-        if (this == EQ && type.base() == BaseType.MAP) {
-            throw ScriptCompileException.type(null,
-                    String.format(
-                            "Operator '==' on MAP variable '%s' compares by reference, which is almost certainly not what you want. "
-                                    + "Hint: did you mean 'contains' to check key membership?",
                             variable));
         }
 
@@ -233,6 +237,7 @@ public enum CheckOp {
             case LT -> Opcodes.IFLT;
             case LTE -> Opcodes.IFLE;
             case EQ -> Opcodes.IFEQ;
+            case NEQ -> Opcodes.IFNE;
             default -> throw new IllegalArgumentException("Unsupported comparison op: " + symbol);
         };
     }
@@ -249,6 +254,7 @@ public enum CheckOp {
             case LT -> Opcodes.IF_ICMPLT;
             case LTE -> Opcodes.IF_ICMPLE;
             case EQ -> Opcodes.IF_ICMPEQ;
+            case NEQ -> Opcodes.IF_ICMPNE;
             default -> throw new IllegalArgumentException("Unsupported comparison op for int: " + symbol);
         };
     }
@@ -440,11 +446,14 @@ public enum CheckOp {
             case STARTS_WITH, ENDS_WITH, MATCHES -> "Hint: use '==' for non-string equality checks.";
             case CONTAINS -> "Hint: for numeric ranges, use 'between'; for set membership, use 'in'.";
             case IN -> {
-                if (type == IRType.DOUBLE || type == IRType.LONG)
+                if (type == IRType.DOUBLE)
+                    yield "Hint: floating-point values have precision issues with set membership. "
+                            + "Use 'between' for range checks, or COLLECT with 'exists' for collection-based matching.";
+                if (type == IRType.LONG)
                     yield "Hint: use 'between' for numeric range checks, or '==' for exact equality.";
                 if (type == IRType.BOOLEAN)
                     yield "Hint: boolean variables should use '== true' or '== false' directly.";
-                yield "Hint: 'in' only supports STRING/INT/ENUM. Use '==' for equality or 'contains' for collection membership.";
+                yield "Hint: 'in' only supports STRING/INT/LONG/ENUM. Use '==' for equality or 'contains' for collection membership.";
             }
             default -> "";
         };

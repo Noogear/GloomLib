@@ -21,9 +21,16 @@ public final class ScriptIR {
 
     /**
      * 模板字符串占位符正则。
-     * 支持普通变量 {@code {hp}}、窄化点链 {@code {entity.name}} 和安全访问 {@code {entity?.name}}。
+     * 支持普通变量 {@code {hp}}、窄化点链 {@code {entity.name}}、安全访问 {@code {entity?.name}}
+     * 和索引访问 {@code {list[0]}}、{@code {map[key]}}、{@code {data[{idx}]}}、{@code {entity.tags[0]}}。
      */
-    private static final Pattern TEMPLATE_PATTERN = Pattern.compile("\\{([\\w]+(?:[?]?\\.[\\w]+)*)}");
+    private static final Pattern TEMPLATE_PATTERN = Pattern.compile("\\{([\\w]+(?:[?]?\\.\\w+)*(?:\\[[^\\]]+\\])*)\\}");
+
+    /**
+     * 括号内动态变量引用模式（如 {@code [0]}、{@code [key]}、{@code [{idx}]}）。
+     * 用于从索引引用中提取动态变量名。
+     */
+    private static final Pattern DYN_INDEX_VAR = Pattern.compile("\\{(\\w+)\\}");
 
 
     private ScriptIR() {
@@ -39,7 +46,7 @@ public final class ScriptIR {
         if (s.indexOf('{', 1) != -1) return false;
         // 含点号或问号的是点链引用/安全访问，不是单变量
         String inner = s.substring(1, s.length() - 1);
-        return !inner.contains(".") && !inner.contains("?");
+        return !inner.contains(".") && !inner.contains("?") && !inner.contains("[");
     }
 
     /**
@@ -68,6 +75,13 @@ public final class ScriptIR {
      */
     public static boolean isDottedPart(String part) {
         return part != null && part.contains(".");
+    }
+
+    /**
+     * 判断模板占位符是否包含索引访问（如 {@code "list[0]"} 或 {@code "map[key]"}）。
+     */
+    public static boolean isIndexedRef(String part) {
+        return part != null && part.contains("[");
     }
 
     /**
@@ -100,6 +114,8 @@ public final class ScriptIR {
      * <p>
      * 例：{@code "HP:{hp} 伤:{entity.dmg} [{hp}]"} → {@code ["hp", "entity"]}
      * <p>
+     * 索引引用中的动态变量也会被提取：{@code "值:{list[{idx}]}"} → {@code ["list", "idx"]}
+     * <p>
      * 直接复用已编译的 {@link #TEMPLATE_PATTERN}，比调用方自行 {@code Pattern.compile}
      * 性能优一至两个数量级（Pattern.compile 平均耗时约为此方法整体的 10–100x）。
      *
@@ -111,9 +127,21 @@ public final class ScriptIR {
         Matcher m = TEMPLATE_PATTERN.matcher(template);
         while (m.find()) {
             String part = m.group(1);
-            String base = isDottedPart(part) ? splitDotted(part)[0] : part;
+            // 截断索引部分以获取基础变量链
+            String baseChain = isIndexedRef(part) ? part.substring(0, part.indexOf('[')) : part;
+            String base = isDottedPart(baseChain) ? splitDotted(baseChain)[0] : baseChain;
             if (!vars.contains(base)) {    // 模板变量数量通常 ≤ 4，线性扫描优于 Set（无哈希开销，缓存友好）
                 vars.add(base);
+            }
+            // 提取括号内动态变量引用（如 {idx}）
+            if (isIndexedRef(part)) {
+                Matcher dynM = DYN_INDEX_VAR.matcher(part);
+                while (dynM.find()) {
+                    String dynVar = dynM.group(1);
+                    if (!vars.contains(dynVar)) {
+                        vars.add(dynVar);
+                    }
+                }
             }
         }
         return vars;
@@ -642,6 +670,25 @@ public final class ScriptIR {
             return new IRType(BaseType.OBJECT, token);
         }
 
+        /**
+         * 构造一个 {@code List<E>} 的 COLLECTION 类型，保留元素泛型信息。
+         * <p>
+         * 用于 COLLECT filter 操作的结果类型推导：将 {@code Collection<E>} 过滤后，
+         * 结果是 {@code List<E>}，而非裸 {@code Collection}。
+         *
+         * @param element 元素类型
+         * @return 携带 {@code List<element>} 泛型的 COLLECTION IRType
+         */
+        public static IRType listOf(IRType element) {
+            java.lang.reflect.Type elemType = element.getToken().getType();
+            java.lang.reflect.ParameterizedType listType = new java.lang.reflect.ParameterizedType() {
+                @Override public java.lang.reflect.Type[] getActualTypeArguments() { return new java.lang.reflect.Type[]{elemType}; }
+                @Override public java.lang.reflect.Type getRawType() { return java.util.List.class; }
+                @Override public java.lang.reflect.Type getOwnerType() { return null; }
+            };
+            return new IRType(BaseType.COLLECTION, com.google.common.reflect.TypeToken.of(listType));
+        }
+
         public static IRType fromClass(Class<?> rawClass) {
             return fromToken(com.google.common.reflect.TypeToken.of(rawClass));
         }
@@ -671,6 +718,32 @@ public final class ScriptIR {
 
         public boolean isContainer() {
             return baseType == BaseType.COLLECTION || baseType == BaseType.STRING || baseType == BaseType.MAP;
+        }
+
+        /** 此类型在 JVM 局部变量表中占用的槽位数（LONG/DOUBLE 占 2，其余占 1）。 */
+        public int slotWidth() {
+            return (baseType == BaseType.DOUBLE || baseType == BaseType.LONG) ? 2 : 1;
+        }
+
+        /**
+         * 解析映射类型的键类型：
+         * <ul>
+         *   <li>MAP ({@code Map<K, V>}) → K</li>
+         *   <li>其他 → OBJECT</li>
+         * </ul>
+         */
+        public IRType keyType() {
+            if (baseType != BaseType.MAP) return OBJECT;
+            try {
+                com.google.common.reflect.TypeToken<?> kToken = typeToken.resolveType(
+                        java.util.Map.class.getTypeParameters()[0]);
+                if (kToken.getType() instanceof java.lang.reflect.TypeVariable<?>) {
+                    return OBJECT;
+                }
+                return fromToken(kToken);
+            } catch (Exception e) {
+                return OBJECT;
+            }
         }
 
         /**

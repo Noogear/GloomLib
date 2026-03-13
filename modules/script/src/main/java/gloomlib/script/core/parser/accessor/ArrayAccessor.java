@@ -1,6 +1,7 @@
 package gloomlib.script.core.parser.accessor;
 
 import com.google.common.reflect.TypeToken;
+import gloomlib.script.core.CompilationContext;
 import gloomlib.script.core.codegen.ASMUtils;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -18,7 +19,7 @@ import org.objectweb.asm.Type;
 public record ArrayAccessor(int index, TypeToken<?> returnType) implements PropertyAccessor {
 
     @Override
-    public void emitLoad(MethodVisitor mv) {
+    public void emitLoad(MethodVisitor mv, CompilationContext ctx) {
         ASMUtils.emitIntConst(mv, index);
 
         Class<?> component = returnType.getRawType();

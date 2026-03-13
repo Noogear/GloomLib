@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import gloomlib.script.core.CompilationContext;
 import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.ScriptIR;
+import gloomlib.script.core.ScriptIR.BaseType;
 import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.FlowNodeType;
 import gloomlib.script.core.ScriptIR.IRType;
@@ -17,7 +18,6 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
 
 /**
  * SWITCH 节点处理器。
@@ -99,9 +99,7 @@ public final class SwitchNodeHandler
                 java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors = gloomlib.script.core.parser.ScriptParser.PropertyResolver
                         .resolveAccessors(
                                 com.google.common.reflect.TypeToken.of(ctx.payloadClass()), sinkingProp);
-                for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : accessors) {
-                    acr.emitLoad(mv);
-                }
+                gloomlib.script.core.codegen.BytecodeCompiler.emitAccessorChain(accessors, mv, ctx);
                 type = conditionAction.getRequiredAttr("returnType");
                 int storeOp = gloomlib.script.core.codegen.ASMUtils.storeOpcode(type);
                 mv.visitVarInsn(storeOp, slot);
@@ -123,7 +121,7 @@ public final class SwitchNodeHandler
         String strategy = node.getAttrOrDefault("_switchStrategy", "AUTO");
 
         if ("AUTO".equals(strategy) || "CASCADE".equals(strategy)) {
-            if (type == IRType.ENUM) {
+            if (type.base() == BaseType.ENUM) {
                 // Enum 统一使用基于 hashCode 的哈希查表
                 strategy = "LOOKUP_STRING";
 
@@ -163,6 +161,22 @@ public final class SwitchNodeHandler
                 }
             } else if (type == IRType.STRING) {
                 strategy = "LOOKUP_STRING";
+            } else if (type == IRType.LONG) {
+                boolean allLongs = true;
+                java.util.Set<Integer> longHashSet = new java.util.HashSet<>();
+                boolean longHashCollision = false;
+                for (String key : cases.keySet()) {
+                    try {
+                        long v = Long.parseLong(key);
+                        if (!longHashSet.add(Long.hashCode(v))) {
+                            longHashCollision = true;
+                        }
+                    } catch (NumberFormatException e) {
+                        allLongs = false;
+                        break;
+                    }
+                }
+                strategy = (allLongs && !longHashCollision && cases.size() > 2) ? "LOOKUP_LONG" : "CASCADE";
             } else {
                 strategy = "CASCADE";
             }
@@ -174,7 +188,10 @@ public final class SwitchNodeHandler
                 break;
             case "LOOKUP_INT":
             case "LOOKUP_STRING":
-                emitLookupSwitch(mv, slot, cases, ctx);
+                emitLookupSwitch(mv, slot, type, cases, ctx);
+                break;
+            case "LOOKUP_LONG":
+                emitLookupLongSwitch(mv, slot, cases, ctx);
                 break;
             case "CASCADE":
             default:
@@ -183,54 +200,146 @@ public final class SwitchNodeHandler
         }
     }
 
-    private void emitLookupSwitch(MethodVisitor mv, int slot,
+    private void emitLookupSwitch(MethodVisitor mv, int slot, IRType type,
                                   ImmutableMap<String, ImmutableList<FlowNode>> cases,
                                   CompilationContext ctx) {
         Label defaultLabel = new Label();
         Label endLabel = new Label();
 
-        mv.visitVarInsn(Opcodes.ALOAD, slot);
+        // ENUM 预处理：将 Enum.name() 结果缓存到临时 slot，避免循环中重复提取（从 2N+1 次降为 1 次）
+        int stringSlot;
+        if (type.base() == BaseType.ENUM) {
+            stringSlot = ctx.nextSlot();
+            mv.visitVarInsn(Opcodes.ALOAD, slot);
+            mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Enum");
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Enum", "name",
+                    "()Ljava/lang/String;", false);
+            mv.visitVarInsn(Opcodes.ASTORE, stringSlot);
+        } else {
+            stringSlot = slot; // STRING 类型直接使用原始 slot
+        }
+
+        mv.visitVarInsn(Opcodes.ALOAD, stringSlot);
         gloomlib.script.core.codegen.ASMUtils.emitHashCode(mv);
 
         String[] caseNames = cases.keySet().toArray(new String[0]);
         int n = caseNames.length;
 
-        // IntStream 索引排序（替代手写冒泡排序）
-        int[] sortedIdx = IntStream.range(0, n)
-                .boxed()
-                .sorted((a, b) -> Integer.compare(caseNames[a].hashCode(), caseNames[b].hashCode()))
-                .mapToInt(Integer::intValue)
-                .toArray();
-
-        int[] keys = new int[n];
-        Label[] labels = new Label[n];
+        // 合并同 hashCode 的 case（LOOKUPSWITCH 要求 key 严格递增不重复）
+        java.util.TreeMap<Integer, java.util.List<Integer>> hashToIdxList = new java.util.TreeMap<>();
         for (int i = 0; i < n; i++) {
-            keys[i] = caseNames[sortedIdx[i]].hashCode();
-            labels[i] = new Label();
+            int h = caseNames[i].hashCode();
+            hashToIdxList.computeIfAbsent(h, k -> new java.util.ArrayList<>()).add(i);
+        }
+
+        int uniqueCount = hashToIdxList.size();
+        int[] keys = new int[uniqueCount];
+        Label[] labels = new Label[uniqueCount];
+        int pos = 0;
+        for (var entry : hashToIdxList.entrySet()) {
+            keys[pos] = entry.getKey();
+            labels[pos] = new Label();
+            pos++;
         }
 
         mv.visitLookupSwitchInsn(defaultLabel, keys, labels);
 
-        for (int i = 0; i < n; i++) {
-            int idx = sortedIdx[i];
-            mv.visitLabel(labels[i]);
-            // hashCode 碰撞保护
-            mv.visitVarInsn(Opcodes.ALOAD, slot);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Object", "toString",
-                    "()Ljava/lang/String;", false);
-            mv.visitLdcInsn(caseNames[idx]);
-            gloomlib.script.core.codegen.ASMUtils.emitEquals(mv);
-            Label mismatch = new Label();
-            mv.visitJumpInsn(Opcodes.IFEQ, mismatch);
+        pos = 0;
+        for (var entry : hashToIdxList.entrySet()) {
+            mv.visitLabel(labels[pos]);
+            java.util.List<Integer> indices = entry.getValue();
+            for (int gi = 0; gi < indices.size(); gi++) {
+                int idx = indices.get(gi);
+                // hashCode 碰撞保护——使用 equals 精确验证
+                mv.visitVarInsn(Opcodes.ALOAD, stringSlot);
+                mv.visitLdcInsn(caseNames[idx]);
+                gloomlib.script.core.codegen.ASMUtils.emitEquals(mv);
+                Label nextCheck = (gi < indices.size() - 1) ? new Label() : defaultLabel;
+                mv.visitJumpInsn(Opcodes.IFEQ, nextCheck);
 
-            ImmutableList<FlowNode> actions = cases.get(caseNames[idx]);
-            for (FlowNode action : actions) {
-                action.type().handler().emit(action, mv, ctx);
+                // 匹配成功：发射分支 action 并跳到 end
+                ImmutableList<FlowNode> actions = cases.get(caseNames[idx]);
+                for (FlowNode action : actions) {
+                    action.type().handler().emit(action, mv, ctx);
+                }
+                mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+                // 不匹配：继续组内下一个候选（最后一个自然跳到 defaultLabel）
+                if (gi < indices.size() - 1) {
+                    mv.visitLabel(nextCheck);
+                }
             }
-            mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+            pos++;
+        }
 
-            mv.visitLabel(mismatch);
-            mv.visitJumpInsn(Opcodes.GOTO, defaultLabel);
+        mv.visitLabel(defaultLabel);
+        mv.visitLabel(endLabel);
+    }
+
+    /**
+     * Long 类型 LOOKUPSWITCH：用 {@link Long#hashCode(long)} 做查表键，LCMP 做碰撞验证。
+     * <p>
+     * 相比 CASCADE 的 O(N) 线性 if-else，LOOKUPSWITCH 为 O(log N) 二分查找。
+     */
+    private void emitLookupLongSwitch(MethodVisitor mv, int slot,
+                                      ImmutableMap<String, ImmutableList<FlowNode>> cases,
+                                      CompilationContext ctx) {
+        Label defaultLabel = new Label();
+        Label endLabel = new Label();
+
+        String[] caseNames = cases.keySet().toArray(new String[0]);
+        int n = caseNames.length;
+        long[] longValues = new long[n];
+        for (int i = 0; i < n; i++) {
+            longValues[i] = Long.parseLong(caseNames[i]);
+        }
+
+        // 合并同 hashCode 的 case（LOOKUPSWITCH 要求 key 严格递增不重复）
+        java.util.TreeMap<Integer, java.util.List<Integer>> hashToIdxList = new java.util.TreeMap<>();
+        for (int i = 0; i < n; i++) {
+            int h = Long.hashCode(longValues[i]);
+            hashToIdxList.computeIfAbsent(h, k -> new java.util.ArrayList<>()).add(i);
+        }
+
+        int uniqueCount = hashToIdxList.size();
+        int[] keys = new int[uniqueCount];
+        Label[] labels = new Label[uniqueCount];
+        int pos = 0;
+        for (var entry : hashToIdxList.entrySet()) {
+            keys[pos] = entry.getKey();
+            labels[pos] = new Label();
+            pos++;
+        }
+
+        // LLOAD → Long.hashCode(long) → LOOKUPSWITCH
+        mv.visitVarInsn(Opcodes.LLOAD, slot);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Long", "hashCode",
+                "(J)I", false);
+        mv.visitLookupSwitchInsn(defaultLabel, keys, labels);
+
+        pos = 0;
+        for (var entry : hashToIdxList.entrySet()) {
+            mv.visitLabel(labels[pos]);
+            java.util.List<Integer> indices = entry.getValue();
+            for (int gi = 0; gi < indices.size(); gi++) {
+                int idx = indices.get(gi);
+                // hashCode 碰撞保护：LCMP 精确验证
+                mv.visitVarInsn(Opcodes.LLOAD, slot);
+                mv.visitLdcInsn(longValues[idx]);
+                mv.visitInsn(Opcodes.LCMP);
+                Label nextCheck = (gi < indices.size() - 1) ? new Label() : defaultLabel;
+                mv.visitJumpInsn(Opcodes.IFNE, nextCheck);
+
+                for (FlowNode action : cases.get(caseNames[idx])) {
+                    action.type().handler().emit(action, mv, ctx);
+                }
+                mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+                if (gi < indices.size() - 1) {
+                    mv.visitLabel(nextCheck);
+                }
+            }
+            pos++;
         }
 
         mv.visitLabel(defaultLabel);
@@ -322,8 +431,14 @@ public final class SwitchNodeHandler
                 mv.visitVarInsn(Opcodes.ALOAD, slot);
                 mv.visitJumpInsn(Opcodes.IFNULL, nextCheckLabel);
                 mv.visitVarInsn(Opcodes.ALOAD, slot);
-                mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Object", "toString",
-                        "()Ljava/lang/String;", false);
+                if (type.base() == BaseType.ENUM) {
+                    mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Enum");
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Enum", "name",
+                            "()Ljava/lang/String;", false);
+                } else {
+                    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Object", "toString",
+                            "()Ljava/lang/String;", false);
+                }
                 mv.visitLdcInsn(key);
                 gloomlib.script.core.codegen.ASMUtils.emitEquals(mv);
                 mv.visitJumpInsn(Opcodes.IFEQ, nextCheckLabel);

@@ -227,21 +227,24 @@ public final class CompilationPipeline {
     }
 
 
-    private static Method findSAM(Class<?> interfaceClass) {
+    private static Method findSAM(Class<?> interfaceClass, String scriptId) {
         Method sam = null;
         for (Method m : interfaceClass.getMethods()) {
             if (java.lang.reflect.Modifier.isAbstract(m.getModifiers())
                     && !m.isDefault()
                     && !isObjectMethod(m)) {
                 if (sam != null) {
-                    throw ScriptCompileException.parse("Target interface " + interfaceClass.getName()
+                    throw ScriptCompileException.create(scriptId, null,
+                            gloomlib.diagnostic.DiagnosticCategory.SEMANTIC,
+                            "Target interface " + interfaceClass.getName()
                             + " is not a single abstract method (SAM) interface.");
                 }
                 sam = m;
             }
         }
         if (sam == null) {
-            throw ScriptCompileException.parse(
+            throw ScriptCompileException.create(scriptId, null,
+                    gloomlib.diagnostic.DiagnosticCategory.SEMANTIC,
                     "Target interface " + interfaceClass.getName() + " has no abstract method.");
         }
         return sam;
@@ -354,7 +357,7 @@ public final class CompilationPipeline {
         Preconditions.checkNotNull(expectedInterfaceType, "expectedInterfaceType");
         Preconditions.checkArgument(expectedInterfaceType.isInterface(), "target must be an interface");
 
-        Method sam = findSAM(expectedInterfaceType);
+        Method sam = findSAM(expectedInterfaceType, unit.id());
         Class<?> expectedReturnType = sam.getReturnType();
 
         int key = deepHash(unit) * 31 + expectedInterfaceType.hashCode();
@@ -445,7 +448,7 @@ public final class CompilationPipeline {
                     .scriptId(unit.id());
 
             if (expectedInterfaceType != null && expectedInterfaceType.isInterface()) {
-                Method sam = findSAM(expectedInterfaceType);
+                Method sam = findSAM(expectedInterfaceType, unit.id());
                 builder.targetMethod(
                         org.objectweb.asm.Type.getInternalName(expectedInterfaceType),
                         sam.getName(),
@@ -530,7 +533,9 @@ public final class CompilationPipeline {
 
             return ctx;
         } catch (ClassNotFoundException e) {
-            throw ScriptCompileException.parse("Payload class not found: " + unit.payloadClass());
+            throw ScriptCompileException.create(unit.id(), null,
+                    gloomlib.diagnostic.DiagnosticCategory.SEMANTIC,
+                    "Payload class not found: " + unit.payloadClass());
         }
     }
 

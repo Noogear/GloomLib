@@ -77,12 +77,13 @@ public final class CollectNodeHandler
         /**
          * 解析操作字符串，支持 {@code !exists} / {@code !all} 取反。
          *
+         * @param raw 原始操作字符串
+         * @param ctx 解析上下文（用于错误定位）
          * @return [CollectOp, negate]
          */
-        public static Resolved resolve(String raw) {
+        public static Resolved resolve(String raw, ParseContext ctx) {
             if (raw == null) {
-                throw gloomlib.script.api.ScriptCompileException.parse(
-                        "COLLECT node requires an 'op' field.");
+                throw ctx.error("COLLECT node requires an 'op' field.");
             }
             String stripped = raw.strip();
             boolean negate = false;
@@ -94,26 +95,26 @@ public final class CollectNodeHandler
                 case "exists" -> new Resolved(EXISTS, negate);
                 case "all" -> new Resolved(ALL, negate);
                 case "count" -> {
-                    if (negate) throw gloomlib.script.api.ScriptCompileException.parse(
+                    if (negate) throw ctx.error(
                             "COLLECT op 'count' does not support '!' negation.");
                     yield new Resolved(COUNT, false);
                 }
                 case "index" -> {
-                    if (negate) throw gloomlib.script.api.ScriptCompileException.parse(
+                    if (negate) throw ctx.error(
                             "COLLECT op 'index' does not support '!' negation.");
                     yield new Resolved(INDEX, false);
                 }
                 case "find" -> {
-                    if (negate) throw gloomlib.script.api.ScriptCompileException.parse(
+                    if (negate) throw ctx.error(
                             "COLLECT op 'find' does not support '!' negation.");
                     yield new Resolved(FIND, false);
                 }
                 case "filter" -> {
-                    if (negate) throw gloomlib.script.api.ScriptCompileException.parse(
+                    if (negate) throw ctx.error(
                             "COLLECT op 'filter' does not support '!' negation.");
                     yield new Resolved(FILTER, false);
                 }
-                default -> throw gloomlib.script.api.ScriptCompileException.parse(
+                default -> throw ctx.error(
                         "Unknown COLLECT op: '" + raw
                                 + "'. Valid ops: exists, !exists, all, !all, count, index, find, filter.");
             };
@@ -131,8 +132,31 @@ public final class CollectNodeHandler
         ITERABLE,
         /** Java 数组（T[]）—— 使用索引循环，天然 RandomAccess */
         ARRAY,
-        /** java.util.Map —— 先提取 values()/entrySet()，再按 ITERABLE 遍历 */
+        /** java.util.Map —— 先提取 values()/keySet()/entrySet()，再按 ITERABLE 遍历 */
         MAP
+    }
+
+    /**
+     * Map 遍历模式——控制 MAP 类型集合提取何种视图进行迭代。
+     */
+    enum IterateMode {
+        /** 遍历 Map.values()（默认，向后兼容） */
+        VALUES,
+        /** 遍历 Map.keySet() */
+        KEYS,
+        /** 遍历 Map.entrySet()，在 match 谓词中暴露 $key / $value 双变量 */
+        ENTRIES;
+
+        static IterateMode resolve(String raw, ParseContext ctx) {
+            if (raw == null) return VALUES;
+            return switch (raw.strip().toLowerCase()) {
+                case "values" -> VALUES;
+                case "keys" -> KEYS;
+                case "entries" -> ENTRIES;
+                default -> throw ctx.error(
+                        "Unknown iterate mode: '" + raw + "'. Valid modes: values, keys, entries.");
+            };
+        }
     }
 
 
@@ -146,7 +170,7 @@ public final class CollectNodeHandler
 
         // op：操作类型
         String rawOp = ctx.get("op");
-        CollectOp.Resolved resolved = CollectOp.resolve(rawOp);
+        CollectOp.Resolved resolved = CollectOp.resolve(rawOp, ctx);
 
         // match：内联谓词子脚本（完整流节点列表）
         List<?> matchRaw = ctx.get("match");
@@ -181,6 +205,11 @@ public final class CollectNodeHandler
             attrs.put("store", store);
             attrs.put("returnType", returnType);
         }
+
+        // iterate：Map 遍历模式（仅 MAP 类型生效，默认 values）
+        String rawIterate = ctx.get("iterate");
+        IterateMode iterateMode = IterateMode.resolve(rawIterate, ctx);
+        attrs.put("iterateMode", iterateMode.name());
 
         // on_fail（量词类 op 可用）
         List<?> onFailRaw = ctx.get("on_fail");
@@ -221,17 +250,39 @@ public final class CollectNodeHandler
         CollectionKind kind = detectKind(collectionType);
 
         // 解析元素类型（在 MAP 转换前完成，因为转换后 kind 变为 ITERABLE）
-        // 委托给 IRType.elementType()：COLLECTION/MAP/ARRAY 三路逻辑统一维护于 IRType
         IRType elementType = collectionType.elementType();
 
-        // MAP → 提取 values() 转为 ITERABLE（使用独立临时槽位，避免覆盖命名变量）
+        // MAP 遍历模式分发
+        boolean entryMode = false;
+        IRType keyType = null;
+        IRType valueType = null;
         if (kind == CollectionKind.MAP) {
-            int valuesSlot = Math.max(ctx.nextSlot(), collectionSlot + 1);
+            IterateMode iterMode = IterateMode.valueOf(
+                    node.getAttrOrDefault("iterateMode", "VALUES"));
+            int viewSlot = Math.max(ctx.nextSlot(), collectionSlot + 1);
             mv.visitVarInsn(Opcodes.ALOAD, collectionSlot);
-            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Map", "values",
-                    "()Ljava/util/Collection;", true);
-            mv.visitVarInsn(Opcodes.ASTORE, valuesSlot);
-            collectionSlot = valuesSlot;
+            switch (iterMode) {
+                case VALUES -> {
+                    mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Map", "values",
+                            "()Ljava/util/Collection;", true);
+                    // elementType 已是 V
+                }
+                case KEYS -> {
+                    mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Map", "keySet",
+                            "()Ljava/util/Set;", true);
+                    elementType = collectionType.keyType();
+                }
+                case ENTRIES -> {
+                    mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Map", "entrySet",
+                            "()Ljava/util/Set;", true);
+                    entryMode = true;
+                    keyType = collectionType.keyType();
+                    valueType = collectionType.elementType();
+                    elementType = IRType.OBJECT; // Map.Entry
+                }
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, viewSlot);
+            collectionSlot = viewSlot;
             kind = CollectionKind.ITERABLE;
         }
 
@@ -240,21 +291,29 @@ public final class CollectNodeHandler
                 ? collectionType.getToken().getRawType().getComponentType()
                 : null;
 
+        // 封装 entry 模式上下文（仅 MAP + ENTRIES 时有意义）
+        EntryModeCtx entryCtx = entryMode ? new EntryModeCtx(keyType, valueType) : null;
+
         switch (collectOp) {
             case EXISTS -> emitQuantifier(node, mv, ctx, collectionSlot, elementType,
-                    kind, matchFlow, negate, componentType, true);
+                    kind, matchFlow, negate, componentType, true, entryCtx);
             case ALL -> emitQuantifier(node, mv, ctx, collectionSlot, elementType,
-                    kind, matchFlow, negate, componentType, false);
+                    kind, matchFlow, negate, componentType, false, entryCtx);
             case COUNT -> emitFullScan(node, mv, ctx, collectionSlot, elementType,
-                    kind, matchFlow, componentType, false);
+                    kind, matchFlow, componentType, false, entryCtx);
             case FILTER -> emitFullScan(node, mv, ctx, collectionSlot, elementType,
-                    kind, matchFlow, componentType, true);
+                    kind, matchFlow, componentType, true, entryCtx);
             case INDEX -> emitFirstMatch(node, mv, ctx, collectionSlot, elementType,
-                    kind, matchFlow, componentType, false);
+                    kind, matchFlow, componentType, false, entryCtx);
             case FIND -> emitFirstMatch(node, mv, ctx, collectionSlot, elementType,
-                    kind, matchFlow, componentType, true);
+                    kind, matchFlow, componentType, true, entryCtx);
         }
     }
+
+    /**
+     * Map ENTRIES 模式上下文：承载键值类型信息，供 emitInlinePredicate 注册 $key/$value。
+     */
+    private record EntryModeCtx(IRType keyType, IRType valueType) {}
 
     // ======================== 量词（exists / all）========================
 
@@ -268,7 +327,8 @@ public final class CollectNodeHandler
                                 int collectionSlot, IRType elementType,
                                 CollectionKind kind,
                                 ImmutableList<FlowNode> matchFlow, boolean negate,
-                                Class<?> componentType, boolean isExists) {
+                                Class<?> componentType, boolean isExists,
+                                EntryModeCtx entryCtx) {
         Label failLabel = new Label();
         Label passLabel = new Label();
         Label loopLabel = new Label();
@@ -304,12 +364,12 @@ public final class CollectNodeHandler
 
             if (isExists) {
                 Label nextLabel = new Label();
-                emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 3);
+                emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 3, entryCtx);
                 mv.visitJumpInsn(Opcodes.GOTO, negate ? failLabel : passLabel);
                 mv.visitLabel(nextLabel);
             } else {
                 Label matchFailLabel = new Label();
-                emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, matchFailLabel, baseTemp + 3);
+                emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, matchFailLabel, baseTemp + 3, entryCtx);
                 mv.visitIincInsn(indexSlot, 1);
                 mv.visitJumpInsn(Opcodes.GOTO, loopLabel);
                 mv.visitLabel(matchFailLabel);
@@ -343,11 +403,11 @@ public final class CollectNodeHandler
                     elementType, null);
 
             if (isExists) {
-                emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, loopLabel, baseTemp + 2);
+                emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, loopLabel, baseTemp + 2, entryCtx);
                 mv.visitJumpInsn(Opcodes.GOTO, negate ? failLabel : passLabel);
             } else {
                 Label matchFailLabel = new Label();
-                emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, matchFailLabel, baseTemp + 2);
+                emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, matchFailLabel, baseTemp + 2, entryCtx);
                 mv.visitJumpInsn(Opcodes.GOTO, loopLabel);
                 mv.visitLabel(matchFailLabel);
                 mv.visitJumpInsn(Opcodes.GOTO, negate ? passLabel : failLabel);
@@ -371,7 +431,8 @@ public final class CollectNodeHandler
                                 int collectionSlot, IRType elementType,
                                 CollectionKind kind,
                                 ImmutableList<FlowNode> matchFlow,
-                                Class<?> componentType, boolean returnElement) {
+                                Class<?> componentType, boolean returnElement,
+                                EntryModeCtx entryCtx) {
         String store = node.getRequiredAttr("store");
         Label loopLabel = new Label();
         Label nextLabel = new Label();
@@ -409,7 +470,7 @@ public final class CollectNodeHandler
             emitExtractElement(mv, kind, collectionSlot, indexSlot, elementSlot,
                     elementType, componentType);
 
-            emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 4);
+            emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 4, entryCtx);
 
             if (returnElement) {
                 mv.visitVarInsn(Opcodes.ALOAD, elementSlot);
@@ -455,7 +516,7 @@ public final class CollectNodeHandler
                     elementType, null);
 
             int predicateBase = returnElement ? baseTemp + 3 : baseTemp + 4;
-            emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, predicateBase);
+            emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, predicateBase, entryCtx);
 
             if (returnElement) {
                 mv.visitVarInsn(Opcodes.ALOAD, elementSlot);
@@ -478,6 +539,8 @@ public final class CollectNodeHandler
         if (returnElement) {
             mv.visitVarInsn(Opcodes.ALOAD, resultSlot);
             mv.visitVarInsn(Opcodes.ASTORE, storeSlot);
+            // 精炼 store 的编译期类型：从粗糙的 OBJECT 替换为实际元素类型
+            ctx.refineType(store, elementType);
         } else {
             mv.visitVarInsn(Opcodes.ILOAD, resultSlot);
             mv.visitVarInsn(Opcodes.ISTORE, storeSlot);
@@ -493,7 +556,8 @@ public final class CollectNodeHandler
                               int collectionSlot, IRType elementType,
                               CollectionKind kind,
                               ImmutableList<FlowNode> matchFlow,
-                              Class<?> componentType, boolean collectToList) {
+                              Class<?> componentType, boolean collectToList,
+                              EntryModeCtx entryCtx) {
         String store = node.getRequiredAttr("store");
         Label loopLabel = new Label();
         Label nextLabel = new Label();
@@ -534,7 +598,7 @@ public final class CollectNodeHandler
             emitExtractElement(mv, kind, collectionSlot, indexSlot, elementSlot,
                     elementType, componentType);
 
-            emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 4);
+            emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 4, entryCtx);
 
             if (collectToList) {
                 mv.visitVarInsn(Opcodes.ALOAD, accSlot);
@@ -580,7 +644,7 @@ public final class CollectNodeHandler
             emitExtractElement(mv, kind, iterSlot, -1, elementSlot,
                     elementType, null);
 
-            emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 3);
+            emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 3, entryCtx);
 
             if (collectToList) {
                 mv.visitVarInsn(Opcodes.ALOAD, accSlot);
@@ -601,6 +665,8 @@ public final class CollectNodeHandler
         if (collectToList) {
             mv.visitVarInsn(Opcodes.ALOAD, accSlot);
             mv.visitVarInsn(Opcodes.ASTORE, storeSlot);
+            // 精炼 store 的编译期类型：从裸 COLLECTION 替换为 List<elementType>
+            ctx.refineType(store, IRType.listOf(elementType));
         } else {
             mv.visitVarInsn(Opcodes.ILOAD, accSlot);
             mv.visitVarInsn(Opcodes.ISTORE, storeSlot);
@@ -635,7 +701,8 @@ public final class CollectNodeHandler
     private static void emitInlinePredicate(MethodVisitor mv, CompilationContext ctx,
                                             ImmutableList<FlowNode> matchFlow,
                                             int elementSlot, IRType elementType,
-                                            Label failLabel, int nextAvail) {
+                                            Label failLabel, int nextAvail,
+                                            EntryModeCtx entryCtx) {
         // 1. 发现 matchFlow 中引用的所有变量名
         Set<String> varNames = new LinkedHashSet<>();
         for (FlowNode node : matchFlow) {
@@ -644,33 +711,36 @@ public final class CollectNodeHandler
 
         // 2. 注册 $it（元素本身）——根据类型决定是否需要拆箱
         if (elementType.isPrimitive()) {
-            // 基本类型元素：拆箱到独立槽位供数值操作使用
             int unboxedSlot = nextAvail;
-            nextAvail += (elementType == IRType.DOUBLE || elementType == IRType.LONG) ? 2 : 1;
+            nextAvail += elementType.slotWidth();
             emitUnboxToSlot(mv, elementSlot, unboxedSlot, elementType);
             ctx.registerDynamicVar("$it", unboxedSlot, elementType);
         } else {
             ctx.registerDynamicVar("$it", elementSlot, elementType);
         }
 
+        // 2b. ENTRIES 模式：从 Map.Entry 中提取 $key 和 $value
+        if (entryCtx != null) {
+            nextAvail = emitEntryField(mv, ctx, elementSlot, "getKey", entryCtx.keyType(), "$key", nextAvail);
+            nextAvail = emitEntryField(mv, ctx, elementSlot, "getValue", entryCtx.valueType(), "$value", nextAvail);
+        }
+
         // 3. 为每个属性变量分配槽位并发射提取字节码
         for (String varName : varNames) {
-            if ("$it".equals(varName)) continue;
+            if ("$it".equals(varName) || "$key".equals(varName) || "$value".equals(varName)) continue;
             // 解析元素属性类型
             Class<?> elementClass = com.google.common.primitives.Primitives.wrap(
                     elementType.getToken().getRawType());
-            IRType propType = ScriptParser.PropertyResolver.resolveType(elementClass, varName, null);
+            IRType propType = ScriptParser.PropertyResolver.resolveType(elementClass, varName, ctx.scriptId());
             // 发射属性提取：element → accessor chain → store
             List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
                     ScriptParser.PropertyResolver.resolveAccessors(
-                            com.google.common.reflect.TypeToken.of(elementClass), varName);
+                            com.google.common.reflect.TypeToken.of(elementClass), varName, ctx.scriptId());
             mv.visitVarInsn(Opcodes.ALOAD, elementSlot);
-            for (var accessor : accessors) {
-                accessor.emitLoad(mv);
-            }
+            gloomlib.script.core.codegen.BytecodeCompiler.emitAccessorChain(accessors, mv, ctx);
             // 根据属性类型决定存储方式
             int slot = nextAvail;
-            nextAvail += (propType == IRType.DOUBLE || propType == IRType.LONG) ? 2 : 1;
+            nextAvail += propType.slotWidth();
             mv.visitVarInsn(ASMUtils.storeOpcode(propType), slot);
             ctx.registerDynamicVar(varName, slot, propType);
         }
@@ -757,6 +827,37 @@ public final class CollectNodeHandler
         mv.visitVarInsn(Opcodes.ALOAD, refSlot);
         ASMUtils.emitUnbox(mv, elementType);
         mv.visitVarInsn(ASMUtils.storeOpcode(elementType), primitiveSlot);
+    }
+
+    /**
+     * 从 Map.Entry 中提取字段（getKey / getValue），存入临时槽位并注册为动态变量。
+     *
+     * @return 更新后的 nextAvail（已计入本槽位宽度）
+     */
+    private static int emitEntryField(MethodVisitor mv, CompilationContext ctx,
+                                      int entrySlot, String methodName,
+                                      IRType fieldType, String varName, int nextAvail) {
+        int slot = nextAvail;
+        nextAvail += fieldType.slotWidth();
+        mv.visitVarInsn(Opcodes.ALOAD, entrySlot);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Map$Entry",
+                methodName, "()Ljava/lang/Object;", true);
+        if (fieldType.isPrimitive()) {
+            // Map.Entry 方法返回 Object，需先 CHECKCAST 到装箱类型才能调用拆箱方法
+            String boxedInternal = fieldType.base() == gloomlib.script.core.ScriptIR.BaseType.BOOLEAN
+                    ? "java/lang/Boolean" : "java/lang/Number";
+            mv.visitTypeInsn(Opcodes.CHECKCAST, boxedInternal);
+            ASMUtils.emitUnbox(mv, fieldType);
+            mv.visitVarInsn(ASMUtils.storeOpcode(fieldType), slot);
+        } else {
+            if (fieldType != IRType.OBJECT && fieldType.getToken().getRawType() != Object.class) {
+                mv.visitTypeInsn(Opcodes.CHECKCAST,
+                        org.objectweb.asm.Type.getInternalName(fieldType.getToken().getRawType()));
+            }
+            mv.visitVarInsn(Opcodes.ASTORE, slot);
+        }
+        ctx.registerDynamicVar(varName, slot, fieldType);
+        return nextAvail;
     }
 
     /**

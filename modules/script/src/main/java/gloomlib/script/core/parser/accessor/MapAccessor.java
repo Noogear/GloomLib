@@ -1,6 +1,7 @@
 package gloomlib.script.core.parser.accessor;
 
 import com.google.common.reflect.TypeToken;
+import gloomlib.script.core.CompilationContext;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Type;
 
@@ -13,7 +14,7 @@ import static org.objectweb.asm.Opcodes.INVOKEINTERFACE;
 public record MapAccessor(String key, TypeToken<?> returnType) implements PropertyAccessor {
 
     @Override
-    public void emitLoad(MethodVisitor mv) {
+    public void emitLoad(MethodVisitor mv, CompilationContext ctx) {
         // Map.get(Object)
         mv.visitLdcInsn(key);
         mv.visitMethodInsn(INVOKEINTERFACE, "java/util/Map", "get", "(Ljava/lang/Object;)Ljava/lang/Object;", true);

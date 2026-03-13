@@ -104,6 +104,11 @@ public final class CompilationContext {
      */
     private final Map<String, ScriptIR.IRType> dynamicTypes = new HashMap<>();
     /**
+     * 类型精炼叠加层——COLLECT find/filter 在 emit 阶段将存储变量的实际泛型类型写入此表。
+     * 与 {@link #dynamicTypes} 不同，此表不受 {@link #clearDynamicVars()} 影响。
+     */
+    private final Map<String, ScriptIR.IRType> refinedTypes = new HashMap<>();
+    /**
      * 目标接口的内部名称（如 java/util/function/ToIntFunction）
      */
     private final String targetInterfaceInternalName;
@@ -194,7 +199,20 @@ public final class CompilationContext {
     public ScriptIR.IRType getType(String varName) {
         ScriptIR.IRType type = dynamicTypes.get(varName);
         if (type != null) return type;
+        type = refinedTypes.get(varName);
+        if (type != null) return type;
         return typeTable.getOrDefault(varName, ScriptIR.IRType.OBJECT);
+    }
+
+    /**
+     * 精炼变量的编译期类型。
+     * <p>
+     * 用于 COLLECT find/filter 在 emit 阶段将存储变量的粗糙类型（OBJECT / COLLECTION）
+     * 替换为实际的元素类型 / {@code List<E>} 参数化类型，使下游节点能正确解析属性链。
+     * 此精炼不受 {@link #clearDynamicVars()} 影响。
+     */
+    public void refineType(String varName, ScriptIR.IRType type) {
+        refinedTypes.put(varName, type);
     }
 
     /**
@@ -217,7 +235,8 @@ public final class CompilationContext {
                     mv.visitInsn(Opcodes.L2D);
                 }
                 case DOUBLE -> mv.visitVarInsn(Opcodes.DLOAD, slot);
-                default -> throw ScriptCompileException.parse(
+                default -> throw ScriptCompileException.create(
+                        scriptId, null, gloomlib.diagnostic.DiagnosticCategory.SEMANTIC,
                         "Math engine cannot handle non-numeric variable: " + var.name());
             }
         };

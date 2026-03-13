@@ -5,6 +5,7 @@ import gloomlib.math.api.MathNode;
 import gloomlib.math.core.MathNodeEmitter;
 import gloomlib.script.core.CheckOp;
 import gloomlib.script.core.CompilationContext;
+import gloomlib.script.core.ScriptIR.BaseType;
 import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.IRType;
 import org.objectweb.asm.Label;
@@ -34,6 +35,8 @@ public final class CheckOpEmitters {
         STRATEGIES.put(CheckOp.NULL, (mv, op, slot, type, node, ctx) -> emitNullCheck(mv, slot));
         STRATEGIES.put(CheckOp.INSTANCEOF, (mv, op, slot, type, node, ctx) -> emitInstanceof(mv, slot, node));
         STRATEGIES.put(CheckOp.CONTAINS, CheckOpEmitters::emitContains);
+        STRATEGIES.put(CheckOp.CONTAINS_VALUE, CheckOpEmitters::emitContainsValue);
+        STRATEGIES.put(CheckOp.EMPTY, CheckOpEmitters::emitEmpty);
         STRATEGIES.put(CheckOp.STARTS_WITH, STRING_OP_STRATEGY);
         STRATEGIES.put(CheckOp.ENDS_WITH, STRING_OP_STRATEGY);
         STRATEGIES.put(CheckOp.MATCHES, (mv, op, slot, type, node, ctx) -> emitMatches(mv, slot, node));
@@ -87,12 +90,16 @@ public final class CheckOpEmitters {
                     "(Ljava/lang/CharSequence;)Z", false);
         } else if (type.base() == gloomlib.script.core.ScriptIR.BaseType.MAP) {
             // Map.containsKey(Object) — 'contains' on Map checks key membership
-            if (value instanceof String s) mv.visitLdcInsn(s);
+            ASMUtils.emitLiteral(mv, value);
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Map", "containsKey",
                     "(Ljava/lang/Object;)Z", true);
         } else if (type.base() == gloomlib.script.core.ScriptIR.BaseType.COLLECTION) {
-            // Collection.contains(Object) — array is rejected at validateType; only Collection instances reach here
-            if (value instanceof String s) mv.visitLdcInsn(s);
+            if (type.getToken().getRawType().isArray()) {
+                // 数组路径：线性搜索 for(i=0; i<len; i++) if(arr[i].equals(value)) → true
+                return emitArrayContains(mv, slot, value, type, ctx);
+            }
+            // Collection.contains(Object)
+            ASMUtils.emitLiteral(mv, value);
             mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Collection", "contains",
                     "(Ljava/lang/Object;)Z", true);
         } else {
@@ -104,6 +111,118 @@ public final class CheckOpEmitters {
                     "(Ljava/lang/CharSequence;)Z", false);
         }
         return Opcodes.IFNE; // contains 为 true 时继续
+    }
+
+
+    /**
+     * 数组线性搜索：遍历数组元素，逐一与 value 做 equals 比较。
+     * <p>
+     * 对象数组使用 {@code AALOAD + equals}，基本类型数组使用原生比较指令。
+     */
+    private static int emitArrayContains(MethodVisitor mv, int slot, Object value,
+                                         IRType type, CompilationContext ctx) {
+        // 栈顶此时已有 ALOAD slot（由 emitContains 压入），先弹掉——我们需要索引循环
+        mv.visitInsn(Opcodes.POP);
+
+        Class<?> component = type.getToken().getRawType().getComponentType();
+        Label loopStart = new Label();
+        Label trueLabel = new Label();
+        Label falseLabel = new Label();
+        Label endLabel = new Label();
+
+        // int len = arr.length
+        // slot + 1 保证不与数组变量槽冲突（属性下沉路径中 ctx.nextSlot() == slot）
+        int lenSlot = Math.max(ctx.nextSlot(), slot + 1);
+        mv.visitVarInsn(Opcodes.ALOAD, slot);
+        mv.visitInsn(Opcodes.ARRAYLENGTH);
+        mv.visitVarInsn(Opcodes.ISTORE, lenSlot);
+
+        // int i = 0
+        int iSlot = lenSlot + 1;
+        ASMUtils.emitIntConst(mv, 0);
+        mv.visitVarInsn(Opcodes.ISTORE, iSlot);
+
+        mv.visitLabel(loopStart);
+        mv.visitVarInsn(Opcodes.ILOAD, iSlot);
+        mv.visitVarInsn(Opcodes.ILOAD, lenSlot);
+        mv.visitJumpInsn(Opcodes.IF_ICMPGE, falseLabel);
+
+        // element = arr[i]
+        mv.visitVarInsn(Opcodes.ALOAD, slot);
+        mv.visitVarInsn(Opcodes.ILOAD, iSlot);
+
+        if (component == int.class) {
+            mv.visitInsn(Opcodes.IALOAD);
+            ASMUtils.emitIntConst(mv, ((Number) value).intValue());
+            mv.visitJumpInsn(Opcodes.IF_ICMPEQ, trueLabel);
+        } else if (component == long.class) {
+            mv.visitInsn(Opcodes.LALOAD);
+            ASMUtils.emitLongConst(mv, ((Number) value).longValue());
+            mv.visitInsn(Opcodes.LCMP);
+            mv.visitJumpInsn(Opcodes.IFEQ, trueLabel);
+        } else if (component == double.class) {
+            mv.visitInsn(Opcodes.DALOAD);
+            ASMUtils.emitDoubleConst(mv, ((Number) value).doubleValue());
+            mv.visitInsn(Opcodes.DCMPG);
+            mv.visitJumpInsn(Opcodes.IFEQ, trueLabel);
+        } else {
+            // 对象数组：value.equals(arr[i])——将常量值置于接收端，避免 null 元素 NPE
+            mv.visitInsn(Opcodes.AALOAD);
+            ASMUtils.emitLiteral(mv, value);
+            mv.visitInsn(Opcodes.SWAP);
+            ASMUtils.emitEquals(mv);
+            mv.visitJumpInsn(Opcodes.IFNE, trueLabel);
+        }
+
+        // i++
+        mv.visitIincInsn(iSlot, 1);
+        mv.visitJumpInsn(Opcodes.GOTO, loopStart);
+
+        mv.visitLabel(trueLabel);
+        ASMUtils.emitIntConst(mv, 1);
+        mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+        mv.visitLabel(falseLabel);
+        ASMUtils.emitIntConst(mv, 0);
+
+        mv.visitLabel(endLabel);
+        return Opcodes.IFNE;
+    }
+
+
+    @SuppressWarnings("unused")
+    private static int emitContainsValue(MethodVisitor mv, CheckOp op, int slot, IRType type,
+                                         FlowNode node, CompilationContext ctx) {
+        mv.visitVarInsn(Opcodes.ALOAD, slot);
+        Object value = node.getRequiredAttr("value");
+        ASMUtils.emitLiteral(mv, value);
+        mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Map", "containsValue",
+                "(Ljava/lang/Object;)Z", true);
+        return Opcodes.IFNE;
+    }
+
+
+    @SuppressWarnings("unused")
+    private static int emitEmpty(MethodVisitor mv, CheckOp op, int slot, IRType type,
+                                 FlowNode node, CompilationContext ctx) {
+        mv.visitVarInsn(Opcodes.ALOAD, slot);
+        if (type.base() == gloomlib.script.core.ScriptIR.BaseType.MAP) {
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Map",
+                    "isEmpty", "()Z", true);
+        } else if (type.base() == gloomlib.script.core.ScriptIR.BaseType.COLLECTION) {
+            if (type.getToken().getRawType().isArray()) {
+                // 数组：ARRAYLENGTH == 0
+                mv.visitInsn(Opcodes.ARRAYLENGTH);
+                // ARRAYLENGTH == 0 时 isEmpty 为 true，IFEQ 跳（与 IFNE 语义统一）
+                return Opcodes.IFEQ;
+            }
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Collection",
+                    "isEmpty", "()Z", true);
+        } else { // STRING
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String",
+                    "isEmpty", "()Z", false);
+        }
+        return Opcodes.IFNE; // isEmpty == true 时条件成立
     }
 
 
@@ -167,6 +286,11 @@ public final class CheckOpEmitters {
         ImmutableList<?> valueList = node.getAttrOrDefault("valueList", null);
         if (valueList == null) valueList = node.getRequiredAttr("value");
 
+        // COLLECTION IN: "does the collection contain any of the listed values?"
+        if (type.base() == BaseType.COLLECTION) {
+            return emitCollectionIn(mv, slot, (ImmutableList<Object>) valueList);
+        }
+
         if (valueList.size() <= CheckOp.IN_SET_THRESHOLD) {
             // ≤IN_SET_THRESHOLD 项 → 展开为多路比较（避免集合开销）
             return emitInExpanded(mv, slot, (ImmutableList<Object>) valueList, type);
@@ -174,6 +298,32 @@ public final class CheckOpEmitters {
 
         // >3 项 → Set.of(...).contains(var)
         return emitInSet(mv, slot, (ImmutableList<Object>) valueList, type, node);
+    }
+
+
+    /**
+     * COLLECTION IN: 依次调用 {@code Collection.contains(value)}，任一命中即为 true。
+     */
+    private static int emitCollectionIn(MethodVisitor mv, int slot, ImmutableList<Object> values) {
+        Label trueLabel = new Label();
+        Label endLabel = new Label();
+
+        for (Object val : values) {
+            mv.visitVarInsn(Opcodes.ALOAD, slot);
+            ASMUtils.emitLiteral(mv, val);
+            mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Collection", "contains",
+                    "(Ljava/lang/Object;)Z", true);
+            mv.visitJumpInsn(Opcodes.IFNE, trueLabel);
+        }
+
+        ASMUtils.emitIntConst(mv, 0);
+        mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+
+        mv.visitLabel(trueLabel);
+        ASMUtils.emitIntConst(mv, 1);
+
+        mv.visitLabel(endLabel);
+        return Opcodes.IFNE;
     }
 
 
@@ -191,9 +341,12 @@ public final class CheckOpEmitters {
                 mv.visitVarInsn(Opcodes.ILOAD, slot);
                 ASMUtils.emitIntConst(mv, ((Number) val).intValue());
                 mv.visitJumpInsn(Opcodes.IF_ICMPEQ, trueLabel);
-            } else if (type == IRType.ENUM) {
-                mv.visitVarInsn(Opcodes.ALOAD, slot);
-                mv.visitLdcInsn(val.toString());
+            } else if (type == IRType.LONG) {
+                mv.visitVarInsn(Opcodes.LLOAD, slot);
+                ASMUtils.emitLongConst(mv, ((Number) val).longValue());
+                mv.visitInsn(Opcodes.LCMP);
+                mv.visitJumpInsn(Opcodes.IFEQ, trueLabel);
+            } else if (type.base() == BaseType.ENUM) {
                 mv.visitVarInsn(Opcodes.ALOAD, slot);
                 ASMUtils.emitEnumName(mv);
                 mv.visitLdcInsn(val.toString());
@@ -201,7 +354,7 @@ public final class CheckOpEmitters {
                 mv.visitJumpInsn(Opcodes.IFNE, trueLabel);
             } else {
                 mv.visitVarInsn(Opcodes.ALOAD, slot);
-                if (val instanceof String s) mv.visitLdcInsn(s);
+                ASMUtils.emitLiteral(mv, val);
                 ASMUtils.emitEquals(mv);
                 mv.visitJumpInsn(Opcodes.IFNE, trueLabel);
             }
@@ -227,8 +380,23 @@ public final class CheckOpEmitters {
 
         if (hoistedField != null) {
             // 外置常量池路径：invokedynamic → ConstantCallSite
+            // 提升后的 Set 统一包含 String 类型（STRING_SET），变量侧也需转为 String 匹配
             mv.visitInvokeDynamicInsn("const", "()Ljava/util/Set;",
                     BytecodeCompiler.CONST_BOOTSTRAP_HANDLE, hoistedField);
+            if (type == IRType.INT) {
+                mv.visitVarInsn(Opcodes.ILOAD, slot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf",
+                        "(I)Ljava/lang/String;", false);
+            } else if (type == IRType.LONG) {
+                mv.visitVarInsn(Opcodes.LLOAD, slot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/String", "valueOf",
+                        "(J)Ljava/lang/String;", false);
+            } else if (type.base() == BaseType.ENUM) {
+                mv.visitVarInsn(Opcodes.ALOAD, slot);
+                ASMUtils.emitEnumName(mv);
+            } else {
+                mv.visitVarInsn(Opcodes.ALOAD, slot);
+            }
         } else {
             // 退化路径：动态创建 Set.of()
             int count = values.size();
@@ -238,26 +406,29 @@ public final class CheckOpEmitters {
                 mv.visitInsn(Opcodes.DUP);
                 ASMUtils.emitIntConst(mv, i);
                 Object val = values.get(i);
-                if (val instanceof String s) {
-                    mv.visitLdcInsn(s);
-                } else if (val instanceof Number n) {
-                    mv.visitLdcInsn(n.intValue());
-                    mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf",
-                            "(I)Ljava/lang/Integer;", false);
+                // 归一化数值类型，防止 Long.equals(Integer) == false
+                if (type == IRType.LONG && val instanceof Number n) {
+                    ASMUtils.emitLiteral(mv, n.longValue());
+                } else {
+                    ASMUtils.emitLiteral(mv, val);
                 }
                 mv.visitInsn(Opcodes.AASTORE);
             }
             mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/util/Set", "of",
                     "([Ljava/lang/Object;)Ljava/util/Set;", true);
-        }
 
-        // set.contains(var)
-        if (type.isPrimitive()) {
-            mv.visitVarInsn(Opcodes.ILOAD, slot);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf",
-                    "(I)Ljava/lang/Integer;", false);
-        } else {
-            mv.visitVarInsn(Opcodes.ALOAD, slot);
+            // set.contains(var) — 动态路径使用类型安全装箱
+            if (type == IRType.INT) {
+                mv.visitVarInsn(Opcodes.ILOAD, slot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf",
+                        "(I)Ljava/lang/Integer;", false);
+            } else if (type == IRType.LONG) {
+                mv.visitVarInsn(Opcodes.LLOAD, slot);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Long", "valueOf",
+                        "(J)Ljava/lang/Long;", false);
+            } else {
+                mv.visitVarInsn(Opcodes.ALOAD, slot);
+            }
         }
         mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Set", "contains",
                 "(Ljava/lang/Object;)Z", true);
@@ -269,21 +440,17 @@ public final class CheckOpEmitters {
     private static int emitBetween(MethodVisitor mv, CheckOp op, int slot, IRType type,
                                    FlowNode node, CompilationContext ctx) {
         String hoistedField = node.getAttrOrDefault("_hoistedField", null);
-        boolean useArray = hoistedField != null && type == IRType.DOUBLE;
+        boolean useArray = hoistedField != null && (type == IRType.DOUBLE || type == IRType.LONG);
 
-        double low = 0, high = 0;
-        if (!useArray) {
-            ImmutableList<?> range = node.getAttrOrDefault("valueList", null);
-            if (range == null) range = node.getRequiredAttr("value");
-            low = ((Number) range.get(0)).doubleValue();
-            high = ((Number) range.get(1)).doubleValue();
-        }
+        ImmutableList<?> range = node.getAttrOrDefault("valueList", null);
+        if (range == null) range = node.getRequiredAttr("value");
 
         Label failLabel = new Label();
         Label endLabel = new Label();
 
         if (type == IRType.INT) {
-            int iLow = (int) low, iHigh = (int) high;
+            int iLow = ((Number) range.get(0)).intValue();
+            int iHigh = ((Number) range.get(1)).intValue();
             // var >= low
             mv.visitVarInsn(Opcodes.ILOAD, slot);
             ASMUtils.emitIntConst(mv, iLow);
@@ -292,6 +459,41 @@ public final class CheckOpEmitters {
             mv.visitVarInsn(Opcodes.ILOAD, slot);
             ASMUtils.emitIntConst(mv, iHigh);
             mv.visitJumpInsn(Opcodes.IF_ICMPGT, failLabel);
+        } else if (type == IRType.LONG) {
+            if (useArray) {
+                // 外置常量池路径：提升器统一生成 double[]，运行时通过 D2L 转换
+                // var >= arr[0]
+                mv.visitVarInsn(Opcodes.LLOAD, slot);
+                mv.visitInvokeDynamicInsn("const", "()[D",
+                        BytecodeCompiler.CONST_BOOTSTRAP_HANDLE, hoistedField);
+                ASMUtils.emitIntConst(mv, 0);
+                mv.visitInsn(Opcodes.DALOAD);
+                mv.visitInsn(Opcodes.D2L);
+                mv.visitInsn(Opcodes.LCMP);
+                mv.visitJumpInsn(Opcodes.IFLT, failLabel);
+                // var <= arr[1]
+                mv.visitVarInsn(Opcodes.LLOAD, slot);
+                mv.visitInvokeDynamicInsn("const", "()[D",
+                        BytecodeCompiler.CONST_BOOTSTRAP_HANDLE, hoistedField);
+                ASMUtils.emitIntConst(mv, 1);
+                mv.visitInsn(Opcodes.DALOAD);
+                mv.visitInsn(Opcodes.D2L);
+                mv.visitInsn(Opcodes.LCMP);
+                mv.visitJumpInsn(Opcodes.IFGT, failLabel);
+            } else {
+                long lLow = ((Number) range.get(0)).longValue();
+                long lHigh = ((Number) range.get(1)).longValue();
+                // var >= low
+                mv.visitVarInsn(Opcodes.LLOAD, slot);
+                ASMUtils.emitLongConst(mv, lLow);
+                mv.visitInsn(Opcodes.LCMP);
+                mv.visitJumpInsn(Opcodes.IFLT, failLabel);
+                // var <= high
+                mv.visitVarInsn(Opcodes.LLOAD, slot);
+                ASMUtils.emitLongConst(mv, lHigh);
+                mv.visitInsn(Opcodes.LCMP);
+                mv.visitJumpInsn(Opcodes.IFGT, failLabel);
+            }
         } else {
             // double
             if (useArray) {
@@ -314,14 +516,16 @@ public final class CheckOpEmitters {
                 mv.visitInsn(Opcodes.DCMPL);
                 mv.visitJumpInsn(Opcodes.IFGT, failLabel);
             } else {
+                double dLow = ((Number) range.get(0)).doubleValue();
+                double dHigh = ((Number) range.get(1)).doubleValue();
                 // 退化路径：常量拼接
                 mv.visitVarInsn(Opcodes.DLOAD, slot);
-                ASMUtils.emitDoubleConst(mv, low);
+                ASMUtils.emitDoubleConst(mv, dLow);
                 mv.visitInsn(Opcodes.DCMPG);
                 mv.visitJumpInsn(Opcodes.IFLT, failLabel);
 
                 mv.visitVarInsn(Opcodes.DLOAD, slot);
-                ASMUtils.emitDoubleConst(mv, high);
+                ASMUtils.emitDoubleConst(mv, dHigh);
                 mv.visitInsn(Opcodes.DCMPL);
                 mv.visitJumpInsn(Opcodes.IFGT, failLabel);
             }
@@ -350,8 +554,9 @@ public final class CheckOpEmitters {
             return emitIntComparison(mv, slot, node, op);
         } else if (type == IRType.LONG) {
             return emitLongComparison(mv, slot, node, op);
-        } else if (type == IRType.ENUM && op == CheckOp.EQ) {
-            return emitEnumEquals(mv, slot, node);
+        } else if (type.base() == BaseType.ENUM) {
+            emitEnumEquals(mv, slot, node);
+            return op.afterEqualsJump();
         } else {
             return emitObjectComparison(mv, slot, node, op);
         }
@@ -427,11 +632,9 @@ public final class CheckOpEmitters {
      */
     private static int emitEnumEquals(MethodVisitor mv, int slot, FlowNode node) {
         mv.visitVarInsn(Opcodes.ALOAD, slot);
+        ASMUtils.emitEnumName(mv);
         String enumValue = node.getRequiredAttr("value").toString();
         mv.visitLdcInsn(enumValue);
-        mv.visitVarInsn(Opcodes.ALOAD, slot);
-        ASMUtils.emitEnumName(mv);
-        mv.visitInsn(Opcodes.SWAP);
         ASMUtils.emitEquals(mv);
         return Opcodes.IFNE;
     }
@@ -442,9 +645,7 @@ public final class CheckOpEmitters {
     private static int emitObjectComparison(MethodVisitor mv, int slot, FlowNode node, CheckOp op) {
         mv.visitVarInsn(Opcodes.ALOAD, slot);
         Object value = node.getAttrOrDefault("value", null);
-        if (value instanceof String s) {
-            mv.visitLdcInsn(s);
-        }
+        ASMUtils.emitLiteral(mv, value);
         ASMUtils.emitEquals(mv);
         return op.afterEqualsJump();
     }

@@ -12,6 +12,7 @@ import gloomlib.diagnostic.DiagnosticCategory;
 import gloomlib.diagnostic.DiagnosticException;
 import gloomlib.diagnostic.SourceLocation;
 import gloomlib.script.api.ScriptCompileException;
+import gloomlib.script.api.ScriptErrorHandler;
 import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.ScriptIR;
 import gloomlib.script.core.ScriptIR.*;
@@ -306,7 +307,8 @@ public final class ScriptParser {
      */
     public static final class PropertyResolver {
 
-        private static final Pattern INDEX_PATTERN = Pattern.compile("(.+)\\[(.+)\\]");
+        /** 匹配单个 {@code [content]} 括号块，用于多层索引迭代。 */
+        private static final Pattern INDEX_CHUNK = Pattern.compile("\\[([^\\]]+)\\]");
 
         private PropertyResolver() {
         }
@@ -360,6 +362,9 @@ public final class ScriptParser {
 
         /**
          * 解析属性为一系列的 PropertyAccessor 指令集，携带脚本来源标识用于错误定位。
+         * <p>
+         * 支持多层索引访问，例如 {@code nested[k1][k2]}、{@code matrix[0][1]}、
+         * {@code table[key][{dynIdx}]}，每层均完整推导泛型类型。
          */
         public static List<PropertyAccessor> resolveAccessors(TypeToken<?> ownerType, String property, String scriptId) {
             List<PropertyAccessor> result = new ArrayList<>();
@@ -367,53 +372,24 @@ public final class ScriptParser {
             TypeToken<?> currentType = ownerType;
 
             for (String part : parts) {
-                Matcher matcher = INDEX_PATTERN.matcher(part);
-                if (matcher.matches()) {
-                    // 形如: inventory[0] 或 metadata[key]
-                    String baseProp = matcher.group(1);
-                    String indexStr = matcher.group(2);
+                int firstBracket = part.indexOf('[');
+                if (firstBracket >= 0) {
+                    // 形如: prop[idx] 或 prop[k1][k2] 或 prop[{var}][0]
+                    String baseProp = part.substring(0, firstBracket);
+                    String bracketChain = part.substring(firstBracket); // "[k1][k2]..."
 
-                    // 1. 先解析基础属性
-                    Method baseGetter = resolveGetter(currentType.getRawType(), baseProp, scriptId);
-                    TypeToken<?> baseType = currentType.resolveType(baseGetter.getGenericReturnType());
-                    result.add(new gloomlib.script.core.parser.accessor.MethodAccessor(baseGetter, baseType));
-                    currentType = baseType;
+                    // 1. 解析基础属性 → getter（若无属性前缀则直接对 currentType 做索引）
+                    if (!baseProp.isEmpty()) {
+                        Method baseGetter = resolveGetter(currentType.getRawType(), baseProp, scriptId);
+                        TypeToken<?> baseType = currentType.resolveType(baseGetter.getGenericReturnType());
+                        result.add(new gloomlib.script.core.parser.accessor.MethodAccessor(baseGetter, baseType));
+                        currentType = baseType;
+                    }
 
-                    // 2. 解析索引部分
-                    if (List.class.isAssignableFrom(currentType.getRawType())) {
-                        int index = Integer.parseInt(indexStr);
-                        TypeToken<?> elementType = extractListType(currentType);
-                        result.add(new gloomlib.script.core.parser.accessor.ListAccessor(index, elementType));
-                        currentType = elementType;
-                    } else if (Map.class.isAssignableFrom(currentType.getRawType())) {
-                        // 简单处理：去推断 Map 的 V
-                        TypeToken<?> valueType = extractMapValueType(currentType);
-
-                        // 由于 YAML 传入的 key 是字符串，我们在 AST 中按 String 类型对待
-                        // 若是纯数字且去引号的可以再处理，但作为 propertyPath 字符串，我们直接注入 String 键
-                        String key = indexStr;
-                        // 支持剥离单双引号（例如 metadata['damage_all']）
-                        if ((key.startsWith("'") && key.endsWith("'"))
-                                || (key.startsWith("\"") && key.endsWith("\""))) {
-                            key = key.substring(1, key.length() - 1);
-                        }
-
-                        result.add(new gloomlib.script.core.parser.accessor.MapAccessor(key, valueType));
-                        currentType = valueType;
-                    } else if (currentType.getRawType().isArray()) {
-                        // 数组索引访问：arr[i]
-                        int index = Integer.parseInt(indexStr);
-                        com.google.common.reflect.TypeToken<?> elementType =
-                                com.google.common.reflect.TypeToken.of(currentType.getRawType().getComponentType());
-                        result.add(new gloomlib.script.core.parser.accessor.ArrayAccessor(index, elementType));
-                        currentType = elementType;
-                    } else {
-                        throw new DiagnosticException(
-                                Diagnostic.simple(
-                                        scriptId != null ? new SourceLocation(scriptId, 0, 0) : SourceLocation.UNKNOWN,
-                                        DiagnosticCategory.TYPE,
-                                        "Type " + currentType + " does not support index access '" + part
-                                                + "'. Supported: List (numeric index), Map (string key), array (numeric index)."));
+                    // 2. 逐层解析每个 [index] 括号块，每层推导一次类型
+                    Matcher indexM = INDEX_CHUNK.matcher(bracketChain);
+                    while (indexM.find()) {
+                        currentType = resolveIndexAccess(result, currentType, indexM.group(1), part, scriptId);
                     }
                 } else {
                     // 普通属性
@@ -425,12 +401,92 @@ public final class ScriptParser {
             return result;
         }
 
+        /**
+         * 针对单个 {@code [indexStr]} 解析一层索引访问，追加对应 Accessor 并返回新的元素类型。
+         * <p>
+         * 支持 List（数字或动态变量索引）、Map（字符串键或动态变量键）、数组（数字或动态变量索引）。
+         * 类型不支持（如对 String、int 做索引）在编译期报错。
+         */
+        private static TypeToken<?> resolveIndexAccess(
+                List<PropertyAccessor> result,
+                TypeToken<?> currentType,
+                String indexStr,
+                String fullPart,
+                String scriptId) {
+            if (List.class.isAssignableFrom(currentType.getRawType())) {
+                TypeToken<?> elementType = extractListType(currentType);
+                if (ScriptIR.isSingleVar(indexStr)) {
+                    result.add(new gloomlib.script.core.parser.accessor.DynamicListAccessor(
+                            indexStr.substring(1, indexStr.length() - 1), elementType));
+                } else {
+                    result.add(new gloomlib.script.core.parser.accessor.ListAccessor(
+                            parseIndex(indexStr, fullPart, scriptId), elementType));
+                }
+                return elementType;
+            } else if (Map.class.isAssignableFrom(currentType.getRawType())) {
+                TypeToken<?> keyType = extractMapKeyType(currentType);
+                TypeToken<?> valueType = extractMapValueType(currentType);
+                String key = indexStr;
+                if ((key.startsWith("'") && key.endsWith("'"))
+                        || (key.startsWith("\"") && key.endsWith("\""))) {
+                    key = key.substring(1, key.length() - 1);
+                }
+                if (ScriptIR.isSingleVar(key)) {
+                    result.add(new gloomlib.script.core.parser.accessor.DynamicMapAccessor(
+                            key.substring(1, key.length() - 1), keyType, valueType));
+                } else {
+                    result.add(new gloomlib.script.core.parser.accessor.MapAccessor(key, valueType));
+                }
+                return valueType;
+            } else if (currentType.getRawType().isArray()) {
+                TypeToken<?> elementType =
+                        com.google.common.reflect.TypeToken.of(currentType.getRawType().getComponentType());
+                if (ScriptIR.isSingleVar(indexStr)) {
+                    result.add(new gloomlib.script.core.parser.accessor.DynamicArrayAccessor(
+                            indexStr.substring(1, indexStr.length() - 1), elementType));
+                } else {
+                    result.add(new gloomlib.script.core.parser.accessor.ArrayAccessor(
+                            parseIndex(indexStr, fullPart, scriptId), elementType));
+                }
+                return elementType;
+            } else {
+                String message;
+                if (java.util.Set.class.isAssignableFrom(currentType.getRawType())) {
+                    message = "Set is an unordered collection and does not support indexed access '[" + indexStr
+                            + "'] in '" + fullPart + "'. Use COLLECT to iterate Set elements, or convert to List first.";
+                } else {
+                    message = "Type " + currentType + " does not support index access '[" + indexStr + "']  in '"
+                            + fullPart + "'. Supported: List (numeric index), Map (string key), array.";
+                }
+                throw new DiagnosticException(
+                        Diagnostic.simple(
+                                scriptId != null ? new SourceLocation(scriptId, 0, 0) : SourceLocation.UNKNOWN,
+                                DiagnosticCategory.TYPE,
+                                message));
+            }
+        }
+
+        private static int parseIndex(String indexStr, String fullPart, String scriptId) {
+            try {
+                return Integer.parseInt(indexStr);
+            } catch (NumberFormatException e) {
+                throw new DiagnosticException(
+                        Diagnostic.simple(
+                                scriptId != null ? new SourceLocation(scriptId, 0, 0) : SourceLocation.UNKNOWN,
+                                DiagnosticCategory.PARSE,
+                                "Invalid numeric index '" + indexStr + "' in '" + fullPart
+                                        + "'. Expected an integer or a dynamic variable reference like {var}."));
+            }
+        }
+
         private static TypeToken<?> extractListType(TypeToken<?> listType) {
             try {
                 // List<E> -> 获取 E
                 java.lang.reflect.TypeVariable<?> param = List.class.getTypeParameters()[0];
                 return listType.resolveType(param);
             } catch (Exception e) {
+                ScriptErrorHandler.fine(
+                        () -> "Failed to extract List element type from " + listType + ", falling back to Object");
                 return TypeToken.of(Object.class);
             }
         }
@@ -441,6 +497,20 @@ public final class ScriptParser {
                 java.lang.reflect.TypeVariable<?> param = Map.class.getTypeParameters()[1];
                 return mapType.resolveType(param);
             } catch (Exception e) {
+                ScriptErrorHandler.fine(
+                        () -> "Failed to extract Map value type from " + mapType + ", falling back to Object");
+                return TypeToken.of(Object.class);
+            }
+        }
+
+        private static TypeToken<?> extractMapKeyType(TypeToken<?> mapType) {
+            try {
+                // Map<K, V> -> 获取 K
+                java.lang.reflect.TypeVariable<?> param = Map.class.getTypeParameters()[0];
+                return mapType.resolveType(param);
+            } catch (Exception e) {
+                ScriptErrorHandler.fine(
+                        () -> "Failed to extract Map key type from " + mapType + ", falling back to Object");
                 return TypeToken.of(Object.class);
             }
         }

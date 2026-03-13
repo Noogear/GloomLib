@@ -116,7 +116,9 @@ public final class CheckNodeHandler
             }
 
             // 缺口2：若 value 仍为字符串且操作符为数值类，尝试作为数学表达式解析
-            if (value instanceof String mathStr && isNumericOp(op)) {
+            // 跳过 ENUM 字面量（ALL_CAPS 标识符），避免被误识别为数学变量引用
+            if (value instanceof String mathStr && isNumericOp(op)
+                    && ScriptParser.ValueParser.inferType(value) != IRType.ENUM) {
                 try {
                     gloomlib.math.api.MathNode mathNode = gloomlib.math.api.MathParser.parse(mathStr);
                     if (mathNode instanceof gloomlib.math.api.MathNode.LiteralNode(double value1)) {
@@ -213,9 +215,9 @@ public final class CheckNodeHandler
             String sinkingProp = conditionAction.getAttrOrDefault("_sinking_property", null);
             if (sinkingProp != null) {
                 int tempSlot = ctx.nextSlot();
-                BytecodeCompiler.emitSunkPropertyLoad(mv, ctx, sinkingProp);
-
                 IRType exactType = conditionAction.getRequiredAttr("returnType");
+                BytecodeCompiler.emitSunkPropertyLoadWithUnbox(mv, ctx, sinkingProp, exactType);
+
                 mv.visitVarInsn(ASMUtils.storeOpcode(exactType), tempSlot);
 
                 jumpOp = emitSinkingCheck(mv, op, tempSlot, exactType, node, ctx);

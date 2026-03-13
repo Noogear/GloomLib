@@ -49,7 +49,8 @@ public final class ScriptInjector {
         try {
             payloadClass = Class.forName(compiled.ir().payloadClass());
         } catch (ClassNotFoundException e) {
-            throw gloomlib.script.api.ScriptCompileException.parse(
+            throw gloomlib.script.api.ScriptCompileException.create(
+                    compiled.ir().id(), null, gloomlib.diagnostic.DiagnosticCategory.SEMANTIC,
                     "Payload class not found: " + compiled.ir().payloadClass());
         }
 

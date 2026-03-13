@@ -139,3 +139,4 @@ dependency-check-report.xml
 /modules/script/src/test
 *.gz
 /modules/math/src/test
+*.txt

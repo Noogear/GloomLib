@@ -2,6 +2,7 @@ package gloomlib.script.api;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.function.Supplier;
 
 /**
  * 全局脚本错误拦截器，负责接管脚本运行时的脱敏与日志解耦任务。
@@ -40,5 +41,21 @@ public final class ScriptErrorHandler {
     public static void handleException(Throwable t, String className, String scriptId) {
         globalLogger.log(Level.SEVERE,
                 "Script execution error in generated class: " + className + " (Script ID: " + scriptId + ")", t);
+    }
+
+    public static void info(String message) {
+        globalLogger.info(message);
+    }
+
+    public static void warning(String message) {
+        globalLogger.warning(message);
+    }
+
+    public static void fine(Supplier<String> messageSupplier) {
+        globalLogger.fine(messageSupplier);
+    }
+
+    public static void log(Level level, String message) {
+        globalLogger.log(level, message);
     }
 }
