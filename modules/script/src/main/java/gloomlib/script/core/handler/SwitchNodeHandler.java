@@ -10,6 +10,10 @@ import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.FlowNodeType;
 import gloomlib.script.core.ScriptIR.IRType;
 import gloomlib.script.core.ScriptIR.NodeCapability;
+import gloomlib.script.core.codegen.ASMUtils;
+import gloomlib.script.core.codegen.BytecodeCompiler;
+import gloomlib.script.core.parser.ScriptParser;
+import gloomlib.script.core.parser.accessor.PropertyAccessor;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -95,20 +99,20 @@ public final class SwitchNodeHandler
             if (sinkingProp != null) {
                 // Property Sinking 闭包：即时解析并提取
                 slot = ctx.nextSlot();
-                mv.visitVarInsn(org.objectweb.asm.Opcodes.ALOAD, 1);
-                java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors = gloomlib.script.core.parser.ScriptParser.PropertyResolver
+                mv.visitVarInsn(Opcodes.ALOAD, 1);
+                List<PropertyAccessor> accessors = ScriptParser.PropertyResolver
                         .resolveAccessors(
-                                com.google.common.reflect.TypeToken.of(ctx.payloadClass()), sinkingProp);
-                gloomlib.script.core.codegen.BytecodeCompiler.emitAccessorChain(accessors, mv, ctx);
+                                com.google.common.reflect.TypeToken.of(ctx.payloadClass()), sinkingProp, ctx.scriptId());
+                BytecodeCompiler.emitAccessorChain(accessors, mv, ctx);
                 type = conditionAction.getRequiredAttr("returnType");
-                int storeOp = gloomlib.script.core.codegen.ASMUtils.storeOpcode(type);
+                int storeOp = ASMUtils.storeOpcode(type);
                 mv.visitVarInsn(storeOp, slot);
             } else {
                 // 普通 Action 压入栈（注意：对于 Switch，由于多分支操作需要反复读取变量，所以依然要存临时 Slot）
                 slot = ctx.nextSlot();
                 conditionAction.type().handler().emit(conditionAction, mv, ctx);
                 type = conditionAction.getRequiredAttr("returnType");
-                int storeOp = gloomlib.script.core.codegen.ASMUtils.storeOpcode(type);
+                int storeOp = ASMUtils.storeOpcode(type);
                 mv.visitVarInsn(storeOp, slot);
             }
         } else {
@@ -119,18 +123,43 @@ public final class SwitchNodeHandler
 
         // 如果仍保留外部传入的实验性策略则运用，否则在运行时进行即时降级策略演算
         String strategy = node.getAttrOrDefault("_switchStrategy", "AUTO");
+        Class<?> resolvedEnumClass = null;
 
         if ("AUTO".equals(strategy) || "CASCADE".equals(strategy)) {
             if (type.base() == BaseType.ENUM) {
-                // Enum 统一使用基于 hashCode 的哈希查表
-                strategy = "LOOKUP_STRING";
+                // 尝试 TABLE_ENUM：已知具体枚举类时用 ordinal() + TABLESWITCH，O(1)
+                Class<?> enumClass = type.getToken().getRawType();
+                if (enumClass != Enum.class && enumClass.isEnum()) {
+                    Enum<?>[] constants = (Enum<?>[]) enumClass.getEnumConstants();
+                    java.util.Map<String, Integer> nameToOrd = new java.util.HashMap<>(constants.length);
+                    for (Enum<?> e : constants) nameToOrd.put(e.name(), e.ordinal());
 
-                // AOT: 检查 case key 是否符合 Java 标识符规则（枚举常量命名约定）
-                for (String key : cases.keySet()) {
-                    if (!isValidEnumName(key)) {
-                        java.util.logging.Logger.getLogger("WarriorView-Script").warning(
-                                String.format("SWITCH case key '%s' does not look like a valid enum constant name.",
-                                        key));
+                    boolean allValid = true;
+                    int minOrd = Integer.MAX_VALUE, maxOrd = Integer.MIN_VALUE;
+                    for (String key : cases.keySet()) {
+                        Integer ord = nameToOrd.get(key);
+                        if (ord == null) { allValid = false; break; }
+                        minOrd = Math.min(minOrd, ord);
+                        maxOrd = Math.max(maxOrd, ord);
+                    }
+                    if (allValid) {
+                        long span = (long) maxOrd - minOrd + 1;
+                        if (span <= cases.size() * 2.5 && span <= 1000) {
+                            strategy = "TABLE_ENUM";
+                            resolvedEnumClass = enumClass;
+                        }
+                    }
+                }
+
+                if (!"TABLE_ENUM".equals(strategy)) {
+                    // 回退到基于 hashCode 的哈希查表
+                    strategy = "LOOKUP_STRING";
+                    for (String key : cases.keySet()) {
+                        if (!isValidEnumName(key)) {
+                            java.util.logging.Logger.getLogger("WarriorView-Script").warning(
+                                    String.format("SWITCH case key '%s' does not look like a valid enum constant name.",
+                                            key));
+                        }
                     }
                 }
             } else if (type == IRType.INT) {
@@ -163,20 +192,15 @@ public final class SwitchNodeHandler
                 strategy = "LOOKUP_STRING";
             } else if (type == IRType.LONG) {
                 boolean allLongs = true;
-                java.util.Set<Integer> longHashSet = new java.util.HashSet<>();
-                boolean longHashCollision = false;
                 for (String key : cases.keySet()) {
                     try {
-                        long v = Long.parseLong(key);
-                        if (!longHashSet.add(Long.hashCode(v))) {
-                            longHashCollision = true;
-                        }
+                        Long.parseLong(key);
                     } catch (NumberFormatException e) {
                         allLongs = false;
                         break;
                     }
                 }
-                strategy = (allLongs && !longHashCollision && cases.size() > 2) ? "LOOKUP_LONG" : "CASCADE";
+                strategy = (allLongs && cases.size() > 2) ? "LOOKUP_LONG" : "CASCADE";
             } else {
                 strategy = "CASCADE";
             }
@@ -185,6 +209,9 @@ public final class SwitchNodeHandler
         switch (strategy) {
             case "TABLE_INT":
                 emitTableIntSwitch(mv, slot, cases, ctx);
+                break;
+            case "TABLE_ENUM":
+                emitTableEnumSwitch(mv, slot, resolvedEnumClass, cases, ctx);
                 break;
             case "LOOKUP_INT":
             case "LOOKUP_STRING":
@@ -220,7 +247,7 @@ public final class SwitchNodeHandler
         }
 
         mv.visitVarInsn(Opcodes.ALOAD, stringSlot);
-        gloomlib.script.core.codegen.ASMUtils.emitHashCode(mv);
+        ASMUtils.emitHashCode(mv);
 
         String[] caseNames = cases.keySet().toArray(new String[0]);
         int n = caseNames.length;
@@ -253,7 +280,7 @@ public final class SwitchNodeHandler
                 // hashCode 碰撞保护——使用 equals 精确验证
                 mv.visitVarInsn(Opcodes.ALOAD, stringSlot);
                 mv.visitLdcInsn(caseNames[idx]);
-                gloomlib.script.core.codegen.ASMUtils.emitEquals(mv);
+                ASMUtils.emitEquals(mv);
                 Label nextCheck = (gi < indices.size() - 1) ? new Label() : defaultLabel;
                 mv.visitJumpInsn(Opcodes.IFEQ, nextCheck);
 
@@ -392,6 +419,55 @@ public final class SwitchNodeHandler
         mv.visitLabel(endLabel);
     }
 
+    /**
+     * 已知具体枚举类时：ordinal() + TABLESWITCH，O(1) 分派。
+     */
+    private void emitTableEnumSwitch(MethodVisitor mv, int slot, Class<?> enumClass,
+                                     ImmutableMap<String, ImmutableList<FlowNode>> cases,
+                                     CompilationContext ctx) {
+        Label defaultLabel = new Label();
+        Label endLabel = new Label();
+
+        Enum<?>[] constants = (Enum<?>[]) enumClass.getEnumConstants();
+        java.util.Map<String, Integer> nameToOrd = new java.util.HashMap<>(constants.length);
+        for (Enum<?> e : constants) nameToOrd.put(e.name(), e.ordinal());
+
+        String[] caseNames = cases.keySet().toArray(new String[0]);
+        int minOrd = Integer.MAX_VALUE, maxOrd = Integer.MIN_VALUE;
+        for (String key : caseNames) {
+            int ord = nameToOrd.get(key);
+            minOrd = Math.min(minOrd, ord);
+            maxOrd = Math.max(maxOrd, ord);
+        }
+
+        int size = maxOrd - minOrd + 1;
+        Label[] tableLabels = new Label[size];
+        for (int i = 0; i < size; i++) tableLabels[i] = defaultLabel;
+
+        Label[] caseLabels = new Label[caseNames.length];
+        for (int i = 0; i < caseNames.length; i++) {
+            Label lbl = new Label();
+            caseLabels[i] = lbl;
+            tableLabels[nameToOrd.get(caseNames[i]) - minOrd] = lbl;
+        }
+
+        mv.visitVarInsn(Opcodes.ALOAD, slot);
+        mv.visitTypeInsn(Opcodes.CHECKCAST, "java/lang/Enum");
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Enum", "ordinal", "()I", false);
+        mv.visitTableSwitchInsn(minOrd, maxOrd, defaultLabel, tableLabels);
+
+        for (int i = 0; i < caseNames.length; i++) {
+            mv.visitLabel(caseLabels[i]);
+            for (FlowNode action : cases.get(caseNames[i])) {
+                action.type().handler().emit(action, mv, ctx);
+            }
+            mv.visitJumpInsn(Opcodes.GOTO, endLabel);
+        }
+
+        mv.visitLabel(defaultLabel);
+        mv.visitLabel(endLabel);
+    }
+
     private void emitCascadeIfElseSwitch(MethodVisitor mv, int slot, IRType type,
                                          ImmutableMap<String, ImmutableList<FlowNode>> cases,
                                          CompilationContext ctx) {
@@ -412,7 +488,7 @@ public final class SwitchNodeHandler
             if (type == IRType.INT || type == IRType.BOOLEAN) {
                 int expected = type == IRType.BOOLEAN ? (Boolean.parseBoolean(key) ? 1 : 0) : Integer.parseInt(key);
                 mv.visitVarInsn(Opcodes.ILOAD, slot);
-                gloomlib.script.core.codegen.ASMUtils.emitIntConst(mv, expected);
+                ASMUtils.emitIntConst(mv, expected);
                 mv.visitJumpInsn(Opcodes.IF_ICMPNE, nextCheckLabel);
             } else if (type == IRType.LONG) {
                 long expected = Long.parseLong(key);
@@ -423,7 +499,7 @@ public final class SwitchNodeHandler
             } else if (type == IRType.DOUBLE) {
                 double expected = Double.parseDouble(key);
                 mv.visitVarInsn(Opcodes.DLOAD, slot);
-                gloomlib.script.core.codegen.ASMUtils.emitDoubleConst(mv, expected);
+                ASMUtils.emitDoubleConst(mv, expected);
                 mv.visitInsn(Opcodes.DCMPG); // 使用统一比对
                 mv.visitJumpInsn(Opcodes.IFNE, nextCheckLabel);
             } else {
@@ -440,7 +516,7 @@ public final class SwitchNodeHandler
                             "()Ljava/lang/String;", false);
                 }
                 mv.visitLdcInsn(key);
-                gloomlib.script.core.codegen.ASMUtils.emitEquals(mv);
+                ASMUtils.emitEquals(mv);
                 mv.visitJumpInsn(Opcodes.IFEQ, nextCheckLabel);
             }
 

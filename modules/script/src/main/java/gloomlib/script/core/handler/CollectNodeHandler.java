@@ -10,7 +10,9 @@ import gloomlib.script.core.ScriptIR.FlowNodeType;
 import gloomlib.script.core.ScriptIR.IRType;
 import gloomlib.script.core.ScriptIR.NodeCapability;
 import gloomlib.script.core.codegen.ASMUtils;
+import gloomlib.script.core.codegen.BytecodeCompiler;
 import gloomlib.script.core.parser.ScriptParser;
+import gloomlib.script.core.parser.accessor.PropertyAccessor;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
@@ -234,7 +236,7 @@ public final class CollectNodeHandler
             String sinkingProp = conditionAction.getAttrOrDefault("_sinking_property", null);
             collectionSlot = ctx.nextSlot();
             if (sinkingProp != null) {
-                gloomlib.script.core.codegen.BytecodeCompiler.emitSunkPropertyLoad(mv, ctx, sinkingProp);
+                BytecodeCompiler.emitSunkPropertyLoad(mv, ctx, sinkingProp);
             } else {
                 conditionAction.type().handler().emit(conditionAction, mv, ctx);
             }
@@ -367,6 +369,8 @@ public final class CollectNodeHandler
                 emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, nextLabel, baseTemp + 3, entryCtx);
                 mv.visitJumpInsn(Opcodes.GOTO, negate ? failLabel : passLabel);
                 mv.visitLabel(nextLabel);
+                mv.visitIincInsn(indexSlot, 1);
+                mv.visitJumpInsn(Opcodes.GOTO, loopLabel);
             } else {
                 Label matchFailLabel = new Label();
                 emitInlinePredicate(mv, ctx, matchFlow, elementSlot, elementType, matchFailLabel, baseTemp + 3, entryCtx);
@@ -375,9 +379,6 @@ public final class CollectNodeHandler
                 mv.visitLabel(matchFailLabel);
                 mv.visitJumpInsn(Opcodes.GOTO, negate ? passLabel : failLabel);
             }
-
-            mv.visitIincInsn(indexSlot, 1);
-            mv.visitJumpInsn(Opcodes.GOTO, loopLabel);
 
         } else { // ITERABLE
             int iterSlot = baseTemp;
@@ -575,8 +576,10 @@ public final class CollectNodeHandler
             if (collectToList) {
                 mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
                 mv.visitInsn(Opcodes.DUP);
+                mv.visitVarInsn(Opcodes.ALOAD, collectionSlot);
+                mv.visitInsn(Opcodes.ARRAYLENGTH);
                 mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>",
-                        "()V", false);
+                        "(I)V", false);
                 mv.visitVarInsn(Opcodes.ASTORE, accSlot);
             } else {
                 ASMUtils.emitIntConst(mv, 0);
@@ -622,8 +625,11 @@ public final class CollectNodeHandler
             if (collectToList) {
                 mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
                 mv.visitInsn(Opcodes.DUP);
+                mv.visitVarInsn(Opcodes.ALOAD, collectionSlot);
+                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Collection", "size",
+                        "()I", true);
                 mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>",
-                        "()V", false);
+                        "(I)V", false);
                 mv.visitVarInsn(Opcodes.ASTORE, accSlot);
             } else {
                 ASMUtils.emitIntConst(mv, 0);
@@ -733,11 +739,11 @@ public final class CollectNodeHandler
                     elementType.getToken().getRawType());
             IRType propType = ScriptParser.PropertyResolver.resolveType(elementClass, varName, ctx.scriptId());
             // 发射属性提取：element → accessor chain → store
-            List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
+            List<PropertyAccessor> accessors =
                     ScriptParser.PropertyResolver.resolveAccessors(
                             com.google.common.reflect.TypeToken.of(elementClass), varName, ctx.scriptId());
             mv.visitVarInsn(Opcodes.ALOAD, elementSlot);
-            gloomlib.script.core.codegen.BytecodeCompiler.emitAccessorChain(accessors, mv, ctx);
+            BytecodeCompiler.emitAccessorChain(accessors, mv, ctx);
             // 根据属性类型决定存储方式
             int slot = nextAvail;
             nextAvail += propType.slotWidth();

@@ -379,6 +379,16 @@ public final class CheckNodeHandler
             }
             return range.canFoldExact(op, value);
         }
+        if (op == CheckOp.BETWEEN) {
+            double[] bounds = resolveBetweenBounds(node);
+            if (bounds != null) {
+                // 值域完全落入 [lo, hi] → 恒真
+                if (range.min() >= bounds[0] && range.max() <= bounds[1]) return Boolean.TRUE;
+                // 值域完全在 [lo, hi] 之外 → 恒假
+                if (range.min() > bounds[1] || range.max() < bounds[0]) return Boolean.FALSE;
+            }
+            return null;
+        }
         if (op == CheckOp.NULL && range.nonNull())
             return Boolean.FALSE;
         return null;
@@ -397,9 +407,28 @@ public final class CheckNodeHandler
             case LT -> range.withMax(d - Double.MIN_VALUE);
             case LTE -> range.withMax(d);
             case EQ -> value != null ? range.withExact(value) : range;
+            case BETWEEN -> {
+                double[] bounds = resolveBetweenBounds(node);
+                yield bounds != null ? range.withMin(bounds[0]).withMax(bounds[1]) : range;
+            }
             case NULL -> info.negate() ? range.withNonNull() : range;
             default -> range;
         };
+    }
+
+    /**
+     * 从节点属性中提取 BETWEEN 的 [lo, hi] 边界。
+     */
+    private static double[] resolveBetweenBounds(ScriptIR.FlowNode node) {
+        ImmutableList<?> bounds = node.getAttrOrDefault("valueList", null);
+        if (bounds == null) bounds = node.getAttrOrDefault("value", null);
+        if (bounds instanceof ImmutableList<?> vals && vals.size() == 2) {
+            return new double[]{
+                    ((Number) vals.get(0)).doubleValue(),
+                    ((Number) vals.get(1)).doubleValue()
+            };
+        }
+        return null;
     }
 
     /**

@@ -9,6 +9,7 @@ import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.ScriptUnit;
 import gloomlib.script.core.ScriptIR.VarDecl;
 import gloomlib.script.core.parser.ScriptParser;
+import gloomlib.script.core.parser.accessor.PropertyAccessor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.MethodVisitor;
@@ -137,7 +138,7 @@ public final class BytecodeCompiler implements Opcodes {
                 String baseName = part.substring(0, part.indexOf('['));
                 String indexPath = part.substring(part.indexOf('['));
                 mv.visitVarInsn(ALOAD, ctx.getSlot(baseName));
-                java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
+                java.util.List<PropertyAccessor> accessors =
                         ScriptParser.PropertyResolver.resolveAccessors(
                                 ctx.getType(baseName).getToken(), indexPath, ctx.scriptId());
                 emitAccessorChain(accessors, mv, ctx);
@@ -208,9 +209,9 @@ public final class BytecodeCompiler implements Opcodes {
      * 发射 accessor 链。
      */
     public static void emitAccessorChain(
-            java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors,
+            java.util.List<PropertyAccessor> accessors,
             MethodVisitor mv, CompilationContext ctx) {
-        for (gloomlib.script.core.parser.accessor.PropertyAccessor acr : accessors) {
+        for (PropertyAccessor acr : accessors) {
             acr.emitLoad(mv, ctx);
         }
     }
@@ -259,7 +260,7 @@ public final class BytecodeCompiler implements Opcodes {
                 mv.visitTypeInsn(CHECKCAST, org.objectweb.asm.Type.getInternalName(narrowed));
             }
 
-            List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
+            List<PropertyAccessor> accessors =
                     ScriptParser.PropertyResolver.resolveAccessors(
                             com.google.common.reflect.TypeToken.of(narrowed != null ? narrowed : ctx.payloadClass()),
                             propPath, ctx.scriptId());
@@ -280,7 +281,7 @@ public final class BytecodeCompiler implements Opcodes {
 
         mv.visitTypeInsn(CHECKCAST, org.objectweb.asm.Type.getInternalName(narrowed));
 
-        List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
+        List<PropertyAccessor> accessors =
                 ScriptParser.PropertyResolver.resolveAccessors(
                         com.google.common.reflect.TypeToken.of(narrowed), propPath, ctx.scriptId());
         emitAccessorChain(accessors, mv, ctx);
@@ -299,7 +300,7 @@ public final class BytecodeCompiler implements Opcodes {
      * 统一「类型原始但 Accessor 返回引用」场景的拆箱逻辑，消除重复。
      */
     public static void emitUnboxIfNeeded(MethodVisitor mv,
-                                         java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors,
+                                         java.util.List<PropertyAccessor> accessors,
                                          gloomlib.script.core.ScriptIR.IRType targetType) {
         if (targetType.isPrimitive() && !accessors.isEmpty()
                 && !accessors.get(accessors.size() - 1).returnType().getRawType().isPrimitive()) {
@@ -316,10 +317,10 @@ public final class BytecodeCompiler implements Opcodes {
      * @param sinkingProp 下沉的属性表达式 (e.g. "health")
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> emitSunkPropertyChain(
+    private static java.util.List<PropertyAccessor> emitSunkPropertyChain(
             MethodVisitor mv, CompilationContext ctx, String sinkingProp) {
         mv.visitVarInsn(Opcodes.ALOAD, 1);
-        java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors = ScriptParser.PropertyResolver
+        java.util.List<PropertyAccessor> accessors = ScriptParser.PropertyResolver
                 .resolveAccessors(
                         com.google.common.reflect.TypeToken.of((Class) ctx.payloadClass()), sinkingProp,
                         ctx.scriptId());
@@ -344,7 +345,7 @@ public final class BytecodeCompiler implements Opcodes {
     public static void emitSunkPropertyLoadWithUnbox(MethodVisitor mv, CompilationContext ctx,
                                                      String sinkingProp,
                                                      gloomlib.script.core.ScriptIR.IRType targetType) {
-        java.util.List<gloomlib.script.core.parser.accessor.PropertyAccessor> accessors =
+        java.util.List<PropertyAccessor> accessors =
                 emitSunkPropertyChain(mv, ctx, sinkingProp);
         emitUnboxIfNeeded(mv, accessors, targetType);
     }
@@ -573,8 +574,8 @@ public final class BytecodeCompiler implements Opcodes {
 
             if (descendants >= 2) {
                 // ---- 多后代分支：缓存本级结果 ----
-                List<gloomlib.script.core.parser.accessor.PropertyAccessor> segAccessors =
-                        gloomlib.script.core.parser.ScriptParser.PropertyResolver
+                List<PropertyAccessor> segAccessors =
+                        ScriptParser.PropertyResolver
                                 .resolveAccessors(sourceType, segment, ctx.scriptId());
                 com.google.common.reflect.TypeToken<?> segType = segAccessors.isEmpty() ? sourceType
                         : segAccessors.get(segAccessors.size() - 1).returnType();
@@ -602,8 +603,8 @@ public final class BytecodeCompiler implements Opcodes {
                 String remaining = cseDropPrefixSegments(singleVar.property(), depth);
 
                 mv.visitVarInsn(ALOAD, sourceSlot);
-                List<gloomlib.script.core.parser.accessor.PropertyAccessor> remAccessors =
-                        gloomlib.script.core.parser.ScriptParser.PropertyResolver
+                List<PropertyAccessor> remAccessors =
+                        ScriptParser.PropertyResolver
                                 .resolveAccessors(sourceType, remaining, ctx.scriptId());
                 emitAccessorChain(remAccessors, mv, ctx);
                 emitUnboxIfNeeded(mv, remAccessors, singleVar.type());
