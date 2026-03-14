@@ -16,7 +16,7 @@ import java.util.*;
 /**
  * 脚本核心优化器。
  * <p>
- * 优化按序执行：常量折叠 → 值域传播 → 死代码消除 → 分支重排 → 变量下沉与内联预估 → 变量缓存推算
+ * 优化按序执行：常量折叠 → 值域传播 → 死代码消除 → 分支重排 → 变量下沉与内联预估
  * 此后执行混合型 Pass（常量提取）和分析型 Pass（活跃变量分析）。
  * <p>
  * 使用 {@link FlowNode#flags} 位掩码存储优化标记，实现零装箱分配。
@@ -45,7 +45,6 @@ public final class ScriptOptimizer {
     private final OptimizationPass deadCodeEliminationPass = this::deadCodeElimination;
     private final OptimizationPass branchReorderingPass = this::branchReordering;
     private final OptimizationPass variableInliningPass = this::variableInlining;
-    private final OptimizationPass variableCachingPass = this::variableCaching;
 
     // ---- 混合型 Pass（修改 IR 结构 + 写入 ctx）——必须返回修改后的 unit ----
 
@@ -58,6 +57,9 @@ public final class ScriptOptimizer {
         return unit;
     };
 
+    private final OptimizationPass deadAssignmentEliminationPass = this::deadAssignmentElimination;
+    private final OptimizationPass deadProducerEliminationPass = this::deadProducerElimination;
+
     /**
      * 转换型 Pass 列表（按执行顺序）。外部可通过此列表实现自定义 Pass 注入。
      */
@@ -66,19 +68,20 @@ public final class ScriptOptimizer {
             valueRangePropagationPass,
             deadCodeEliminationPass,
             branchReorderingPass,
-            variableInliningPass,
-            variableCachingPass
+            variableInliningPass
     );
 
     /**
-     * 分析型 Pass 列表（结果存入 ctx，供 BytecodeCompiler 使用）。
+     * 后置 Pass 列表（在全部 transformPasses 之后按序执行）。
      * <p>
-     * 注意：constantHoisting 虽然也写入 ctx，但因为同时修改了节点属性（_hoistedField），
-     * 已归入混合型 Pass。任何新增的同时修改 IR 和 ctx 的 Pass 都应放入 transformPasses。
+     * 包含分析型（写入 ctx）和依赖分析结果的后置转换型（修改 IR）。
+     * 执行顺序敏感：deadProducerElimination 和 deadAssignmentElimination 依赖 liveVarAnalysis 的结果。
      */
     private final List<OptimizationPass> analysisPasses = List.of(
             constantHoistingPass,
-            liveVarAnalysisPass
+            liveVarAnalysisPass,
+            deadProducerEliminationPass,
+            deadAssignmentEliminationPass
     );
 
     /**
@@ -88,10 +91,7 @@ public final class ScriptOptimizer {
      * 使得中间的守卫检查仍然正常执行，而动作调用则延迟到消费者位置。
      */
     private static boolean isPureGuardNode(FlowNode node) {
-        return switch (node.type()) {
-            case CHECK, ANY, ALL -> true;
-            default -> false;
-        };
+        return node.handler().capabilities().contains(NodeCapability.PURE_GUARD);
     }
 
 
@@ -118,7 +118,7 @@ public final class ScriptOptimizer {
         ImmutableList.Builder<FlowNode> optimized = ImmutableList.builder();
         for (FlowNode node : nodes) {
             FlowNode processed = foldNodeRecursive(node, ctx);
-            if (processed.type().handler() instanceof ScriptIR.ConstantFolder folder) {
+            if (processed.handler() instanceof ScriptIR.ConstantFolder folder) {
                 Boolean result = folder.evaluateFold(processed, ctx);
                 if (result == null) {
                     optimized.add(processed);
@@ -141,10 +141,10 @@ public final class ScriptOptimizer {
     }
 
     private FlowNode foldNodeRecursive(FlowNode node, CompilationContext ctx) {
-        if (node.type().handler() instanceof ScriptIR.NodeMutator mutator) {
+        if (node.handler() instanceof ScriptIR.NodeMutator mutator) {
             return mutator.mapChildren(node, child -> {
                 FlowNode folded = foldNodeRecursive(child, ctx);
-                if (folded.type().handler() instanceof ScriptIR.ConstantFolder folder) {
+                if (folded.handler() instanceof ScriptIR.ConstantFolder folder) {
                     Boolean result = folder.evaluateFold(folded, ctx);
                     if (result != null) {
                         if (result) {
@@ -178,7 +178,7 @@ public final class ScriptOptimizer {
             if (node.hasFlag(FlowNode.FLAG_FOLDED))
                 continue;
             optimized.add(dceNodeRecursive(node));
-            if (node.type().handler().capabilities().contains(NodeCapability.TERMINATES_FLOW)) {
+            if (node.handler().capabilities().contains(NodeCapability.TERMINATES_FLOW)) {
                 break;
             }
         }
@@ -186,7 +186,7 @@ public final class ScriptOptimizer {
     }
 
     private FlowNode dceNodeRecursive(FlowNode node) {
-        if (node.type().handler() instanceof ScriptIR.NodeMutator mutator) {
+        if (node.handler() instanceof ScriptIR.NodeMutator mutator) {
             return mutator.filterChildren(node, this::isLiveChild, this::dceNodeRecursive);
         }
         return node;
@@ -220,7 +220,7 @@ public final class ScriptOptimizer {
 
         for (FlowNode node : nodes) {
             // 常量 MATH 产出 → 向后续 CHECK 注入精确值域约束
-            if (node.type().handler() instanceof ScriptIR.VariableProducer producer) {
+            if (node.handler() instanceof ScriptIR.VariableProducer producer) {
                 String var = producer.getProducedVariable(node);
                 Object constVal = producer.getProducedConstantValue(node);
                 if (var != null && constVal != null) {
@@ -233,8 +233,8 @@ public final class ScriptOptimizer {
             FlowNode processed = vrpNodeRecursive(node, ranges);
 
             // 递归 VRP 后，检查复合节点整体是否可折叠（基于子节点 FLAG_DEAD/FLAG_FOLDED 标记）
-            if (processed.type().handler() instanceof ScriptIR.ConstantFolder folder
-                    && !(processed.type().handler() instanceof ScriptIR.RangePropagator)) {
+            if (processed.handler() instanceof ScriptIR.ConstantFolder folder
+                    && !(processed.handler() instanceof ScriptIR.RangePropagator)) {
                 Boolean foldResult = folder.evaluateFold(processed, null);
                 if (foldResult != null) {
                     if (foldResult) {
@@ -252,7 +252,7 @@ public final class ScriptOptimizer {
                 }
             }
 
-            if (processed.type().handler() instanceof ScriptIR.RangePropagator propagator) {
+            if (processed.handler() instanceof ScriptIR.RangePropagator propagator) {
                 String var = propagator.getConstrainedVariable(processed);
                 if (var != null) {
                     ValueRange range = ranges.getOrDefault(var, ValueRange.UNCONSTRAINED);
@@ -279,12 +279,21 @@ public final class ScriptOptimizer {
     }
 
     private FlowNode vrpNodeRecursive(FlowNode node, Map<String, ValueRange> outerRanges) {
-        if (node.type().handler() instanceof ScriptIR.NodeMutator mutator) {
+        if (node.handler() instanceof ScriptIR.NodeMutator mutator) {
             // 子树使用外层约束的只读快照（子树内的约束不回传到外层）
             Map<String, ValueRange> childRanges = new HashMap<>(outerRanges);
             return mutator.mapChildren(node, child -> {
                 FlowNode processed = vrpNodeRecursive(child, childRanges);
-                if (processed.type().handler() instanceof ScriptIR.RangePropagator propagator) {
+                // 复合节点内的常量产出 → 向同级后续 CHECK 注入精确值域约束
+                if (processed.handler() instanceof ScriptIR.VariableProducer producer) {
+                    String pVar = producer.getProducedVariable(processed);
+                    Object constVal = producer.getProducedConstantValue(processed);
+                    if (pVar != null && constVal != null) {
+                        double d = constVal instanceof Number n ? n.doubleValue() : 0;
+                        childRanges.put(pVar, new ValueRange(d, d, constVal, true));
+                    }
+                }
+                if (processed.handler() instanceof ScriptIR.RangePropagator propagator) {
                     String var = propagator.getConstrainedVariable(processed);
                     if (var != null) {
                         ValueRange range = childRanges.getOrDefault(var, ValueRange.UNCONSTRAINED);
@@ -295,7 +304,7 @@ public final class ScriptOptimizer {
                         }
                         childRanges.put(var, propagator.updateRange(processed, range));
                     }
-                } else if (processed.type().handler() instanceof ScriptIR.ConstantFolder folder) {
+                } else if (processed.handler() instanceof ScriptIR.ConstantFolder folder) {
                     // 内层复合节点（ANY/ALL）子条件被递归标记后，评估整体折叠
                     Boolean foldResult = folder.evaluateFold(processed, null);
                     if (foldResult != null) {
@@ -317,51 +326,33 @@ public final class ScriptOptimizer {
 
 
     private ScriptUnit branchReordering(ScriptUnit unit, CompilationContext ctx) {
-        ImmutableList.Builder<FlowNode> optimized = ImmutableList.builder();
-        for (FlowNode node : unit.flow()) {
-            if (node.type().handler() instanceof ScriptIR.BranchReorderer reorderer) {
-                optimized.add(reorderer.reorderBranches(node, ctx));
-            } else {
-                optimized.add(node);
-            }
-        }
-        return unit.withFlow(optimized.build());
+        return unit.withFlow(reorderNodesRecursive(unit.flow(), ctx));
     }
 
-
-    private ScriptUnit variableCaching(ScriptUnit unit, CompilationContext ctx) {
-        Multiset<String> usageCount = HashMultiset.create();
-        for (FlowNode node : unit.flow()) {
-            if (node.type().handler() instanceof ScriptIR.VariableConsumer consumer) {
-                String variable = consumer.getConsumedVariable(node);
-                if (variable != null) {
-                    usageCount.add(variable);
-                }
-            }
-        }
-
-        Set<String> cachedVars = new HashSet<>();
-        for (Multiset.Entry<String> entry : usageCount.entrySet()) {
-            if (entry.getCount() >= 2) {
-                cachedVars.add(entry.getElement());
-            }
-        }
-
-        if (cachedVars.isEmpty())
-            return unit;
-
+    private ImmutableList<FlowNode> reorderNodesRecursive(ImmutableList<FlowNode> nodes, CompilationContext ctx) {
         ImmutableList.Builder<FlowNode> optimized = ImmutableList.builder();
-        for (FlowNode node : unit.flow()) {
-            if (node.type().handler() instanceof ScriptIR.VariableConsumer consumer) {
-                String variable = consumer.getConsumedVariable(node);
-                if (variable != null && cachedVars.contains(variable)) {
-                    optimized.add(node.withFlag(FlowNode.FLAG_CACHED));
-                    continue;
-                }
+        for (FlowNode node : nodes) {
+            FlowNode processed = reorderNodeRecursive(node, ctx);
+            if (processed.handler() instanceof ScriptIR.BranchReorderer reorderer) {
+                optimized.add(reorderer.reorderBranches(processed, ctx));
+            } else {
+                optimized.add(processed);
             }
-            optimized.add(node);
         }
-        return unit.withFlow(optimized.build());
+        return optimized.build();
+    }
+
+    private FlowNode reorderNodeRecursive(FlowNode node, CompilationContext ctx) {
+        if (node.handler() instanceof ScriptIR.NodeMutator mutator) {
+            return mutator.mapChildren(node, child -> {
+                FlowNode processed = reorderNodeRecursive(child, ctx);
+                if (processed.handler() instanceof ScriptIR.BranchReorderer reorderer) {
+                    return reorderer.reorderBranches(processed, ctx);
+                }
+                return processed;
+            });
+        }
+        return node;
     }
 
 
@@ -383,16 +374,38 @@ public final class ScriptOptimizer {
         return unit.withFlow(optimized.build());
     }
 
+    @SuppressWarnings("unchecked")
     private FlowNode hoistNode(FlowNode node, List<ConstantDef> defs, int[] counter) {
-        if (node.type().handler() instanceof ScriptIR.ConstantHoister hoister) {
+        if (node.handler() instanceof ScriptIR.ConstantHoister hoister) {
             node = hoister.hoistConstants(node, defs, counter);
         }
 
-        if (node.type().handler() instanceof ScriptIR.NodeMutator mutator) {
+        if (node.handler() instanceof ScriptIR.NodeMutator mutator) {
             node = mutator.mapChildren(node, child -> hoistNode(child, defs, counter));
-        } else if (node.type().handler() instanceof ScriptIR.NodeTraverser traverser) {
-            for (FlowNode child : traverser.traverseChildren(node)) {
-                hoistNode(child, defs, counter);
+        } else {
+            // 对于仅实现 NodeTraverser 的容器（CHECK、SWITCH、RETURN、ACTION），
+            // 通过直接遍历属性中的子节点列表进行递归替换，确保 _hoistedField 不会被丢弃。
+            for (java.util.Map.Entry<String, Object> entry : node.attrs().entrySet()) {
+                Object val = entry.getValue();
+                if (val instanceof ImmutableList<?> list && !list.isEmpty()
+                        && list.get(0) instanceof FlowNode) {
+                    ImmutableList<FlowNode> children = (ImmutableList<FlowNode>) val;
+                    ImmutableList.Builder<FlowNode> mapped = ImmutableList.builder();
+                    boolean changed = false;
+                    for (FlowNode child : children) {
+                        FlowNode hoisted = hoistNode(child, defs, counter);
+                        mapped.add(hoisted);
+                        if (hoisted != child) changed = true;
+                    }
+                    if (changed) {
+                        node = node.withAttr(entry.getKey(), mapped.build());
+                    }
+                } else if (val instanceof FlowNode childNode) {
+                    FlowNode hoisted = hoistNode(childNode, defs, counter);
+                    if (hoisted != childNode) {
+                        node = node.withAttr(entry.getKey(), hoisted);
+                    }
+                }
             }
         }
         return node;
@@ -416,7 +429,7 @@ public final class ScriptOptimizer {
      */
     private static boolean hasTopLevelDottedRefTo(ImmutableList<FlowNode> flow, String varName) {
         for (FlowNode node : flow) {
-            if (node.type() != ScriptIR.FlowNodeType.ACTION) continue;
+            if (!node.handler().capabilities().contains(NodeCapability.DOTTED_ARG_SINK)) continue;
             ImmutableList<String> args = node.getAttrOrDefault("args", ImmutableList.of());
             for (String arg : args) {
                 if (ScriptIR.isDottedSingleRef(arg)) {
@@ -460,30 +473,42 @@ public final class ScriptOptimizer {
         ctx.setLiveVars(refs.elementSet());
     }
 
-    private void collectLiveVars(FlowNode node, Multiset<String> refs) {
-        if (node.type().handler() instanceof ScriptIR.VariableConsumer consumer) {
-            for (String var : consumer.getAllConsumedVariables(node)) {
-                if (var != null) {
-                    refs.add(var);
-                }
+    private ScriptUnit deadAssignmentElimination(ScriptUnit unit, CompilationContext ctx) {
+        Set<String> liveVars = ctx.liveVars();
+        ImmutableList.Builder<ScriptIR.VarDecl> liveDecls = ImmutableList.builder();
+        for (gloomlib.script.core.ScriptIR.VarDecl v : unit.vars()) {
+            if (liveVars.contains(v.name())) {
+                liveDecls.add(v);
             }
         }
-
-        if (node.type().handler() instanceof ScriptIR.NodeTraverser traverser) {
-            for (FlowNode child : traverser.traverseChildren(node)) {
-                collectLiveVars(child, refs);
-            }
-        }
+        return unit.withVars(liveDecls.build());
     }
 
     /**
-     * 递归统计节点树中所有变量引用次数。
+     * 死生产者消除：产出变量已死 + 无外部副作用 → 安全消除整个节点。
      * <p>
-     * 与 {@link #collectLiveVars} 保持相同的递归策略：
-     * 使用 {@code getAllConsumedVariables} + {@link ScriptIR.NodeTraverser} 遍历子节点。
+     * 依赖 {@link #liveVarAnalysis} 的结果（{@link CompilationContext#liveVars()}）。
+     * MATH 节点（无 {@link NodeCapability#SIDE_EFFECT}）产出死变量时可被整体删除。
+     * ACTION/COLLECT（有 SIDE_EFFECT）即使产出死变量也不可删除。
      */
-    private void countVariableRefs(FlowNode node, Multiset<String> refs) {
-        if (node.type().handler() instanceof ScriptIR.VariableConsumer consumer) {
+    private ScriptUnit deadProducerElimination(ScriptUnit unit, CompilationContext ctx) {
+        Set<String> liveVars = ctx.liveVars();
+        ImmutableList.Builder<FlowNode> optimized = ImmutableList.builder();
+        for (FlowNode node : unit.flow()) {
+            if (node.handler() instanceof ScriptIR.VariableProducer producer
+                    && !node.handler().capabilities().contains(NodeCapability.SIDE_EFFECT)) {
+                String var = producer.getProducedVariable(node);
+                if (var != null && !liveVars.contains(var)) {
+                    continue;
+                }
+            }
+            optimized.add(node);
+        }
+        return unit.withFlow(optimized.build());
+    }
+
+    private void collectLiveVars(FlowNode node, Multiset<String> refs) {
+        if (node.handler() instanceof ScriptIR.VariableConsumer consumer) {
             for (String var : consumer.getAllConsumedVariables(node)) {
                 if (var != null) {
                     refs.add(var);
@@ -491,9 +516,9 @@ public final class ScriptOptimizer {
             }
         }
 
-        if (node.type().handler() instanceof ScriptIR.NodeTraverser traverser) {
+        if (node.handler() instanceof ScriptIR.NodeTraverser traverser) {
             for (FlowNode child : traverser.traverseChildren(node)) {
-                countVariableRefs(child, refs);
+                collectLiveVars(child, refs);
             }
         }
     }
@@ -523,8 +548,8 @@ public final class ScriptOptimizer {
         Multiset<String> deepRefs = HashMultiset.create();
         Multiset<String> topLevelSinkableRefs = HashMultiset.create();
         for (FlowNode node : oldFlow) {
-            countVariableRefs(node, deepRefs);
-            if (node.type().handler() instanceof ScriptIR.VariableConsumer consumer) {
+            collectLiveVars(node, deepRefs);
+            if (node.handler() instanceof ScriptIR.VariableConsumer consumer) {
                 String var = consumer.getConsumedVariable(node);
                 if (var != null) {
                     topLevelSinkableRefs.add(var);
@@ -565,14 +590,14 @@ public final class ScriptOptimizer {
             // 被跳过的守卫节点照常输出，仅生产者与消费者合并。
             // 这也是一个安全的子优化：如果中间的 CHECK 提前终止了脚本，
             // 生产者的动作调用会被完全跳过（减少不必要的副作用执行）。
-            if (current.type().handler() instanceof ScriptIR.VariableProducer producer) {
+            if (current.handler() instanceof ScriptIR.VariableProducer producer) {
                 String storeTarget = producer.getProducedVariable(current);
                 if (storeTarget != null && deepRefs.count(storeTarget) == 1) {
                     // 前瞻扫描：跳过纯守卫节点，寻找唯一的消费者
                     int consumerIdx = -1;
                     for (int j = i + 1; j < oldFlow.size() && j <= i + 8; j++) {
                         FlowNode candidate = oldFlow.get(j);
-                        if (candidate.type().handler() instanceof ScriptIR.VariableConsumer vc) {
+                        if (candidate.handler() instanceof ScriptIR.VariableConsumer vc) {
                             String cVar = vc.getConsumedVariable(candidate);
                             if (storeTarget.equals(cVar)) {
                                 consumerIdx = j;
@@ -581,6 +606,14 @@ public final class ScriptOptimizer {
                         }
                         // 仅允许跳过无副作用的纯守卫节点
                         if (!isPureGuardNode(candidate)) {
+                            // 扩展：无外部副作用 + 产出不同变量 → 安全跳过
+                            if (!candidate.handler().capabilities().contains(NodeCapability.SIDE_EFFECT)
+                                    && candidate.handler() instanceof ScriptIR.VariableProducer vp) {
+                                String pVar = vp.getProducedVariable(candidate);
+                                if (pVar != null && !pVar.equals(storeTarget)) {
+                                    continue;
+                                }
+                            }
                             break;
                         }
                     }
@@ -589,7 +622,7 @@ public final class ScriptOptimizer {
                         FlowNode peelAction = producer.stripProducedVariable(current);
                         FlowNode consumerNode = oldFlow.get(consumerIdx);
                         ScriptIR.VariableConsumer consumer =
-                                (ScriptIR.VariableConsumer) consumerNode.type().handler();
+                                (ScriptIR.VariableConsumer) consumerNode.handler();
                         FlowNode modifiedConsumer = consumer.inlineAction(consumerNode, peelAction);
 
                         // 输出中间的守卫节点（保持原始执行顺序）
@@ -603,11 +636,11 @@ public final class ScriptOptimizer {
                 }
             }
 
-            if (current.type().handler() instanceof ScriptIR.VariableConsumer consumer) {
+            if (current.handler() instanceof ScriptIR.VariableConsumer consumer) {
                 String reqVar = consumer.getConsumedVariable(current);
                 // 扩展：若主 getConsumedVariable 未命中，且当前节点为顶层 ACTION，
                 // 则尝试从点链参数中寻找可下沉变量（如 {cause.name} 中的 cause）
-                if (reqVar == null && current.type() == ScriptIR.FlowNodeType.ACTION) {
+                if (reqVar == null && current.handler().capabilities().contains(NodeCapability.DOTTED_ARG_SINK)) {
                     for (String cVar : consumer.getAllConsumedVariables(current)) {
                         if (sinkingVars.containsKey(cVar)) {
                             reqVar = cVar;

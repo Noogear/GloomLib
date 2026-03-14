@@ -1,8 +1,6 @@
 package gloomlib.script.core.handler;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import gloomlib.script.api.action.ActionRegistry;
 import gloomlib.script.core.CompilationContext;
 import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.ScriptIR;
@@ -48,13 +46,6 @@ import java.util.List;
  */
 public final class ReturnNodeHandler implements gloomlib.script.core.ScriptIR.FlowNodeHandler,
         gloomlib.script.core.ScriptIR.VariableConsumer, gloomlib.script.core.ScriptIR.NodeTraverser {
-
-    static {
-        FlowNodeType.registerHandler(FlowNodeType.RETURN, ReturnNodeHandler::new);
-    }
-
-    public static void init() {
-    }
 
     /**
      * 根据目标接口确切要求，返回原生类型自适应指令。
@@ -214,7 +205,7 @@ public final class ReturnNodeHandler implements gloomlib.script.core.ScriptIR.Fl
         // 短语法：- return: xxx
         Object shortValue = ctx.get("return");
         if (shortValue != null) {
-            return new FlowNode(FlowNodeType.RETURN, ImmutableMap.of("value", shortValue));
+            return new FlowNode(FlowNodeType.RETURN, "return", ImmutableMap.of("value", shortValue));
         }
 
         Object standardValue = ctx.get("value");
@@ -223,18 +214,19 @@ public final class ReturnNodeHandler implements gloomlib.script.core.ScriptIR.Fl
         if (standardValue != null && variable != null) {
             // 如果同时提供了 value 和 variable，包装为集合 ["{variable}", value]
             return new FlowNode(FlowNodeType.RETURN,
+                    "return",
                     ImmutableMap.of("value", List.of("{" + variable + "}", standardValue)));
         }
 
         if (standardValue != null) {
-            return new FlowNode(FlowNodeType.RETURN, ImmutableMap.of("value", standardValue));
+            return new FlowNode(FlowNodeType.RETURN, "return", ImmutableMap.of("value", standardValue));
         }
 
         if (variable != null) {
-            return new FlowNode(FlowNodeType.RETURN, ImmutableMap.of("variable", variable.toString()));
+            return new FlowNode(FlowNodeType.RETURN, "return", ImmutableMap.of("variable", variable.toString()));
         }
 
-        return new FlowNode(FlowNodeType.RETURN, ImmutableMap.of());
+        return new FlowNode(FlowNodeType.RETURN, "return", ImmutableMap.of());
     }
 
     @Override
@@ -252,16 +244,20 @@ public final class ReturnNodeHandler implements gloomlib.script.core.ScriptIR.Fl
             FlowNode conditionAction = node.getAttrOrDefault("conditionAction", null);
             if (conditionAction != null) {
                 String sinkingProp = conditionAction.getAttrOrDefault("_sinking_property", null);
-                gloomlib.script.core.ScriptIR.IRType returnType = conditionAction.getRequiredAttr("returnType");
+                ScriptIR.IRType returnType;
                 if (sinkingProp != null) {
                     // 路径 CA：属性下沉（Property Sinking）— virtual producer
+                    returnType = conditionAction.getRequiredAttr("returnType");
                     BytecodeCompiler.emitSunkPropertyLoadWithUnbox(mv, ctx, sinkingProp, returnType);
+                } else if (conditionAction.handler() instanceof ScriptIR.InlineEmitter ie) {
+                    // 路径 CB：生产者内联 — 通过 InlineEmitter 接口统一分发
+                    ie.emitInline(conditionAction, mv, ctx);
+                    returnType = ie.inlineResultType(conditionAction, ctx);
                 } else {
-                    // 路径 CB：生产者内联（Producer Inlining）— inlined ACTION node
-                    // 需要直接发射调用并把返回值留在栈顶，而非让 ActionNodeHandler.emit 弹出它
-                    ActionRegistry.ActionDef def = conditionAction.getRequiredAttr("def");
-                    ImmutableList<String> args = conditionAction.getRequiredAttr("args");
-                    new ActionNodeHandler().emitActionCallLeaveOnStack(mv, def, args, ctx, conditionAction);
+                    // 路径 CC：回退泛型 emit
+                    conditionAction.handler().emit(conditionAction, mv, ctx);
+                    returnType = conditionAction.getAttrOrDefault("returnType",
+                            ScriptIR.IRType.OBJECT);
                 }
                 // 按目标接口自适应返回指令，不无脑 ARETURN
                 emitAdaptiveReturn(mv, ctx, returnType);

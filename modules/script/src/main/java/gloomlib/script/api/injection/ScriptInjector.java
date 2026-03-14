@@ -3,7 +3,7 @@ package gloomlib.script.api.injection;
 import com.google.common.base.Preconditions;
 import gloomlib.script.api.ScriptHost;
 import gloomlib.script.core.CompilationPipeline;
-import gloomlib.script.core.handler.*;
+import gloomlib.script.core.NodeRegistry;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,14 +17,12 @@ import java.util.function.Consumer;
  */
 public final class ScriptInjector {
 
-    // 确保 Handler 注册（类加载触发 static 块）
+    // 注册内置节点并冻结注册表
     static {
-        CheckNodeHandler.init();
-        SwitchNodeHandler.init();
-        ReturnNodeHandler.init();
-        ActionNodeHandler.init();
-        MathNodeHandler.init();
-        CompositeCheckHandler.init();
+        if (!NodeRegistry.isFrozen()) {
+            NodeRegistry.registerDefaults();
+            NodeRegistry.freeze();
+        }
     }
 
     private final ScriptHost host;
@@ -81,13 +79,14 @@ public final class ScriptInjector {
     }
 
     /**
-     * 卸载所有已注入的脚本。
+     * 卸载所有已注入的脚本，并清理编译缓存与常量注册表。
      */
     public void ejectAll() {
         for (RegisteredScript reg : registered) {
             host.unregisterEvent(reg.token());
         }
         registered.clear();
+        CompilationPipeline.clearCache();
     }
 
     /**

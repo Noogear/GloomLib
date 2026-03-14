@@ -63,13 +63,6 @@ public final class CollectNodeHandler
         implements ScriptIR.FlowNodeHandler, ScriptIR.NodeMutator, ScriptIR.VariableConsumer,
         ScriptIR.BranchReorderer {
 
-    static {
-        FlowNodeType.registerHandler(FlowNodeType.COLLECT, CollectNodeHandler::new);
-    }
-
-    public static void init() {
-    }
-
     /**
      * 集合操作类型。
      */
@@ -219,7 +212,7 @@ public final class CollectNodeHandler
             attrs.put("onFailNodes", ScriptParser.parseFlow(onFailRaw));
         }
 
-        return new FlowNode(FlowNodeType.COLLECT, attrs.build());
+        return new FlowNode(FlowNodeType.COLLECT, "collect", attrs.build());
     }
 
 
@@ -237,8 +230,10 @@ public final class CollectNodeHandler
             collectionSlot = ctx.nextSlot();
             if (sinkingProp != null) {
                 BytecodeCompiler.emitSunkPropertyLoad(mv, ctx, sinkingProp);
+            } else if (conditionAction.handler() instanceof ScriptIR.InlineEmitter ie) {
+                ie.emitInline(conditionAction, mv, ctx);
             } else {
-                conditionAction.type().handler().emit(conditionAction, mv, ctx);
+                conditionAction.handler().emit(conditionAction, mv, ctx);
             }
             mv.visitVarInsn(Opcodes.ASTORE, collectionSlot);
             collectionType = conditionAction.getAttrOrDefault("returnType", IRType.COLLECTION);
@@ -625,11 +620,8 @@ public final class CollectNodeHandler
             if (collectToList) {
                 mv.visitTypeInsn(Opcodes.NEW, "java/util/ArrayList");
                 mv.visitInsn(Opcodes.DUP);
-                mv.visitVarInsn(Opcodes.ALOAD, collectionSlot);
-                mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, "java/util/Collection", "size",
-                        "()I", true);
                 mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/util/ArrayList", "<init>",
-                        "(I)V", false);
+                        "()V", false);
                 mv.visitVarInsn(Opcodes.ASTORE, accSlot);
             } else {
                 ASMUtils.emitIntConst(mv, 0);
@@ -757,7 +749,7 @@ public final class CollectNodeHandler
 
         // 5. 发射 match 流节点
         for (FlowNode node : matchFlow) {
-            node.type().handler().emit(node, mv, ctx);
+            node.handler().emit(node, mv, ctx);
         }
 
         // 6. 恢复上下文
@@ -774,7 +766,7 @@ public final class CollectNodeHandler
             varNames.add(var);
         }
         // 递归遍历子节点（复合条件 ANY/ALL 的子列表等）
-        if (node.type().handler() instanceof ScriptIR.NodeTraverser traverser) {
+        if (node.handler() instanceof ScriptIR.NodeTraverser traverser) {
             for (FlowNode child : traverser.traverseChildren(node)) {
                 discoverVariables(child, varNames);
             }
@@ -897,25 +889,17 @@ public final class CollectNodeHandler
      * ANY/ALL 的子列表也必须满足约束——否则嵌套的 ACTION/RETURN 仍会导致语义错误。
      */
     private static void validateMatchNode(FlowNode node, ParseContext ctx) {
-        switch (node.type()) {
-            case CHECK -> {} // 谓词安全
-            case ANY, ALL -> {
-                // 递归验证复合条件的子节点
-                if (node.type().handler() instanceof ScriptIR.NodeTraverser traverser) {
-                    for (FlowNode child : traverser.traverseChildren(node)) {
-                        validateMatchNode(child, ctx);
-                    }
+        if (node.handler().capabilities().contains(ScriptIR.NodeCapability.PREDICATE_SAFE)) {
+            // 谓词安全节点：递归验证子节点
+            if (node.handler() instanceof ScriptIR.NodeTraverser traverser) {
+                for (FlowNode child : traverser.traverseChildren(node)) {
+                    validateMatchNode(child, ctx);
                 }
             }
-            case RETURN -> throw ctx.error(
-                    "RETURN node is not allowed inside match — "
-                            + "it would exit the entire script, not skip the element.");
-            case ACTION -> throw ctx.error(
-                    "ACTION node is not allowed inside match — "
-                            + "it would execute side effects for every iterated element.");
-            default -> throw ctx.error(
-                    "Node type '" + node.type() + "' is not supported inside match. "
-                            + "Only CHECK, ANY, and ALL nodes are allowed.");
+        } else {
+            throw ctx.error(
+                    "Node type '" + node.type() + "' (key=" + node.nodeKey()
+                            + ") is not allowed inside match — only PREDICATE_SAFE nodes are permitted.");
         }
     }
 

@@ -4,11 +4,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import gloomlib.script.api.action.ActionRegistry;
 import gloomlib.script.api.action.ActionRegistry.ActionDef;
-import gloomlib.script.core.CheckOp;
+import gloomlib.math.api.MathNode;
+import gloomlib.math.api.MathParser;
 import gloomlib.script.core.CompilationPipeline;
 import gloomlib.script.core.CompilationPipeline.CompiledScript;
 import gloomlib.script.core.ScriptIR.*;
-import gloomlib.script.core.handler.CheckNodeHandler;
 import gloomlib.script.core.parser.ScriptParser;
 
 import java.util.function.Consumer;
@@ -41,9 +41,11 @@ public final class ScriptBuilder {
         return new ScriptBuilder(payloadClass);
     }
 
+    /**
+     * 构建单个 CHECK 节点的核心方法。被顶层 check()、ConditionBuilder、MatchBuilder 共用。
+     */
     private static FlowNode buildCheckNodeInternal(String variable, String op, Object value) {
-        // 前置校验：strip '!' 前缀后检查操作符合法性
-        validateOperator(op);
+        ValueParsing.validateOperator(op);
 
         ImmutableMap.Builder<String, Object> attrs = ImmutableMap.builder();
         attrs.put("variable", variable);
@@ -53,18 +55,18 @@ public final class ScriptBuilder {
         if (value != null) {
             Object normalizedValue = value;
             if (value instanceof String s) {
-                Object parsed = ScriptParser.ValueParser.parseNumber(s);
+                Object parsed = ValueParsing.parseNumber(s);
                 if (parsed instanceof Number) {
                     normalizedValue = parsed;
                 }
             }
             attrs.put("value", normalizedValue);
-            attrs.put("valueType", ScriptParser.ValueParser.inferType(normalizedValue));
+            attrs.put("valueType", ValueParsing.inferType(normalizedValue));
             if (normalizedValue instanceof Number n) {
                 numericValue = n.doubleValue();
             }
         }
-        return new FlowNode(FlowNodeType.CHECK, attrs.build(), numericValue, 0);
+        return new FlowNode(FlowNodeType.CHECK, "check", attrs.build(), numericValue, 0);
     }
 
     /**
@@ -97,15 +99,6 @@ public final class ScriptBuilder {
                             args.size()));
         }
     }
-
-    /**
-     * 前置校验操作符合法性。委托给 {@link CheckOp#resolve(String)} 统一处理。
-     */
-    private static void validateOperator(String op) {
-        // CheckOp.resolve 会在操作符不合法时抛出 ScriptCompileException（含拼写建议）
-        CheckOp.resolve(op);
-    }
-
 
     /**
      * 手动指定本脚本的来源标识，用于运行期报错追踪。
@@ -155,7 +148,7 @@ public final class ScriptBuilder {
     /**
      * 追加一个判断限制节点（如果此条件不符合，底层的执行器会在该位置停止，类似 Kotlin 的 takeIf）。
      * <p>
-     * 操作符：{@code null, ==, >, <, >=, <=, contains, starts_with, ends_with, matches, instanceof}
+     * 操作符：{@code null, instanceof, ==, !=, >, >=, <, <=, starts_with, ends_with, matches, contains, contains_value, in, empty, between}
      * <br>
      * 所有操作符前均可加 {@code !} 前缀取反。
      *
@@ -205,7 +198,7 @@ public final class ScriptBuilder {
      */
     public ScriptBuilder checkIn(String variable, Object... values) {
         ImmutableList<Object> valueList = ImmutableList.copyOf(values);
-        flow.add(new FlowNode(FlowNodeType.CHECK, ImmutableMap.<String, Object>builder()
+        flow.add(new FlowNode(FlowNodeType.CHECK, "check", ImmutableMap.<String, Object>builder()
                 .put("variable", variable)
                 .put("op", "in")
                 .put("value", valueList)
@@ -223,7 +216,7 @@ public final class ScriptBuilder {
      */
     public ScriptBuilder checkBetween(String variable, Number low, Number high) {
         ImmutableList<Object> range = ImmutableList.of(low, high);
-        flow.add(new FlowNode(FlowNodeType.CHECK, ImmutableMap.<String, Object>builder()
+        flow.add(new FlowNode(FlowNodeType.CHECK, "check", ImmutableMap.<String, Object>builder()
                 .put("variable", variable)
                 .put("op", "between")
                 .put("value", range)
@@ -233,23 +226,16 @@ public final class ScriptBuilder {
     }
 
     /**
-     * 内部统一构建 CHECK FlowNode 的辅助方法，与 {@link CheckNodeHandler#parse} 保持一致。
+     * 内部统一构建 CHECK FlowNode 的辅助方法。
      */
     private FlowNode buildCheckNode(String variable, String op, Object value, Consumer<ScriptBuilder> onFail) {
         ImmutableMap.Builder<String, Object> attrs = ImmutableMap.builder();
 
         FlowNode baseNode = buildCheckNodeInternal(variable, op, value);
         attrs.putAll(baseNode.attrs());
+        appendOnFailNodes(attrs, onFail);
 
-        if (onFail != null) {
-            ScriptBuilder failBuilder = new ScriptBuilder(payloadClazz);
-            failBuilder.id(this.scriptId + "-fail");
-            failBuilder.actionRegistry = this.actionRegistry;
-            onFail.accept(failBuilder);
-            attrs.put("onFailNodes", failBuilder.flow.build());
-        }
-
-        return new FlowNode(FlowNodeType.CHECK, attrs.build(), baseNode.numericValue(), 0);
+        return new FlowNode(FlowNodeType.CHECK, "check", attrs.build(), baseNode.numericValue(), 0);
     }
 
     /**
@@ -286,16 +272,9 @@ public final class ScriptBuilder {
 
         ImmutableMap.Builder<String, Object> attrs = ImmutableMap.builder();
         attrs.put("children", cb.children.build());
+        appendOnFailNodes(attrs, onFail);
 
-        if (onFail != null) {
-            ScriptBuilder failBuilder = new ScriptBuilder(payloadClazz);
-            failBuilder.id(this.scriptId + "-fail");
-            failBuilder.actionRegistry = this.actionRegistry;
-            onFail.accept(failBuilder);
-            attrs.put("onFailNodes", failBuilder.flow.build());
-        }
-
-        return new FlowNode(type, attrs.build());
+        return new FlowNode(type, type.key(), attrs.build());
     }
 
 
@@ -408,6 +387,13 @@ public final class ScriptBuilder {
     private FlowNode buildCollectNode(String variable, String op, boolean negate,
                                       String store, Consumer<MatchBuilder> matchBuilder,
                                       Consumer<ScriptBuilder> onFail) {
+        return buildCollectNode(variable, op, negate, store, null, matchBuilder, onFail);
+    }
+
+    private FlowNode buildCollectNode(String variable, String op, boolean negate,
+                                      String store, IterateMode iterateMode,
+                                      Consumer<MatchBuilder> matchBuilder,
+                                      Consumer<ScriptBuilder> onFail) {
         MatchBuilder mb = new MatchBuilder();
         matchBuilder.accept(mb);
 
@@ -416,6 +402,9 @@ public final class ScriptBuilder {
         attrs.put("collectOp", op.toUpperCase());
         attrs.put("collectNegate", negate);
         attrs.put("matchFlow", mb.conditions.build());
+        if (iterateMode != null) {
+            attrs.put("iterateMode", iterateMode.name());
+        }
         if (store != null) {
             IRType returnType = switch (op.toUpperCase()) {
                 case "FIND" -> IRType.OBJECT;
@@ -425,16 +414,9 @@ public final class ScriptBuilder {
             attrs.put("store", store);
             attrs.put("returnType", returnType);
         }
+        appendOnFailNodes(attrs, onFail);
 
-        if (onFail != null) {
-            ScriptBuilder failBuilder = new ScriptBuilder(payloadClazz);
-            failBuilder.id(this.scriptId + "-fail");
-            failBuilder.actionRegistry = this.actionRegistry;
-            onFail.accept(failBuilder);
-            attrs.put("onFailNodes", failBuilder.flow.build());
-        }
-
-        return new FlowNode(FlowNodeType.COLLECT, attrs.build());
+        return new FlowNode(FlowNodeType.COLLECT, "collect", attrs.build());
     }
 
 
@@ -449,7 +431,7 @@ public final class ScriptBuilder {
         ActionDef def = requireRegistry().lookup(actionName);
         ImmutableList<String> argsList = toStringArgs(args);
         validateActionArgs(actionName, def, argsList);
-        flow.add(new FlowNode(FlowNodeType.ACTION, ImmutableMap.<String, Object>builder()
+        flow.add(new FlowNode(FlowNodeType.ACTION, "action", ImmutableMap.<String, Object>builder()
                 .put("action", actionName)
                 .put("args", argsList)
                 .put("def", def)
@@ -480,7 +462,7 @@ public final class ScriptBuilder {
 
         IRType returnIRType = IRType.fromClass(def.returnType());
 
-        flow.add(new FlowNode(FlowNodeType.ACTION, ImmutableMap.<String, Object>builder()
+        flow.add(new FlowNode(FlowNodeType.ACTION, "action", ImmutableMap.<String, Object>builder()
                 .put("store", store)
                 .put("action", actionName)
                 .put("args", argsList)
@@ -494,7 +476,7 @@ public final class ScriptBuilder {
      * 流程提前终止，等价于 {@code return null}。
      */
     public ScriptBuilder returnEarly() {
-        flow.add(new FlowNode(FlowNodeType.RETURN, ImmutableMap.of()));
+        flow.add(new FlowNode(FlowNodeType.RETURN, "return", ImmutableMap.of()));
         return this;
     }
 
@@ -507,7 +489,7 @@ public final class ScriptBuilder {
      * </ul>
      */
     public ScriptBuilder returnValue(String value) {
-        flow.add(new FlowNode(FlowNodeType.RETURN, ImmutableMap.of("value", value)));
+        flow.add(new FlowNode(FlowNodeType.RETURN, "return", ImmutableMap.of("value", value)));
         return this;
     }
 
@@ -515,7 +497,7 @@ public final class ScriptBuilder {
      * 返回整数字面量。
      */
     public ScriptBuilder returnValue(int value) {
-        flow.add(new FlowNode(FlowNodeType.RETURN, ImmutableMap.of("value", value)));
+        flow.add(new FlowNode(FlowNodeType.RETURN, "return", ImmutableMap.of("value", value)));
         return this;
     }
 
@@ -523,7 +505,7 @@ public final class ScriptBuilder {
      * 返回浮点字面量。
      */
     public ScriptBuilder returnValue(double value) {
-        flow.add(new FlowNode(FlowNodeType.RETURN, ImmutableMap.of("value", value)));
+        flow.add(new FlowNode(FlowNodeType.RETURN, "return", ImmutableMap.of("value", value)));
         return this;
     }
 
@@ -531,7 +513,7 @@ public final class ScriptBuilder {
      * 返回布尔字面量。
      */
     public ScriptBuilder returnValue(boolean value) {
-        flow.add(new FlowNode(FlowNodeType.RETURN, ImmutableMap.of("value", value)));
+        flow.add(new FlowNode(FlowNodeType.RETURN, "return", ImmutableMap.of("value", value)));
         return this;
     }
 
@@ -545,7 +527,7 @@ public final class ScriptBuilder {
      * @param varName 已通过 {@link #defineVar} 声明的变量名
      */
     public ScriptBuilder returnVar(String varName) {
-        flow.add(new FlowNode(FlowNodeType.RETURN, ImmutableMap.of("variable", varName)));
+        flow.add(new FlowNode(FlowNodeType.RETURN, "return", ImmutableMap.of("variable", varName)));
         return this;
     }
 
@@ -559,7 +541,7 @@ public final class ScriptBuilder {
      */
     public ScriptBuilder returnList(Object... elements) {
         ImmutableList<Object> list = ImmutableList.copyOf(elements);
-        flow.add(new FlowNode(FlowNodeType.RETURN, ImmutableMap.of("value", list)));
+        flow.add(new FlowNode(FlowNodeType.RETURN, "return", ImmutableMap.of("value", list)));
         return this;
     }
 
@@ -573,10 +555,109 @@ public final class ScriptBuilder {
     public ScriptBuilder switchBranch(String variable, Consumer<SwitchBuilder> config) {
         SwitchBuilder builder = new SwitchBuilder(payloadClazz, actionRegistry);
         config.accept(builder);
-        flow.add(new FlowNode(FlowNodeType.SWITCH, ImmutableMap.<String, Object>builder()
+        flow.add(new FlowNode(FlowNodeType.SWITCH, "switch", ImmutableMap.<String, Object>builder()
                 .put("variable", variable)
                 .put("cases", builder.buildCases())
                 .build()));
+        return this;
+    }
+
+    /**
+     * 追加一个数学表达式计算节点，将计算结果存入指定变量。
+     * <p>
+     * 表达式中可通过 {@code {变量名}} 引用已声明的变量，支持四则运算、幂运算、比较运算、
+     * 三元运算符、内置函数等。编译器会自动进行常量折叠与代数恒等优化。
+     *
+     * @param store 计算结果存入的变量名
+     * @param expr  数学表达式（如 {@code "{hp} * 0.5 + 10"}）
+     */
+    public ScriptBuilder math(String store, String expr) {
+        MathNode root = MathParser.parse(expr);
+        flow.add(new FlowNode(FlowNodeType.MATH, "math", ImmutableMap.of(
+                "store", store,
+                "expr", expr,
+                "mathNode", root)));
+        return this;
+    }
+
+    /**
+     * 追加一个方法调用节点，在 payload 对象上调用指定方法（无返回值捕获）。
+     * <p>
+     * 与 {@link #action} 不同，{@code invoke} 直接调用 payload 上任意公开方法，
+     * 无需预注册 {@code @ScriptAction}。编译后通过字节码直接调用，零反射开销。
+     *
+     * @param methodName 方法名（如 {@code "setHealth"}）
+     * @param args       顺序参数（支持 {@code "{变量名}"} 模板插值）
+     */
+    public ScriptBuilder invoke(String methodName, Object... args) {
+        flow.add(buildInvokeNode(methodName, null, null, args));
+        return this;
+    }
+
+    /**
+     * 在指定目标变量上调用方法（无返回值捕获）。
+     *
+     * @param methodName 方法名
+     * @param target     目标变量引用（如 {@code "{player}"}）
+     * @param args       顺序参数
+     */
+    public ScriptBuilder invokeOn(String methodName, String target, Object... args) {
+        flow.add(buildInvokeNode(methodName, target, null, args));
+        return this;
+    }
+
+    /**
+     * 在 payload 对象上调用方法并捕获返回值。
+     *
+     * @param store      返回值存入的变量名
+     * @param methodName 方法名
+     * @param args       顺序参数
+     */
+    public ScriptBuilder invokeStore(String store, String methodName, Object... args) {
+        flow.add(buildInvokeNode(methodName, null, store, args));
+        return this;
+    }
+
+    /**
+     * 在指定目标变量上调用方法并捕获返回值。
+     *
+     * @param store      返回值存入的变量名
+     * @param methodName 方法名
+     * @param target     目标变量引用
+     * @param args       顺序参数
+     */
+    public ScriptBuilder invokeStoreOn(String store, String methodName, String target, Object... args) {
+        flow.add(buildInvokeNode(methodName, target, store, args));
+        return this;
+    }
+
+    private FlowNode buildInvokeNode(String methodName, String target, String store, Object... args) {
+        validateInvokeMethod(methodName);
+        ImmutableMap.Builder<String, Object> attrs = ImmutableMap.builder();
+        attrs.put("methodName", methodName);
+        attrs.put("args", toStringArgs(args));
+        if (target != null) attrs.put("target", target);
+        if (store != null) attrs.put("store", store);
+        return new FlowNode(FlowNodeType.INVOKE, "invoke", attrs.build());
+    }
+
+    /**
+     * 通用 COLLECT 节点构建器，支持完整配置（含迭代模式、全部操作类型）。
+     * <p>
+     * 适用于需要精细控制迭代模式（如 Map 的 KEYS / ENTRIES 遍历）的高级场景。
+     * 简单场景请直接使用 {@link #collectExists} 等便捷方法。
+     *
+     * @param variable 集合/Map 变量名
+     * @param config   配置回调
+     */
+    public ScriptBuilder collect(String variable, Consumer<CollectConfig> config) {
+        CollectConfig cc = new CollectConfig();
+        config.accept(cc);
+        if (cc.matchConsumer == null) {
+            throw new IllegalStateException("collect() requires match() to be called.");
+        }
+        flow.add(buildCollectNode(variable, cc.op, cc.negate, cc.store,
+                cc.iterateMode, cc.matchConsumer, cc.onFail));
         return this;
     }
 
@@ -637,6 +718,22 @@ public final class ScriptBuilder {
     }
 
     /**
+     * 将 onFail 回调编译为子脚本并追加到属性中。3 个 build*Node 方法共用。
+     */
+    private void appendOnFailNodes(ImmutableMap.Builder<String, Object> attrs, Consumer<ScriptBuilder> onFail) {
+        if (onFail == null) return;
+        ScriptBuilder failBuilder = new ScriptBuilder(payloadClazz);
+        failBuilder.id(this.scriptId + "-fail");
+        failBuilder.actionRegistry = this.actionRegistry;
+        onFail.accept(failBuilder);
+        attrs.put("onFailNodes", failBuilder.flow.build());
+    }
+
+    private static void validateInvokeMethod(String methodName) {
+        ValueParsing.validateInvokeMethod(methodName);
+    }
+
+    /**
      * 获取已绑定的 ActionRegistry，未绑定则抛异常。
      */
     private ActionRegistry requireRegistry() {
@@ -669,14 +766,14 @@ public final class ScriptBuilder {
         public ConditionBuilder any(Consumer<ConditionBuilder> anyBuilder) {
             ConditionBuilder cb = new ConditionBuilder();
             anyBuilder.accept(cb);
-            children.add(new FlowNode(FlowNodeType.ANY, ImmutableMap.of("children", cb.children.build())));
+            children.add(new FlowNode(FlowNodeType.ANY, "any", ImmutableMap.of("children", cb.children.build())));
             return this;
         }
 
         public ConditionBuilder all(Consumer<ConditionBuilder> allBuilder) {
             ConditionBuilder cb = new ConditionBuilder();
             allBuilder.accept(cb);
-            children.add(new FlowNode(FlowNodeType.ALL, ImmutableMap.of("children", cb.children.build())));
+            children.add(new FlowNode(FlowNodeType.ALL, "all", ImmutableMap.of("children", cb.children.build())));
             return this;
         }
     }
@@ -715,6 +812,65 @@ public final class ScriptBuilder {
     }
 
     /**
+     * COLLECT 节点的迭代模式。
+     * <p>
+     * 仅对 Map 类型的集合变量有效。对 List / Set / Array 自动忽略。
+     */
+    public enum IterateMode {
+        /** 遍历 Map.values()（默认模式，向后兼容） */
+        VALUES,
+        /** 遍历 Map.keySet() */
+        KEYS,
+        /** 遍历 Map.entrySet()，在 match 谓词中通过 $key / $value 访问 */
+        ENTRIES
+    }
+
+    /**
+     * 通用 COLLECT 配置构建器，支持全部操作类型与迭代模式。
+     */
+    public static final class CollectConfig {
+        private String op = "exists";
+        private boolean negate = false;
+        private String store = null;
+        private IterateMode iterateMode = null;
+        private Consumer<MatchBuilder> matchConsumer;
+        private Consumer<ScriptBuilder> onFail;
+
+        private CollectConfig() {
+        }
+
+        /** 设置为 exists 操作（默认）。 */
+        public CollectConfig exists() { this.op = "exists"; return this; }
+
+        /** 设置为 all 操作。 */
+        public CollectConfig all() { this.op = "all"; return this; }
+
+        /** 设置为 count 操作，结果存入指定变量。 */
+        public CollectConfig count(String store) { this.op = "count"; this.store = store; return this; }
+
+        /** 设置为 index 操作（首个匹配索引），结果存入指定变量。 */
+        public CollectConfig index(String store) { this.op = "index"; this.store = store; return this; }
+
+        /** 设置为 find 操作（首个匹配元素），结果存入指定变量。 */
+        public CollectConfig find(String store) { this.op = "find"; this.store = store; return this; }
+
+        /** 设置为 filter 操作（所有匹配元素），结果存入指定变量。 */
+        public CollectConfig filter(String store) { this.op = "filter"; this.store = store; return this; }
+
+        /** 取反操作（!exists, !all）。 */
+        public CollectConfig negate() { this.negate = !this.negate; return this; }
+
+        /** 设置迭代模式（KEYS / ENTRIES / VALUES），仅对 Map 变量生效。 */
+        public CollectConfig iterate(IterateMode mode) { this.iterateMode = mode; return this; }
+
+        /** 设置匹配条件。 */
+        public CollectConfig match(Consumer<MatchBuilder> matcher) { this.matchConsumer = matcher; return this; }
+
+        /** 设置条件不满足时的回调。 */
+        public CollectConfig onFail(Consumer<ScriptBuilder> fail) { this.onFail = fail; return this; }
+    }
+
+    /**
      * COLLECT 节点的 match 子条件构建器。
      */
     public static final class MatchBuilder {
@@ -730,7 +886,7 @@ public final class ScriptBuilder {
          * @param value 比对值
          */
         public MatchBuilder match(String op, Object value) {
-            conditions.add(buildMatchCondition("$it", op, value));
+            conditions.add(buildCheckNodeInternal("$it", op, value));
             return this;
         }
 
@@ -738,7 +894,7 @@ public final class ScriptBuilder {
          * 添加一个无值的子条件（如 "null"）。
          */
         public MatchBuilder match(String op) {
-            conditions.add(buildMatchCondition("$it", op, null));
+            conditions.add(buildCheckNodeInternal("$it", op, null));
             return this;
         }
 
@@ -750,7 +906,7 @@ public final class ScriptBuilder {
          * @param value    比对值
          */
         public MatchBuilder check(String variable, String op, Object value) {
-            conditions.add(buildMatchCondition(variable, op, value));
+            conditions.add(buildCheckNodeInternal(variable, op, value));
             return this;
         }
 
@@ -758,32 +914,30 @@ public final class ScriptBuilder {
          * 添加一个属性级无值子条件。
          */
         public MatchBuilder check(String variable, String op) {
-            conditions.add(buildMatchCondition(variable, op, null));
+            conditions.add(buildCheckNodeInternal(variable, op, null));
             return this;
         }
 
-        private static FlowNode buildMatchCondition(String variable, String op, Object value) {
-            validateOperator(op);
-            ImmutableMap.Builder<String, Object> attrs = ImmutableMap.builder();
-            attrs.put("variable", variable);
-            attrs.put("op", op);
+        /**
+         * 追加一个 ANY (OR) 复合子条件。子条件任一成立即视为该 match 项通过。
+         */
+        public MatchBuilder any(Consumer<ConditionBuilder> anyBuilder) {
+            ConditionBuilder cb = new ConditionBuilder();
+            anyBuilder.accept(cb);
+            conditions.add(new FlowNode(FlowNodeType.ANY, "any",
+                    ImmutableMap.of("children", cb.children.build())));
+            return this;
+        }
 
-            double numericValue = 0.0;
-            if (value != null) {
-                Object normalizedValue = value;
-                if (value instanceof String s) {
-                    Object parsed = ScriptParser.ValueParser.parseNumber(s);
-                    if (parsed instanceof Number) {
-                        normalizedValue = parsed;
-                    }
-                }
-                attrs.put("value", normalizedValue);
-                attrs.put("valueType", ScriptParser.ValueParser.inferType(normalizedValue));
-                if (normalizedValue instanceof Number n) {
-                    numericValue = n.doubleValue();
-                }
-            }
-            return new FlowNode(FlowNodeType.CHECK, attrs.build(), numericValue, 0);
+        /**
+         * 追加一个 ALL (AND) 复合子条件。子条件必须全部成立才视为该 match 项通过。
+         */
+        public MatchBuilder all(Consumer<ConditionBuilder> allBuilder) {
+            ConditionBuilder cb = new ConditionBuilder();
+            allBuilder.accept(cb);
+            conditions.add(new FlowNode(FlowNodeType.ALL, "all",
+                    ImmutableMap.of("children", cb.children.build())));
+            return this;
         }
     }
 }

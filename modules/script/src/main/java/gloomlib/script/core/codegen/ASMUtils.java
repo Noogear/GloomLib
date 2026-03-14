@@ -361,7 +361,7 @@ public final class ASMUtils {
                 node.getAttrOrDefault("onFailNodes", null);
         if (onFailNodes != null) {
             for (gloomlib.script.core.ScriptIR.FlowNode failNode : onFailNodes) {
-                failNode.type().handler().emit(failNode, mv, ctx);
+                failNode.handler().emit(failNode, mv, ctx);
             }
         }
     }

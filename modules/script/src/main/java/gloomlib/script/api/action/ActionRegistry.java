@@ -30,9 +30,12 @@ public final class ActionRegistry {
     /**
      * 系统保留字（实例级，可动态扩展）。
      * 禁止将这些字符串作为动作名称，以防与 ScriptParser 动态推断规则发生碰撞。
+     * <p>
+     * 仅包含 YAML 结构性关键字；节点类型关键字（如 check、switch 等）
+     * 由 {@code NodeRegistry} 在注册时通过 {@link #addReservedKey} 动态注入。
      */
     private final Set<String> reservedKeys = new java.util.HashSet<>(Set.of(
-            "type", "action", "return", "check", "switch", "args", "store", "priority", "event"));
+            "type", "args", "store", "priority", "event"));
 
     public ActionRegistry() {
     }

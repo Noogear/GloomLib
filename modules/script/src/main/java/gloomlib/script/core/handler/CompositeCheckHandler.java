@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import gloomlib.script.core.CompilationContext;
 import gloomlib.script.core.ParseContext;
+import gloomlib.script.core.NodeRegistry;
 import gloomlib.script.core.ScriptIR.ConditionEmitter;
 import gloomlib.script.core.ScriptIR.FlowNode;
 import gloomlib.script.core.ScriptIR.FlowNodeType;
@@ -32,14 +33,6 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
         gloomlib.script.core.ScriptIR.NodeMutator,
         gloomlib.script.core.ScriptIR.ConstantFolder {
 
-    static {
-        FlowNodeType.registerHandler(FlowNodeType.ANY, CompositeCheckHandler::new);
-        FlowNodeType.registerHandler(FlowNodeType.ALL, CompositeCheckHandler::new);
-    }
-
-    public static void init() {
-    }
-
     @Override
     @SuppressWarnings("unchecked")
     public FlowNode parse(ParseContext ctx) {
@@ -66,7 +59,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
                     children.add(ScriptParser.parseFlowNode(ctx.withAttrs(childYaml)));
                 } else {
                     // 普通 CHECK 条件（复用 CheckNodeHandler.parse）
-                    children.add(FlowNodeType.CHECK.handler().parse(ctx.withAttrs(childYaml)));
+                    children.add(NodeRegistry.handler("check").parse(ctx.withAttrs(childYaml)));
                 }
             } else {
                 throw ctx.error("Invalid condition in " + type.name() + " node: " + item);
@@ -82,7 +75,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
             nodeAttrs.put("onFailNodes", ScriptParser.parseFlow(onFailRaw));
         }
 
-        return new FlowNode(type, nodeAttrs.build());
+        return new FlowNode(type, type.key(), nodeAttrs.build());
     }
 
     @Override
@@ -112,16 +105,16 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
                          MethodVisitor mv, CompilationContext ctx) {
         Label passLabel = new Label();
 
-        // 进入 any 前保存快照： any 内部的 instanceof 窄化不应泄漏到父级作用域
-        Map<String, Class<?>> outerSnapshot = ctx.snapshotNarrowed();
+        // 进入 any 前保存快照： any 内部的 instanceof 窄化和 non-null 事实不应泄漏到父级作用域
+        CompilationContext.TypeSnapshot outerSnapshot = ctx.snapshotTypeState();
 
         for (FlowNode child : children) {
-            // 每个分支使用各自独立的快照，防止吉兆互串窄化
-            Map<String, Class<?>> branchSnapshot = ctx.snapshotNarrowed();
+            // 每个分支使用各自独立的快照，防止互串窄化和 non-null 事实
+            CompilationContext.TypeSnapshot branchSnapshot = ctx.snapshotTypeState();
             if (child.type() == FlowNodeType.ANY || child.type() == FlowNodeType.ALL) {
                 // 嵌套复合节点：用临时 boolean 变量桥接
                 emitNestedComposite(child, mv, ctx, passLabel, true);
-            } else if (child.type().handler() instanceof ConditionEmitter emitter) {
+            } else if (child.handler() instanceof ConditionEmitter emitter) {
                 // 单个条件：条件成立时跳到 passLabel（OR 短路：任一 TRUE → 跳过 fail handler）
                 int jumpOp = emitter.emitCondition(child, mv, ctx);
                 mv.visitJumpInsn(jumpOp, passLabel);
@@ -129,7 +122,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
                 throw gloomlib.script.api.ScriptCompileException.create(child,
                         "Node type " + child.type() + " is not supported inside ANY node.");
             }
-            ctx.restoreNarrowed(branchSnapshot);
+            ctx.restoreTypeState(branchSnapshot);
         }
 
         // 全部不满足 → on_fail + 提前退出（返回类型和方法签名一致）
@@ -138,7 +131,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
 
         mv.visitLabel(passLabel);
         // any 内部快照不传出到父级
-        ctx.restoreNarrowed(outerSnapshot);
+        ctx.restoreTypeState(outerSnapshot);
     }
 
     /**
@@ -158,14 +151,14 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
         Label continueLabel = new Label();
 
         // 进入 all 前保存快照
-        Map<String, Class<?>> outerSnapshot = ctx.snapshotNarrowed();
+        CompilationContext.TypeSnapshot outerSnapshot = ctx.snapshotTypeState();
 
         for (FlowNode child : children) {
             // 每个分支使用各自独立的快照
-            Map<String, Class<?>> branchSnapshot = ctx.snapshotNarrowed();
+            CompilationContext.TypeSnapshot branchSnapshot = ctx.snapshotTypeState();
             if (child.type() == FlowNodeType.ANY || child.type() == FlowNodeType.ALL) {
                 emitNestedComposite(child, mv, ctx, failLabel, false);
-            } else if (child.type().handler() instanceof ConditionEmitter emitter) {
+            } else if (child.handler() instanceof ConditionEmitter emitter) {
                 int jumpOp = emitter.emitCondition(child, mv, ctx);
                 // jumpOp 是"条件成立时应跳转"的 opcode
                 // 我们需要"条件失败时跳到 failLabel"→ 不满足时跳转
@@ -175,7 +168,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
                 throw gloomlib.script.api.ScriptCompileException.create(child,
                         "Node type " + child.type() + " is not supported inside ALL node.");
             }
-            ctx.restoreNarrowed(branchSnapshot);
+            ctx.restoreTypeState(branchSnapshot);
         }
 
         // 全部通过
@@ -188,7 +181,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
 
         mv.visitLabel(continueLabel);
         // all 内部快照不传出到父级
-        ctx.restoreNarrowed(outerSnapshot);
+        ctx.restoreTypeState(outerSnapshot);
     }
 
     /**
@@ -212,7 +205,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
             for (FlowNode gc : grandChildren) {
                 if (gc.type() == FlowNodeType.ANY || gc.type() == FlowNodeType.ALL) {
                     emitNestedComposite(gc, mv, ctx, nestedPassLabel, true);
-                } else if (gc.type().handler() instanceof ConditionEmitter emitter) {
+                } else if (gc.handler() instanceof ConditionEmitter emitter) {
                     int jumpOp = emitter.emitCondition(gc, mv, ctx);
                     mv.visitJumpInsn(jumpOp, nestedPassLabel); // TRUE → jump to pass
                 }
@@ -241,7 +234,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
             for (FlowNode gc : grandChildren) {
                 if (gc.type() == FlowNodeType.ANY || gc.type() == FlowNodeType.ALL) {
                     emitNestedComposite(gc, mv, ctx, nestedFailLabel, false);
-                } else if (gc.type().handler() instanceof ConditionEmitter emitter) {
+                } else if (gc.handler() instanceof ConditionEmitter emitter) {
                     int jumpOp = emitter.emitCondition(gc, mv, ctx);
                     mv.visitJumpInsn(ASMUtils.invertJump(jumpOp), nestedFailLabel); // FALSE → jump to fail
                 }
@@ -295,7 +288,7 @@ public final class CompositeCheckHandler implements gloomlib.script.core.ScriptI
 
     @Override
     public EnumSet<NodeCapability> capabilities() {
-        return EnumSet.of(NodeCapability.HAS_CONDITION);
+        return EnumSet.of(NodeCapability.PURE_GUARD, NodeCapability.PREDICATE_SAFE);
     }
 
     @Override

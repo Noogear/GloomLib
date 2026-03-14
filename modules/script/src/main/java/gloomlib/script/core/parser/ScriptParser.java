@@ -11,8 +11,9 @@ import gloomlib.diagnostic.Diagnostic;
 import gloomlib.diagnostic.DiagnosticCategory;
 import gloomlib.diagnostic.DiagnosticException;
 import gloomlib.diagnostic.SourceLocation;
-import gloomlib.script.api.ScriptCompileException;
 import gloomlib.script.api.ScriptErrorHandler;
+import gloomlib.script.core.NodeDescriptor;
+import gloomlib.script.core.NodeRegistry;
 import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.ScriptIR;
 import gloomlib.script.core.ScriptIR.*;
@@ -87,29 +88,16 @@ public final class ScriptParser {
     }
 
     /**
-     * 解析单个流程节点，通过 {@link FlowNodeType} 枚举分发到对应 Handler。
+     * 解析单个流程节点。
+     * <p>
+     * 节点类型通过 {@link NodeRegistry} 泛型分发，
+     * 新增节点类型只需在 {@link NodeRegistry} 中注册即可，无需修改本方法。
      * <p>
      * 支持短语法：
      * <ul>
      * <li>无 {@code type} 且有 {@code action} 字段 → ACTION</li>
      * <li>有 {@code return} 字段 → RETURN_VALUE（即 {@code - return: 42}）</li>
      * </ul>
-     */
-    /**
-     * 向后兼容入口：不携带脚本来源信息，等价于 {@code parseFlowNode(new ParseContext(attrs, null))}。
-     */
-    public static FlowNode parseFlowNode(Map<String, Object> attrs) {
-        return parseFlowNode(new ParseContext(attrs, null));
-    }
-
-    /**
-     * 携带完整解析上下文的主实现。
-     * <p>
-     * 节点类型通过 {@link FlowNodeType#fromShorthand(String)} 泛型分发，
-     * 新增节点类型只需在 {@link FlowNodeType} 枚举中声明 shorthand 元数据即可，无需修改本方法。
-     * <p>
-     * {@link ParseContext} 同时承担属性访问与诊断定位：handler 调用 {@link ParseContext#error}
-     * 时可直接获得带有文件名与行号的 {@link ScriptCompileException}，无需外层 try-catch。
      */
     public static FlowNode parseFlowNode(ParseContext ctx) {
         Map<String, Object> attrs = ctx.attrs();
@@ -125,14 +113,14 @@ public final class ScriptParser {
         }
 
         String typeStr = (String) attrs.get("type");
-        FlowNodeType type = null;
+        NodeDescriptor desc = null;
 
         if (typeStr == null) {
-            // 遍历 shorthand 注册表，泛型检测触发键（枚举声明顺序即优先级）
-            for (String key : FlowNodeType.reservedKeys()) {
+            // 遍历注册表，泛型检测 shorthand 触发键
+            for (String key : NodeRegistry.registeredKeys()) {
                 if (attrs.containsKey(key)) {
-                    type = FlowNodeType.fromShorthand(key);
-                    String alias = type.shorthandAlias();
+                    desc = NodeRegistry.descriptor(key);
+                    String alias = desc.shorthandAlias();
                     if (alias != null) {
                         Map<String, Object> rebuilt = new java.util.HashMap<>(attrs);
                         Object val = rebuilt.remove(key);
@@ -144,12 +132,12 @@ public final class ScriptParser {
             }
 
             // 动态 Action 推断：取第一个非保留字段作为 action 名
-            if (type == null) {
+            if (desc == null) {
                 String inferredAction = null;
                 Object inferredArgs = null;
                 for (Map.Entry<String, Object> entry : attrs.entrySet()) {
                     String k = entry.getKey();
-                    if (!FlowNodeType.reservedKeys().contains(k)
+                    if (!NodeRegistry.registeredKeys().contains(k)
                             && !k.equals("store") && !k.equals("args")
                             && !k.equals("type")) {
                         inferredAction = k;
@@ -167,29 +155,20 @@ public final class ScriptParser {
                         rebuilt.put("args", List.of(inferredArgs));
                     }
                     ctx = ctx.withAttrs(rebuilt);
-                    type = FlowNodeType.ACTION;
+                    desc = NodeRegistry.descriptor("action");
                 }
             }
         }
 
-        if (type == null) {
-            type = FlowNodeType.fromYaml(typeStr);
+        if (desc == null) {
+            desc = NodeRegistry.fromYaml(typeStr);
         }
-        FlowNode node = type.handler().parse(ctx);
+        FlowNode node = desc.createHandler().parse(ctx);
         // 将提取的行号写入 FlowNode
         if (lineNumber > 0 && node.lineNumber() <= 0) {
-            node = new FlowNode(node.type(), node.attrs(), node.numericValue(), node.flags(), lineNumber);
+            node = new FlowNode(node.type(), node.nodeKey(), node.attrs(), node.numericValue(), node.flags(), lineNumber);
         }
         return node;
-    }
-
-    /**
-     * 内部快捷入口：携带 scriptId 封装为 {@link ParseContext} 后调用主实现。
-     * ParseContext 会在 handler 调用 {@link ParseContext#error} 时自动注入文件名与行号，
-     * 不再需要外层 try-catch 补充位置信息。
-     */
-    private static FlowNode parseFlowNode(Map<String, Object> attrs, String scriptId) {
-        return parseFlowNode(new ParseContext(attrs, scriptId));
     }
 
     /**
@@ -220,13 +199,13 @@ public final class ScriptParser {
             if (item instanceof String s) {
                 if (s.equalsIgnoreCase("return")) {
                     // 对应 YAML 中的 "- return"（空返回）
-                    flow.add(FlowNodeType.RETURN.handler().parse(new ParseContext(Map.of(), scriptId)));
+                    flow.add(NodeRegistry.handler("return").parse(new ParseContext(Map.of(), scriptId)));
                 } else {
                     // 新增：自动包装纯字符串动作 (例如 "- healAllPlayers")
-                    flow.add(parseFlowNode(Map.of("action", s), scriptId));
+                    flow.add(parseFlowNode(new ParseContext(Map.of("action", s), scriptId)));
                 }
             } else if (item instanceof Map<?, ?> rawMap) {
-                flow.add(parseFlowNode((Map<String, Object>) rawMap, scriptId));
+                flow.add(parseFlowNode(new ParseContext((Map<String, Object>) rawMap, scriptId)));
             } else {
                 throw new DiagnosticException(
                         Diagnostic.simple(
@@ -309,6 +288,19 @@ public final class ScriptParser {
 
         /** 匹配单个 {@code [content]} 括号块，用于多层索引迭代。 */
         private static final Pattern INDEX_CHUNK = Pattern.compile("\\[([^\\]]+)\\]");
+
+        /**
+         * getter 方法反射缓存：{@code ClassValue} 按类分桶，内部 {@code ConcurrentHashMap} 按属性名缓存。
+         * <p>
+         * 相比 Guava LoadingCache 的优势：跟随 {@code ClassLoader} 卸载自动释放、零争用、JDK 原生。
+         */
+        private static final ClassValue<java.util.concurrent.ConcurrentHashMap<String, Method>> GETTER_CACHE =
+                new ClassValue<>() {
+                    @Override
+                    protected java.util.concurrent.ConcurrentHashMap<String, Method> computeValue(Class<?> type) {
+                        return new java.util.concurrent.ConcurrentHashMap<>();
+                    }
+                };
 
         private PropertyResolver() {
         }
@@ -534,6 +526,11 @@ public final class ScriptParser {
          * 解析 getter 方法，携带脚本来源标识用于错误定位。
          */
         public static Method resolveGetter(Class<?> clazz, String property, String scriptId) {
+            return GETTER_CACHE.get(clazz).computeIfAbsent(property,
+                    prop -> resolveGetterUncached(clazz, prop, scriptId));
+        }
+
+        private static Method resolveGetterUncached(Class<?> clazz, String property, String scriptId) {
             String getterName = getGetterName(property);
             try {
                 return clazz.getMethod(getterName);

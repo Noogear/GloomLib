@@ -3,6 +3,7 @@ package gloomlib.script.core.handler;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import gloomlib.script.core.CompilationContext;
+import gloomlib.script.core.NodeRegistry;
 import gloomlib.script.core.ParseContext;
 import gloomlib.script.core.ScriptIR;
 import gloomlib.script.core.ScriptIR.BaseType;
@@ -33,13 +34,6 @@ import java.util.Map;
 public final class SwitchNodeHandler
         implements ScriptIR.FlowNodeHandler, ScriptIR.NodeTraverser, ScriptIR.VariableConsumer,
         ScriptIR.BranchReorderer {
-
-    static {
-        FlowNodeType.registerHandler(FlowNodeType.SWITCH, SwitchNodeHandler::new);
-    }
-
-    public static void init() {
-    }
 
     /**
      * 检查 case key 是否像合法的枚举常量名（Java 标识符规则）。
@@ -75,12 +69,12 @@ public final class SwitchNodeHandler
             List<Map<String, Object>> actions = (List<Map<String, Object>>) entry.getValue();
             ImmutableList.Builder<FlowNode> actionNodes = ImmutableList.builder();
             for (Map<String, Object> actionYaml : actions) {
-                actionNodes.add(FlowNodeType.ACTION.handler().parse(ctx.withAttrs(actionYaml)));
+                actionNodes.add(NodeRegistry.handler("action").parse(ctx.withAttrs(actionYaml)));
             }
             cases.put(key, actionNodes.build());
         }
 
-        return new FlowNode(FlowNodeType.SWITCH, ImmutableMap.of(
+        return new FlowNode(FlowNodeType.SWITCH, "switch", ImmutableMap.of(
                 "variable", variable,
                 "cases", cases.build()));
     }
@@ -110,8 +104,13 @@ public final class SwitchNodeHandler
             } else {
                 // 普通 Action 压入栈（注意：对于 Switch，由于多分支操作需要反复读取变量，所以依然要存临时 Slot）
                 slot = ctx.nextSlot();
-                conditionAction.type().handler().emit(conditionAction, mv, ctx);
-                type = conditionAction.getRequiredAttr("returnType");
+                if (conditionAction.handler() instanceof ScriptIR.InlineEmitter ie) {
+                    ie.emitInline(conditionAction, mv, ctx);
+                    type = ie.inlineResultType(conditionAction, ctx);
+                } else {
+                    conditionAction.handler().emit(conditionAction, mv, ctx);
+                    type = conditionAction.getAttrOrDefault("returnType", IRType.OBJECT);
+                }
                 int storeOp = ASMUtils.storeOpcode(type);
                 mv.visitVarInsn(storeOp, slot);
             }
@@ -119,6 +118,12 @@ public final class SwitchNodeHandler
             variable = node.getRequiredAttr("variable");
             slot = ctx.getSlot(variable);
             type = ctx.getType(variable);
+        }
+
+        // 小 case 数快速路径：≤2 个 case 直接内联 if-else，跳过策略选择开销
+        if (cases.size() <= 2) {
+            emitCascadeIfElseSwitch(mv, slot, type, cases, ctx);
+            return;
         }
 
         // 如果仍保留外部传入的实验性策略则运用，否则在运行时进行即时降级策略演算
@@ -287,7 +292,7 @@ public final class SwitchNodeHandler
                 // 匹配成功：发射分支 action 并跳到 end
                 ImmutableList<FlowNode> actions = cases.get(caseNames[idx]);
                 for (FlowNode action : actions) {
-                    action.type().handler().emit(action, mv, ctx);
+                    action.handler().emit(action, mv, ctx);
                 }
                 mv.visitJumpInsn(Opcodes.GOTO, endLabel);
 
@@ -358,7 +363,7 @@ public final class SwitchNodeHandler
                 mv.visitJumpInsn(Opcodes.IFNE, nextCheck);
 
                 for (FlowNode action : cases.get(caseNames[idx])) {
-                    action.type().handler().emit(action, mv, ctx);
+                    action.handler().emit(action, mv, ctx);
                 }
                 mv.visitJumpInsn(Opcodes.GOTO, endLabel);
 
@@ -410,7 +415,7 @@ public final class SwitchNodeHandler
         for (int i = 0; i < caseNames.length; i++) {
             mv.visitLabel(caseLabels[i]);
             for (FlowNode action : cases.get(caseNames[i])) {
-                action.type().handler().emit(action, mv, ctx);
+                action.handler().emit(action, mv, ctx);
             }
             mv.visitJumpInsn(Opcodes.GOTO, endLabel);
         }
@@ -459,7 +464,7 @@ public final class SwitchNodeHandler
         for (int i = 0; i < caseNames.length; i++) {
             mv.visitLabel(caseLabels[i]);
             for (FlowNode action : cases.get(caseNames[i])) {
-                action.type().handler().emit(action, mv, ctx);
+                action.handler().emit(action, mv, ctx);
             }
             mv.visitJumpInsn(Opcodes.GOTO, endLabel);
         }
@@ -523,7 +528,7 @@ public final class SwitchNodeHandler
             // 匹配成功，跳转执行区块
             mv.visitLabel(caseBlockLabels[i]);
             for (FlowNode action : cases.get(key)) {
-                action.type().handler().emit(action, mv, ctx);
+                action.handler().emit(action, mv, ctx);
             }
             mv.visitJumpInsn(Opcodes.GOTO, endLabel);
 
@@ -539,7 +544,7 @@ public final class SwitchNodeHandler
 
     @Override
     public EnumSet<NodeCapability> capabilities() {
-        return EnumSet.of(NodeCapability.HAS_BRANCHES);
+        return EnumSet.noneOf(NodeCapability.class);
     }
 
     @Override

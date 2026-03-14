@@ -29,50 +29,15 @@ import java.util.List;
  */
 @SuppressWarnings("null")
 public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, ScriptIR.VariableProducer,
-        ScriptIR.VariableConsumer, ScriptIR.NodeTraverser, ScriptIR.TypeValidator {
+        ScriptIR.VariableConsumer, ScriptIR.NodeTraverser, ScriptIR.TypeValidator, ScriptIR.InlineEmitter {
 
     private static final ActionRegistry REGISTRY = new ActionRegistry();
-
-    static {
-        FlowNodeType.registerHandler(FlowNodeType.ACTION, ActionNodeHandler::new);
-    }
-
-    public static void init() {
-        REGISTRY.scanAndRegister(ScriptBuiltinActions.class);
-    }
 
     public static ActionRegistry registry() {
         return REGISTRY;
     }
 
-    /**
-     * 从 {@code \{var\}} 或 {@code \{entity.name\}} 形式的括号参数提取基础变量名。
-     * 点链引用取头部：{@code \{entity.health\}} → {@code entity}。
-     */
-    private static String baseVarOf(String bracketedArg) {
-        String inner = bracketedArg.substring(1, bracketedArg.length() - 1);
-        return ScriptIR.isDottedPart(inner) ? ScriptIR.splitDotted(inner)[0] : inner;
-    }
 
-    private static void validateVarArgType(String action, int paramIndex, String argStr,
-                                           IRType expected, CompilationContext ctx, FlowNode node) {
-        String varName = argStr.substring(1, argStr.length() - 1);
-        // payload 及其别名（slot 1）：用 payload 具体类参与类型检查，而非泛化的 OBJECT
-        IRType actual = (ctx.getSlot(varName) == 1)
-                ? IRType.fromClass(ctx.payloadClass())
-                : ctx.getType(varName);
-        if (expected.isAssignableFrom(actual))
-            return;
-
-        // 如果变量已经过 instanceof 窄化，检查窄化类型是否能满足期望类型
-        Class<?> narrowed = ctx.getNarrowedClass(varName);
-        if (narrowed != null && expected.isAssignableFrom(IRType.fromClass(narrowed)))
-            return;
-
-        throw gloomlib.script.api.ScriptCompileException.type(node, String.format(
-                "Action '%s' expects %s at argument %d, but variable '{%s}' is of type %s.",
-                action, expected, paramIndex, varName, actual));
-    }
 
     private static void validateTemplateArgType(String action, int paramIndex, String argStr,
                                                 IRType expected, FlowNode node) {
@@ -201,7 +166,7 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
             nodeAttrs.put("returnType", returnIRType);
         }
 
-        return new FlowNode(FlowNodeType.ACTION, nodeAttrs.build());
+        return new FlowNode(FlowNodeType.ACTION, "action", nodeAttrs.build());
     }
 
     @Override
@@ -239,22 +204,19 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
         }
     }
 
-    /**
-     * 发射动作调用并将返回值留在操作数栈顶，不执行 STORE 或 POP。
-     * <p>
-     * 与 {@link #emit} 的区别：{@code emit} 会视 {@code store} 属性决定是否
-     * ISTORE / DSTORE 或 POP 返回值；本方法则直接把返回值留在栈上供调用方消费。
-     * <p>
-     * 仅供 ReturnNodeHandler 的生产者内联路径使用。
-     *
-     * @param node 已剥离 {@code store} 属性的 ACTION FlowNode
-     */
-    void emitActionCallLeaveOnStack(MethodVisitor mv, ActionRegistry.ActionDef def,
-                                    ImmutableList<String> args, CompilationContext ctx, FlowNode node) {
-        // emitActionCall 只负责 ALOAD 1 + arg loading + INVOKESTATIC，
-        // 不含任何 STORE / POP 逻辑（那部分在 emit() 中处理）。
-        // 因此直接调用即可让返回值停留在操作数栈顶。
+    // ===================== InlineEmitter =====================
+
+    @Override
+    public void emitInline(FlowNode node, MethodVisitor mv, CompilationContext ctx) {
+        ImmutableList<String> args = node.getRequiredAttr("args");
+        ActionRegistry.ActionDef def = node.getRequiredAttr("def");
         emitActionCall(mv, def, args, ctx, node);
+    }
+
+    @Override
+    public IRType inlineResultType(FlowNode node, CompilationContext ctx) {
+        ActionRegistry.ActionDef def = node.getRequiredAttr("def");
+        return IRType.fromClass(def.returnType());
     }
 
     /**
@@ -263,7 +225,7 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
      * 根据 ActionDef 的参数类型智能加载参数，
      * 字符串模板使用 invokedynamic StringConcatFactory。
      */
-    void emitActionCall(MethodVisitor mv, ActionRegistry.ActionDef def,
+    static void emitActionCall(MethodVisitor mv, ActionRegistry.ActionDef def,
                         ImmutableList<String> args, CompilationContext ctx, FlowNode node) {
         // 根据 consumesPayload 决定是否自动注入 payload（slot 1）作为第一个方法参数
         if (def.consumesPayload()) {
@@ -290,39 +252,7 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
             Class<?> reqType = pTypes[methodParamIndex];
 
             if (i == sinkArgIndex && conditionAction != null) {
-                String sinkingProp = conditionAction.getAttrOrDefault("_sinking_property", null);
-                if (sinkingProp != null) {
-                    // 属性下沉（虚拟 VarDecl Producer）路径
-                    IRType returnType = conditionAction.getRequiredAttr("returnType");
-                    BytecodeCompiler.emitSunkPropertyLoad(mv, ctx, sinkingProp);
-                    Class<?> unwrappedType = com.google.common.primitives.Primitives.unwrap(reqType);
-                    if (!unwrappedType.isPrimitive() && returnType.isPrimitive()) {
-                        ASMUtils.emitBox(mv, returnType);
-                    }
-                } else {
-                    // 真实节点内联路径：将 conditionAction 的计算结果留在操作数栈顶，供当前参数槽消费。
-                    // ACTION 类型必须走 emitActionCallLeaveOnStack，而非完整的 emit()；
-                    // 后者会对 store=null 的节点 POP 返回值，导致栈状态不合法。
-                    // MATH 等其他类型的 emit() 本身不含 STORE/POP 逻辑，可以直接调用。
-                    if (conditionAction.type() == ScriptIR.FlowNodeType.ACTION) {
-                        ActionRegistry.ActionDef condDef = conditionAction.getRequiredAttr("def");
-                        ImmutableList<String> condArgs = conditionAction.getAttrOrDefault("args",
-                                ImmutableList.of());
-                        // 使用 leave-on-stack 版本：正确处理 consumesPayload，且不执行任何 STORE/POP
-                        emitActionCallLeaveOnStack(mv, condDef, condArgs, ctx, conditionAction);
-                    } else {
-                        conditionAction.type().handler().emit(conditionAction, mv, ctx);
-                    }
-                    Class<?> unwrappedType = com.google.common.primitives.Primitives.unwrap(reqType);
-                    if (!unwrappedType.isPrimitive()) {
-                        // 方法要求引用类型，但 MATH 发射的是 double → 需装箱
-                        if (conditionAction.type() == ScriptIR.FlowNodeType.MATH) {
-                            ASMUtils.emitBox(mv, IRType.DOUBLE);
-                        }
-                    }
-                    // 方法要求原始类型，且 MATH emit 已留下 double → 直接使用（无需额外处理）
-                }
-
+                ArgInliningHelper.emitConditionAction(mv, ctx, conditionAction, reqType);
             } else if (ScriptIR.isSingleVar(arg) && reqType != String.class) {
                 // 纯变量引用 → 直传对象（非 String 参数场景）
                 String varName = arg.substring(1, arg.length() - 1);
@@ -418,7 +348,7 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
 
     @Override
     public EnumSet<NodeCapability> capabilities() {
-        return EnumSet.of(NodeCapability.SIDE_EFFECT);
+        return EnumSet.of(NodeCapability.SIDE_EFFECT, NodeCapability.DOTTED_ARG_SINK);
     }
 
     @Override
@@ -434,67 +364,13 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
     @Override
     public String getConsumedVariable(FlowNode node) {
         ImmutableList<String> args = node.getAttrOrDefault("args", ImmutableList.of());
-        String foundVar = null;
-        for (String arg : args) {
-            String baseVar = null;
-            if (ScriptIR.isSingleVar(arg) || ScriptIR.isDottedSingleRef(arg)) {
-                baseVar = baseVarOf(arg);
-            } else if (ScriptIR.isTemplate(arg)) {
-                // 提取模板中所有点链引用的头变量；多头不同时放弃下沉
-                for (String bv : ScriptIR.templateBaseVars(arg)) {
-                    if (baseVar == null) baseVar = bv;
-                    else if (!baseVar.equals(bv)) return null;
-                }
-            }
-            if (baseVar != null) {
-                if (foundVar != null && !foundVar.equals(baseVar)) return null;
-                foundVar = baseVar;
-            }
-        }
-        return foundVar;
+        return ArgInliningHelper.scanConsumedVariable(args);
     }
 
     @Override
     public FlowNode inlineAction(FlowNode node, FlowNode inlineHook) {
-        // Find which arg needs replacing
         ImmutableList<String> args = node.getAttrOrDefault("args", ImmutableList.of());
-        int targetIndex = -1;
-        // 精确匹配：若 hook 携带 _var_name（虚拟生产者路径），只匹配与下沉变量同名的参数，
-        // 避免把 {target}、{source} 等无关单变量误判为注入点。
-        // 若 hook 无 _var_name（真实生产者 Path A），保持原有"取首个单变量"逻辑。
-        String sinkingVarName = inlineHook.getAttrOrDefault("_var_name", null);
-        for (int i = 0; i < args.size(); i++) {
-            String arg = args.get(i);
-            if (ScriptIR.isSingleVar(arg)) {
-                if (sinkingVarName == null || sinkingVarName.equals(baseVarOf(arg))) {
-                    targetIndex = i;
-                    break;
-                }
-            }
-        }
-
-        // 点链引用下沉：若未找到单变量引用，尝试匹配 {varName.prop} 形式的参数
-        // 例：showIndicator [..., "{cause.name}"] 中 cause 是可下沉变量，
-        // 则将 _sinking_property 从 "cause" 延伸为 "cause.name" 以启用完整链式属性加载
-        FlowNode effectiveHook = inlineHook;
-        if (targetIndex < 0) {
-            if (sinkingVarName != null) {
-                for (int i = 0; i < args.size(); i++) {
-                    String arg = args.get(i);
-                    if (ScriptIR.isDottedSingleRef(arg) && sinkingVarName.equals(baseVarOf(arg))) {
-                        targetIndex = i;
-                        // 构造完整属性路径：baseProp.suffix（如 "cause" + "." + "name" = "cause.name"）
-                        String inner = arg.substring(1, arg.length() - 1);
-                        String suffix = inner.substring(sinkingVarName.length() + 1);
-                        String baseProp = inlineHook.getAttrOrDefault("_sinking_property", "");
-                        effectiveHook = inlineHook.withAttr("_sinking_property", baseProp + "." + suffix);
-                        break;
-                    }
-                }
-            }
-        }
-
-        return node.withAttr("conditionAction", effectiveHook).withAttr("_sink_arg_index", targetIndex);
+        return ArgInliningHelper.buildInlineAction(node, inlineHook, args);
     }
 
     @Override
@@ -509,15 +385,7 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
     @Override
     public List<String> getAllConsumedVariables(FlowNode node) {
         ImmutableList<String> args = node.getAttrOrDefault("args", ImmutableList.of());
-        List<String> vars = new java.util.ArrayList<>();
-        for (String arg : args) {
-            if (ScriptIR.isSingleVar(arg) || ScriptIR.isDottedSingleRef(arg)) {
-                vars.add(baseVarOf(arg));
-            } else if (ScriptIR.isTemplate(arg)) {
-                vars.addAll(ScriptIR.templateBaseVars(arg));
-            }
-        }
-        return vars;
+        return ArgInliningHelper.collectAllConsumedVariables(args);
     }
 
     @Override
@@ -564,7 +432,8 @@ public final class ActionNodeHandler implements ScriptIR.FlowNodeHandler, Script
             String argStr = args.get(i);
 
             if (ScriptIR.isSingleVar(argStr)) {
-                validateVarArgType(actionName, paramIndex, argStr, expectedIR, ctx, node);
+                ArgInliningHelper.validateVarArgType(
+                        "Action '" + actionName + "'", paramIndex, argStr, expectedIR, ctx, node);
             } else if (ScriptIR.isTemplate(argStr)) {
                 validateTemplateArgType(actionName, paramIndex, argStr, expectedIR, node);
             } else {

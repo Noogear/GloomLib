@@ -7,7 +7,6 @@ import gloomlib.script.core.optimizer.ScriptOptimizer;
 import org.objectweb.asm.MethodVisitor;
 
 import java.util.*;
-import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -176,104 +175,60 @@ public final class ScriptIR {
     }
 
     /**
-     * 流程节点类型枚举，每个枚举值关联对应的 {@link FlowNodeHandler} 工厂。
-     *
-     * <p>每个枚举值可声明 {@code shorthandAlias}：shorthand 值在 attrs 中应被重命名为的目标键
-     * （如 {@code check → variable}、{@code math → expr}）；
-     * 省略表示保留原键不变。shorthand 触发键始终等于枚举名的小写形式。
-     * <p>新增节点类型时只需在此声明即可，{@link gloomlib.script.core.parser.ScriptParser} 无需改动。
+     * 流程节点类型枚举，纯粹的类型标签。
+     * <p>
+     * 内置节点使用对应枚举值，运行时注册的自定义节点使用 {@link #CUSTOM}，
+     * 通过 {@link FlowNode#nodeKey} 区分具体类型。
+     * <p>
+     * 所有注册、查询与分发逻辑由 {@link NodeRegistry} 统一管理。
      */
     public enum FlowNodeType {
-        ACTION,
-        RETURN,
-        CHECK("variable"),
-        SWITCH("variable"),
-        ANY,
-        ALL,
-        COLLECT("variable"),
-        MATH("expr");
+        ACTION, RETURN, CHECK, SWITCH, ANY, ALL, COLLECT, MATH, INVOKE,
+        /** 运行时注册的自定义节点类型。通过 nodeKey 区分具体类型。 */
+        CUSTOM;
 
         /**
-         * shorthand key → FlowNodeType 静态查找表，由枚举初始化时自动构建。
+         * 返回内置类型的 shorthand key（小写枚举名），CUSTOM 返回 {@code null}。
          */
-        private static final java.util.Map<String, FlowNodeType> SHORTHAND_MAP;
-        private static final EnumMap<FlowNodeType, Supplier<FlowNodeHandler>> FACTORIES = new EnumMap<>(
-                FlowNodeType.class);
-
-        static {
-            java.util.Map<String, FlowNodeType> m = new java.util.LinkedHashMap<>();
-            for (FlowNodeType t : values()) m.put(t.shorthandKey(), t);
-            SHORTHAND_MAP = java.util.Collections.unmodifiableMap(m);
-        }
-
-        private final String shorthandAlias;
-
-        FlowNodeType() {
-            this.shorthandAlias = null;
-        }
-
-        FlowNodeType(String shorthandAlias) {
-            this.shorthandAlias = shorthandAlias;
-        }
-
-        /**
-         * 按 shorthand key 查找节点类型，未命中返回 {@code null}。
-         * 供 {@link gloomlib.script.core.parser.ScriptParser} 泛型分发使用。
-         */
-        public static FlowNodeType fromShorthand(String key) {
-            return SHORTHAND_MAP.get(key);
-        }
-
-        /**
-         * 保留的 shorthand key 集合，用于动态 Action 推断时过滤。
-         */
-        public static java.util.Set<String> reservedKeys() {
-            return SHORTHAND_MAP.keySet();
-        }
-
-        public static void registerHandler(FlowNodeType type, Supplier<FlowNodeHandler> factory) {
-            FACTORIES.put(type, factory);
-        }
-
-        public static FlowNodeType fromYaml(String type) {
-            if (type == null)
-                return ACTION;
-            try {
-                return valueOf(type.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                throw ScriptCompileException.parse("Unknown flow node type: " + type);
-            }
-        }
-
-        /**
-         * YAML 短语法触发字段名，始终等于枚举名的小写形式。
-         */
-        public String shorthandKey() {
-            return name().toLowerCase();
-        }
-
-        /**
-         * shorthand 值在 attrs 中应被重命名为的目标键，{@code null} 表示不需要重命名。
-         */
-        public String shorthandAlias() {
-            return shorthandAlias;
-        }
-
-        public FlowNodeHandler handler() {
-            Supplier<FlowNodeHandler> factory = FACTORIES.get(this);
-            if (factory == null) {
-                throw new IllegalStateException("No handler registered for FlowNodeType: " + this);
-            }
-            return factory.get();
+        public String key() {
+            return this == CUSTOM ? null : name().toLowerCase();
         }
     }
 
     public enum NodeCapability {
-        HAS_CONDITION,
-        HAS_BRANCHES,
+        /**
+         * 终止流：此节点之后的代码不可达。
+         * 查询方：DCE、{@link NodeMutator#filterAttr}。
+         */
         TERMINATES_FLOW,
+
+        /**
+         * 外部副作用：删除此节点会改变外部可观测行为（如 I/O、集合遍历）。
+         * <p>
+         * 仅写入本地变量（如 MATH 的 DSTORE）不算外部副作用。
+         * 查询方：deadProducerElimination（守卫）、variableInlining 前瞻扩展。
+         */
         SIDE_EFFECT,
-        FOLDABLE
+
+        /**
+         * 纯守卫：无副作用、不产出变量，仅做条件分支控制。
+         * 变量内联时可被安全跳过。
+         * <p>
+         * 与 {@link #SIDE_EFFECT}、{@link #TERMINATES_FLOW} 互斥。
+         */
+        PURE_GUARD,
+
+        /**
+         * 点链参数下沉：args 中可能包含 {var.prop} 引用。
+         * 查询方：hasTopLevelDottedRefTo、variableInlining 下沉检测。
+         */
+        DOTTED_ARG_SINK,
+
+        /**
+         * 谓词安全：可在 COLLECT match 块内使用。
+         * 查询方：CollectNodeHandler.validateMatchNode。
+         */
+        PREDICATE_SAFE
     }
 
 
@@ -286,6 +241,25 @@ public final class ScriptIR {
         void emit(FlowNode node, MethodVisitor mv, CompilationContext ctx);
 
         EnumSet<NodeCapability> capabilities();
+    }
+
+    /**
+     * 允许节点在内联路径中发射代码并将结果留在操作数栈顶（不执行 STORE / POP）。
+     * <p>
+     * 消除 ArgInliningHelper、ReturnNodeHandler 等消费方对 {@link FlowNodeType} 的硬编码分发，
+     * 新节点类型只需实现此接口即可自动参与内联优化。
+     */
+    public interface InlineEmitter {
+        /**
+         * 发射当前节点的字节码，将计算结果留在操作数栈顶。
+         * 与 {@link FlowNodeHandler#emit} 的区别：后者会 STORE / POP 返回值。
+         */
+        void emitInline(FlowNode node, MethodVisitor mv, CompilationContext ctx);
+
+        /**
+         * 返回 {@link #emitInline} 留在栈顶的原始类型，用于消费方的装箱 / 拆箱适配。
+         */
+        IRType inlineResultType(FlowNode node, CompilationContext ctx);
     }
 
     /**
@@ -390,6 +364,8 @@ public final class ScriptIR {
         /**
          * 对节点的指定子列表属性执行过滤+映射。
          * 供 {@link #filterChildren} 实现复用。
+         * <p>
+         * 遇到 {@link NodeCapability#TERMINATES_FLOW} 的子节点后截断后续不可达节点。
          */
         static FlowNode filterAttr(FlowNode node, String attrKey,
                                    java.util.function.Predicate<FlowNode> keep,
@@ -403,6 +379,10 @@ public final class ScriptIR {
                 FlowNode mapped = mapper.apply(child);
                 filtered.add(mapped);
                 if (mapped != child) changed = true;
+                if (mapped.handler().capabilities().contains(NodeCapability.TERMINATES_FLOW)) {
+                    changed = true;
+                    break;
+                }
             }
             return changed ? node.withAttr(attrKey, filtered.build()) : node;
         }
@@ -427,6 +407,20 @@ public final class ScriptIR {
          */
         default Object getProducedConstantValue(FlowNode node) {
             return null;
+        }
+
+        /**
+         * 解析该节点产出变量的 IR 类型，用于编译管线的槽位分配。
+         * <p>
+         * 默认从节点 {@code returnType} 属性读取；handler 可在此处内聚更复杂的推导逻辑
+         * （如 INVOKE 的反射解析），避免编译管线对 {@link FlowNodeType} 的硬编码分发。
+         *
+         * @param node         含 store 属性的流节点
+         * @param payloadClass 脚本 payload 具体类
+         * @param unit         当前脚本单元（用于变量声明查找）
+         */
+        default IRType resolveProducedType(FlowNode node, Class<?> payloadClass, ScriptUnit unit) {
+            return node.getAttrOrDefault("returnType", IRType.OBJECT);
         }
     }
 
@@ -465,13 +459,14 @@ public final class ScriptIR {
     }
 
     /**
-     * 通用流程节点，由 {@link FlowNodeType} 枚举标识类型。
+     * 通用流程节点，由 {@link FlowNodeType} 枚举标识类型，{@code nodeKey} 字段标识具体注册键。
      * <p>
      * 性能关键路径使用 {@code numericValue} 和 {@code flags} 字段
      * 存储原生值，避免 attrs Map 的自动装箱。
      */
     public record FlowNode(
             FlowNodeType type,
+            String nodeKey,
             ImmutableMap<String, Object> attrs,
             double numericValue,
             int flags,
@@ -481,17 +476,9 @@ public final class ScriptIR {
          */
         public static final int FLAG_FOLDED = 1;
         /**
-         * 标记：需缓存到局部变量
-         */
-        public static final int FLAG_CACHED = 1 << 1;
-        /**
          * 标记：RETURN 后不可达
          */
         public static final int FLAG_DEAD_AFTER = 1 << 2;
-        /**
-         * 标记：变量未被引用（死变量）
-         */
-        public static final int FLAG_DEAD_VAR = 1 << 3;
         /**
          * 标记：复合节点子条件恒假（用于递归折叠标记，区别于 FLAG_FOLDED 的恒真）
          */
@@ -502,24 +489,31 @@ public final class ScriptIR {
         public static final int FLAG_OPTIMIZER_INJECTED = 1 << 5;
 
         /**
-         * 无行号的 4-arg 构造。
+         * 无行号的 5-arg 构造。
          */
-        public FlowNode(FlowNodeType type, ImmutableMap<String, Object> attrs, double numericValue, int flags) {
-            this(type, attrs, numericValue, flags, -1);
+        public FlowNode(FlowNodeType type, String nodeKey, ImmutableMap<String, Object> attrs, double numericValue, int flags) {
+            this(type, nodeKey, attrs, numericValue, flags, -1);
         }
 
         /**
          * 仅 attrs 的简易构造（用于非数值节点）。
          */
-        public FlowNode(FlowNodeType type, ImmutableMap<String, Object> attrs) {
-            this(type, attrs, 0.0, 0, -1);
+        public FlowNode(FlowNodeType type, String nodeKey, ImmutableMap<String, Object> attrs) {
+            this(type, nodeKey, attrs, 0.0, 0, -1);
+        }
+
+        /**
+         * 通过 {@link NodeRegistry} 获取 handler 实例。全局唯一分发入口。
+         */
+        public FlowNodeHandler handler() {
+            return NodeRegistry.handler(nodeKey);
         }
 
         /**
          * 创建优化器注入的提前终止节点，用于恒假分支截断。
          */
         public static FlowNode earlyReturn() {
-            return new FlowNode(FlowNodeType.RETURN, ImmutableMap.of())
+            return new FlowNode(FlowNodeType.RETURN, "return", ImmutableMap.of())
                     .withFlag(FLAG_DEAD_AFTER | FLAG_OPTIMIZER_INJECTED);
         }
 
@@ -529,7 +523,7 @@ public final class ScriptIR {
          * 为属性下沉构建匿名虚拟生产者节点。
          */
         public static FlowNode virtualProducer(VarDecl decl) {
-            return new FlowNode(FlowNodeType.ACTION,
+            return new FlowNode(FlowNodeType.ACTION, "action",
                     ImmutableMap.of(
                             "_sinking_property", decl.property(),
                             "_var_name", decl.name(),
@@ -589,15 +583,15 @@ public final class ScriptIR {
         }
 
         public FlowNode withFlag(int flag) {
-            return new FlowNode(type, attrs, numericValue, flags | flag, lineNumber);
+            return new FlowNode(type, nodeKey, attrs, numericValue, flags | flag, lineNumber);
         }
 
         public FlowNode withNumericValue(double value) {
-            return new FlowNode(type, attrs, value, flags, lineNumber);
+            return new FlowNode(type, nodeKey, attrs, value, flags, lineNumber);
         }
 
         public FlowNode withAttr(String key, Object value) {
-            return new FlowNode(type, ImmutableMap.<String, Object>builder()
+            return new FlowNode(type, nodeKey, ImmutableMap.<String, Object>builder()
                     .putAll(attrs)
                     .put(key, value)
                     .buildKeepingLast(), numericValue, flags, lineNumber);
@@ -613,7 +607,7 @@ public final class ScriptIR {
                     builder.put(entry);
                 }
             }
-            return new FlowNode(type, builder.build(), numericValue, flags, lineNumber);
+            return new FlowNode(type, nodeKey, builder.build(), numericValue, flags, lineNumber);
         }
     }
 

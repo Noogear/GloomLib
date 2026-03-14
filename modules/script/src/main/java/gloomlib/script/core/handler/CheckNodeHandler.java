@@ -25,24 +25,17 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * CHECK 节点处理器（增强版）。
+ * CHECK 节点处理器。
  * <p>
- * 支持 10 个基础操作符，所有操作符前均可加 {@code !} 前缀取反。
+ * 支持 16 个操作符，所有操作符前均可加 {@code !} 前缀取反。
  * 编译时根据 {@link IRType} 智能选择零装箱字节码指令。
  * <p>
- * 操作符：{@code null, ==, >, <, >=, <=, contains, starts_with, ends_with, matches, instanceof, in, between}
+ * 操作符：{@code null, instanceof, ==, !=, >, >=, <, <=, starts_with, ends_with, matches, contains, contains_value, in, empty, between}
  */
 @SuppressWarnings("null")
 public final class CheckNodeHandler
         implements ScriptIR.FlowNodeHandler, ScriptIR.ConditionEmitter, ScriptIR.NodeTraverser,
         ScriptIR.ConstantHoister, ScriptIR.ConstantFolder, ScriptIR.RangePropagator, ScriptIR.VariableConsumer {
-
-    static {
-        FlowNodeType.registerHandler(FlowNodeType.CHECK, CheckNodeHandler::new);
-    }
-
-    public static void init() {
-    }
 
     /**
      * 从 FlowNode 'op' 属性解析 CheckOp.Resolved 的便利方法。
@@ -153,7 +146,7 @@ public final class CheckNodeHandler
             nodeAttrs.put("onFailNodes", ScriptParser.parseFlow(onFailRaw));
         }
 
-        return new FlowNode(FlowNodeType.CHECK, nodeAttrs.build(), numericValue, 0);
+        return new FlowNode(FlowNodeType.CHECK, "check", nodeAttrs.build(), numericValue, 0);
     }
 
     @Override
@@ -170,8 +163,8 @@ public final class CheckNodeHandler
         ASMUtils.emitEarlyReturn(mv, ctx);
         mv.visitLabel(continueLabel);
 
-        // instanceof 成功路径：将变量窄化为目标类型，供后续节点使用。
-        // 只处理面向顺序流的顶层 emit （非复合条件内部）；取反的 !instanceof 不注册。
+        // instanceof / !null 成功路径：将变量窄化为目标类型并标记 non-null，供后续节点使用。
+        // 只处理面向顺序流的顶层 emit（非复合条件内部）；取反操作不注册。
         FlowNode conditionAction = node.getAttrOrDefault("conditionAction", null);
         if (conditionAction == null) {
             CheckOp.Resolved info = resolveOp(node);
@@ -179,12 +172,24 @@ public final class CheckNodeHandler
                 String variable = node.getRequiredAttr("variable");
                 String rawClass = node.<String>getRequiredAttr("value").replace('/', '.');
                 try {
-                    ctx.narrowType(variable, Class.forName(rawClass));
+                    Class<?> narrowedClass = Class.forName(rawClass);
+                    ctx.narrowType(variable, narrowedClass);
+                    // 将窄化后的类型写回原变量槽位：ALOAD + CHECKCAST + ASTORE
+                    // 后续所有使用该变量的模板/属性链不再需要重复 CHECKCAST
+                    int slot = ctx.getSlot(variable);
+                    mv.visitVarInsn(Opcodes.ALOAD, slot);
+                    mv.visitTypeInsn(Opcodes.CHECKCAST, rawClass.replace('.', '/'));
+                    mv.visitVarInsn(Opcodes.ASTORE, slot);
                 } catch (ClassNotFoundException e) {
                     // parse 阶段已验证，这里不应到达
                     throw gloomlib.script.api.ScriptCompileException.create(node,
                             "[instanceof narrow] class not found at emit: " + rawClass);
                 }
+                ctx.markNonNull(variable);
+            } else if (info.op() == CheckOp.NULL && info.negate()) {
+                // !null 检查通过 → 变量已知 non-null
+                String variable = node.getRequiredAttr("variable");
+                ctx.markNonNull(variable);
             }
         }
     }
@@ -221,13 +226,18 @@ public final class CheckNodeHandler
                 mv.visitVarInsn(ASMUtils.storeOpcode(exactType), tempSlot);
 
                 jumpOp = emitSinkingCheck(mv, op, tempSlot, exactType, node, ctx);
-            } else {
-                conditionAction.type().handler().emit(conditionAction, mv, ctx);
-                if (conditionAction.type() == FlowNodeType.MATH) {
+            } else if (conditionAction.handler() instanceof ScriptIR.InlineEmitter ie) {
+                // InlineEmitter 统一分发：将计算结果留在栈顶，按结果类型选择比较策略
+                ie.emitInline(conditionAction, mv, ctx);
+                IRType resultType = ie.inlineResultType(conditionAction, ctx);
+                if (resultType == IRType.DOUBLE) {
                     jumpOp = CheckOpEmitters.emitDoubleComparisonOnStack(mv, node, op != null ? op : CheckOp.EQ, ctx);
                 } else {
                     jumpOp = Opcodes.IFNE;
                 }
+            } else {
+                conditionAction.handler().emit(conditionAction, mv, ctx);
+                jumpOp = Opcodes.IFNE;
             }
         } else {
             String variable = node.getRequiredAttr("variable");
@@ -252,7 +262,7 @@ public final class CheckNodeHandler
 
     @Override
     public EnumSet<NodeCapability> capabilities() {
-        return EnumSet.of(NodeCapability.HAS_CONDITION, NodeCapability.FOLDABLE);
+        return EnumSet.of(NodeCapability.PURE_GUARD, NodeCapability.PREDICATE_SAFE);
     }
 
 

@@ -250,11 +250,14 @@ public final class BytecodeCompiler implements Opcodes {
         mv.visitVarInsn(ALOAD, slot);
 
         if (safeAccess) {
-            // 安全访问：null 短路 → push null, goto end
-            org.objectweb.asm.Label nullLabel = new org.objectweb.asm.Label();
-            org.objectweb.asm.Label endLabel = new org.objectweb.asm.Label();
-            mv.visitInsn(DUP);
-            mv.visitJumpInsn(IFNULL, nullLabel);
+            // 安全访问：若变量已知 non-null 则跳过 null 守卫，否则生成 null 短路分支
+            boolean knownNonNull = ctx.isNonNull(varName);
+            org.objectweb.asm.Label nullLabel = knownNonNull ? null : new org.objectweb.asm.Label();
+            org.objectweb.asm.Label endLabel = knownNonNull ? null : new org.objectweb.asm.Label();
+            if (!knownNonNull) {
+                mv.visitInsn(DUP);
+                mv.visitJumpInsn(IFNULL, nullLabel);
+            }
 
             if (narrowed != null) {
                 mv.visitTypeInsn(CHECKCAST, org.objectweb.asm.Type.getInternalName(narrowed));
@@ -265,20 +268,26 @@ public final class BytecodeCompiler implements Opcodes {
                             com.google.common.reflect.TypeToken.of(narrowed != null ? narrowed : ctx.payloadClass()),
                             propPath, ctx.scriptId());
             emitAccessorChain(accessors, mv, ctx);
-            mv.visitJumpInsn(GOTO, endLabel);
 
-            // null 分支：弹掉栈顶 null，推一个 null
-            mv.visitLabel(nullLabel);
-            mv.visitInsn(POP);
-            mv.visitInsn(ACONST_NULL);
+            if (!knownNonNull) {
+                mv.visitJumpInsn(GOTO, endLabel);
 
-            mv.visitLabel(endLabel);
+                // null 分支：弹掉栈顶 null，推一个 null
+                mv.visitLabel(nullLabel);
+                mv.visitInsn(POP);
+                mv.visitInsn(ACONST_NULL);
+
+                mv.visitLabel(endLabel);
+            }
 
             return accessors.isEmpty()
                     ? com.google.common.reflect.TypeToken.of(narrowed != null ? narrowed : Object.class)
                     : accessors.get(accessors.size() - 1).returnType();
         }
 
+        // 非安全访问：若 CheckNodeHandler 已将窄化值写回槽位（ALOAD+CHECKCAST+ASTORE），
+        // JVM verifier 已知此 slot 持有窄化类型，但保守地仍发射 CHECKCAST（零运行时开销，
+        // JIT 会消除冗余 cast；如果移除可能导致部分 frame map 路径不匹配）。
         mv.visitTypeInsn(CHECKCAST, org.objectweb.asm.Type.getInternalName(narrowed));
 
         List<PropertyAccessor> accessors =
@@ -434,9 +443,9 @@ public final class BytecodeCompiler implements Opcodes {
                 mv.visitLineNumber(line, sourceLineLabel);
             }
 
-            node.type().handler().emit(node, mv, ctx);
+            node.handler().emit(node, mv, ctx);
 
-            if (node.type().handler().capabilities().contains(ScriptIR.NodeCapability.TERMINATES_FLOW)) {
+            if (node.handler().capabilities().contains(ScriptIR.NodeCapability.TERMINATES_FLOW)) {
                 // 短路优化：如果前一个节点明确包含 TERMINATES_FLOW 断言，停止往下发射。
                 break;
             }

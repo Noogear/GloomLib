@@ -28,14 +28,8 @@ import java.util.*;
  * 可调用 {@link #batchPrecompile} 将它们通过 {@link MathEngine#compileBatch}
  * 合并到单个 JVM 类中，避免 N 次 defineClass 开销。
  */
-public class MathNodeHandler implements ScriptIR.FlowNodeHandler, ScriptIR.VariableProducer, ScriptIR.VariableConsumer {
-
-    static {
-        FlowNodeType.registerHandler(FlowNodeType.MATH, MathNodeHandler::new);
-    }
-
-    public static void init() {
-    }
+public class MathNodeHandler implements ScriptIR.FlowNodeHandler, ScriptIR.VariableProducer,
+        ScriptIR.VariableConsumer, ScriptIR.InlineEmitter {
 
     /**
      * 将 {@link MathNode} AST 发射为 JVM 字节码。
@@ -87,7 +81,7 @@ public class MathNodeHandler implements ScriptIR.FlowNodeHandler, ScriptIR.Varia
      * 递归收集节点树中所有 MATH 节点的表达式和消费变量。
      */
     private static void collectMathExpressions(FlowNode node, List<String> expressions, Set<String> varNames) {
-        if (node.type() == FlowNodeType.MATH) {
+        if ("math".equals(node.nodeKey())) {
             String expr = node.getAttrOrDefault("expr", null);
             if (expr != null) {
                 expressions.add(expr);
@@ -100,7 +94,7 @@ public class MathNodeHandler implements ScriptIR.FlowNodeHandler, ScriptIR.Varia
         }
 
         // 递归子节点
-        ScriptIR.FlowNodeHandler handler = node.type().handler();
+        ScriptIR.FlowNodeHandler handler = node.handler();
         if (handler instanceof ScriptIR.NodeTraverser traverser) {
             for (FlowNode child : traverser.traverseChildren(node)) {
                 collectMathExpressions(child, expressions, varNames);
@@ -126,7 +120,7 @@ public class MathNodeHandler implements ScriptIR.FlowNodeHandler, ScriptIR.Varia
                 .put("mathNode", root)
                 .build();
 
-        return new FlowNode(FlowNodeType.valueOf("MATH"), nodeAttrs);
+        return new FlowNode(FlowNodeType.MATH, "math", nodeAttrs);
     }
 
     @Override
@@ -149,7 +143,25 @@ public class MathNodeHandler implements ScriptIR.FlowNodeHandler, ScriptIR.Varia
 
     @Override
     public EnumSet<NodeCapability> capabilities() {
-        return EnumSet.of(NodeCapability.SIDE_EFFECT); // Has side effect of storing to local var
+        return EnumSet.noneOf(NodeCapability.class);
+    }
+
+    // ===================== InlineEmitter =====================
+
+    @Override
+    public void emitInline(FlowNode node, MethodVisitor mv, CompilationContext ctx) {
+        MathNode root = node.getRequiredAttr("mathNode");
+        emitMathNode(root, mv, ctx);
+    }
+
+    @Override
+    public ScriptIR.IRType inlineResultType(FlowNode node, CompilationContext ctx) {
+        return ScriptIR.IRType.DOUBLE;
+    }
+
+    @Override
+    public ScriptIR.IRType resolveProducedType(FlowNode node, Class<?> payloadClass, ScriptIR.ScriptUnit unit) {
+        return ScriptIR.IRType.DOUBLE;
     }
 
     @Override

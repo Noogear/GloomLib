@@ -1,20 +1,21 @@
 package gloomlib.script.core;
 
 import com.google.common.base.Preconditions;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.ImmutableList;
 import gloomlib.diagnostic.DiagnosticCategory;
 import gloomlib.script.api.ScriptCompileException;
 import gloomlib.script.core.codegen.BytecodeCompiler;
+import gloomlib.script.core.codegen.ScriptConstantBootstrap;
 import gloomlib.script.core.optimizer.ScriptOptimizer;
 
-import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -35,20 +36,26 @@ import java.util.function.Function;
 public final class CompilationPipeline {
 
     /**
-     * 编译缓存：ScriptUnit 深度 hash → 已编译结果（弱引用）。
+     * 编译缓存：ScriptUnit 深度 hash → 已编译结果。
      * <p>
-     * 使用 {@link WeakReference} 确保：当所有由该脚本产生的处理器实例均不可达时，
-     * Hidden Class 可被 JVM 从元空间 GC 卸载，无需手动 clearCache。
+     * 使用 {@code softValues()} 确保：内存压力时 JVM 自动回收缓存条目，
+     * Hidden Class 可被从元空间 GC 卸载，无需手动 clearCache。
      */
-    private static final ConcurrentHashMap<Integer, WeakReference<CompiledScript>> CACHE = new ConcurrentHashMap<>();
+    private static final Cache<Integer, CompiledScript> CACHE = CacheBuilder.newBuilder()
+            .softValues()
+            .build();
 
     /**
      * 结构模板缓存：structural hash → 已优化的 IR 模板。
      * <p>
      * 结构相同但常量值不同的脚本共享同一优化结果，
      * 仅需替换常量后重新运行 BytecodeCompiler（跳过全部验证和优化 Pass）。
+     * <p>
+     * LRU 淘汰策略，上限 128 条目。
      */
-    private static final ConcurrentHashMap<Integer, TemplateRecord> TEMPLATE_CACHE = new ConcurrentHashMap<>();
+    private static final Cache<Integer, TemplateRecord> TEMPLATE_CACHE = CacheBuilder.newBuilder()
+            .maximumSize(128)
+            .build();
 
     private final ScriptOptimizer optimizer;
     private final BytecodeCompiler compiler;
@@ -62,29 +69,33 @@ public final class CompilationPipeline {
      * 清除指定脚本的编译缓存。
      */
     public static void invalidate(ScriptIR.ScriptUnit unit) {
-        CACHE.remove(deepHash(unit));
+        CACHE.invalidate(deepHash(unit));
     }
 
     /**
-     * 清空全部编译缓存（用于配置热重载场景）。
+     * 清空全部编译缓存和常量注册表（用于配置热重载场景）。
+     * <p>
+     * 同时调用 {@link ScriptConstantBootstrap#purge()} 释放
+     * 旧版脚本的外置常量（Pattern / Set / 数组），避免常量池无限增长。
      */
     public static void clearCache() {
-        CACHE.clear();
-        TEMPLATE_CACHE.clear();
+        CACHE.invalidateAll();
+        TEMPLATE_CACHE.invalidateAll();
+        ScriptConstantBootstrap.purge();
     }
 
     /**
      * 返回当前缓存条目数（调试用）。
      */
     public static int cacheSize() {
-        return CACHE.size();
+        return (int) CACHE.size();
     }
 
     /**
      * 返回结构模板缓存条目数（调试用）。
      */
     public static int templateCacheSize() {
-        return TEMPLATE_CACHE.size();
+        return (int) TEMPLATE_CACHE.size();
     }
 
     private static int deepHash(ScriptIR.ScriptUnit unit) {
@@ -147,8 +158,11 @@ public final class CompilationPipeline {
     /**
      * 将 newUnit 的常量值替换进 templateOptimized 的对应位置。
      * <p>
-     * 使用值映射策略（old value → new value）而非节点键匹配，
-     * 使得替换不受优化器变换（variableInlining 移除 variable 属性等）的影响。
+     * 递归收集原始与新 IR 的常量差异（含嵌套子节点），构建 oldValue→newValue 映射，
+     * 然后递归遍历优化后 IR（含嵌套子节点）执行替换。
+     * <p>
+     * 当检测到映射冲突（同一旧值需替换为不同新值）时，抛出 IllegalStateException，
+     * 由 {@link #compileFromTemplate} 的 catch 捕获并安全回退到完整编译路径。
      */
     private static ScriptIR.ScriptUnit substituteConstants(
             ScriptIR.ScriptUnit templateOptimized,
@@ -157,73 +171,159 @@ public final class CompilationPipeline {
 
         ImmutableList<ScriptIR.FlowNode> origFlow = templateOriginal.flow();
         ImmutableList<ScriptIR.FlowNode> newFlow = newUnit.flow();
-        ImmutableList<ScriptIR.FlowNode> optFlow = templateOptimized.flow();
 
         if (origFlow.size() != newFlow.size()) {
             throw new IllegalStateException("Structural mismatch: flow size differs");
         }
 
-        // 1. 构建值映射：oldValue → newValue
+        // 1. 递归收集所有常量差异（含嵌套复合节点子树）
         Map<Double, Double> numericSubs = new java.util.LinkedHashMap<>();
-        // key: attrKey, value: oldVal→newVal
         Map<String, Map<Object, Object>> attrSubs = new java.util.HashMap<>();
-
-        for (int i = 0; i < origFlow.size(); i++) {
-            ScriptIR.FlowNode orig = origFlow.get(i);
-            ScriptIR.FlowNode repl = newFlow.get(i);
-
-            // 数值映射
-            if (Double.compare(orig.numericValue(), repl.numericValue()) != 0
-                    && orig.numericValue() != 0.0) { // 跳过默认0值，避免误替换
-                numericSubs.put(orig.numericValue(), repl.numericValue());
-            }
-
-            // 属性值映射
-            for (String key : new String[]{"value", "args", "valueList"}) {
-                Object origVal = orig.attrs().get(key);
-                Object newVal = repl.attrs().get(key);
-                if (origVal != null && newVal != null && !newVal.equals(origVal)) {
-                    attrSubs.computeIfAbsent(key, k -> new java.util.LinkedHashMap<>())
-                            .put(origVal, newVal);
-                }
-            }
-        }
+        collectConstantDiffs(origFlow, newFlow, numericSubs, attrSubs);
 
         if (numericSubs.isEmpty() && attrSubs.isEmpty()) {
             return templateOptimized;
         }
 
-        // 2. 对优化后 IR 的每个节点应用值映射
-        ImmutableList.Builder<ScriptIR.FlowNode> builder = ImmutableList.builder();
-        for (ScriptIR.FlowNode node : optFlow) {
-            if (node.hasFlag(ScriptIR.FlowNode.FLAG_OPTIMIZER_INJECTED)
-                    || node.hasFlag(ScriptIR.FlowNode.FLAG_FOLDED)) {
-                builder.add(node);
-                continue;
+        // 2. 递归对优化后 IR 的所有节点（含嵌套）应用替换
+        return templateOptimized.withFlow(substituteFlow(templateOptimized.flow(), numericSubs, attrSubs));
+    }
+
+    private static final String[] CONSTANT_ATTR_KEYS = {"value", "args", "valueList"};
+
+    /**
+     * 递归收集原始节点列表与新节点列表之间的常量值差异。
+     * <p>
+     * 当发现同一旧值需映射到不同新值（冲突）时，抛出异常触发安全回退。
+     */
+    @SuppressWarnings("unchecked")
+    private static void collectConstantDiffs(
+            ImmutableList<ScriptIR.FlowNode> origNodes,
+            ImmutableList<ScriptIR.FlowNode> newNodes,
+            Map<Double, Double> numericSubs,
+            Map<String, Map<Object, Object>> attrSubs) {
+
+        int limit = Math.min(origNodes.size(), newNodes.size());
+        for (int i = 0; i < limit; i++) {
+            ScriptIR.FlowNode orig = origNodes.get(i);
+            ScriptIR.FlowNode repl = newNodes.get(i);
+
+            // 数值差异（跳过默认 0 值，避免误替换非显式常量的节点）
+            if (Double.compare(orig.numericValue(), repl.numericValue()) != 0
+                    && orig.numericValue() != 0.0) {
+                Double existing = numericSubs.get(orig.numericValue());
+                if (existing != null && Double.compare(existing, repl.numericValue()) != 0) {
+                    throw new IllegalStateException("Numeric constant collision: "
+                            + orig.numericValue() + " → " + existing + " vs " + repl.numericValue());
+                }
+                numericSubs.put(orig.numericValue(), repl.numericValue());
             }
 
-            // 替换 numericValue
-            Double newNum = numericSubs.get(node.numericValue());
-            if (newNum != null) {
-                node = node.withNumericValue(newNum);
-            }
-
-            // 替换属性值
-            for (Map.Entry<String, Map<Object, Object>> sub : attrSubs.entrySet()) {
-                String attrKey = sub.getKey();
-                Object currentVal = node.attrs().get(attrKey);
-                if (currentVal != null) {
-                    Object replacement = sub.getValue().get(currentVal);
-                    if (replacement != null) {
-                        node = node.withAttr(attrKey, replacement);
+            // 属性值差异
+            for (String key : CONSTANT_ATTR_KEYS) {
+                Object ov = orig.attrs().get(key);
+                Object nv = repl.attrs().get(key);
+                if (ov != null && nv != null && !nv.equals(ov)) {
+                    Map<Object, Object> sub = attrSubs.computeIfAbsent(key, k -> new java.util.LinkedHashMap<>());
+                    Object existing = sub.get(ov);
+                    if (existing != null && !existing.equals(nv)) {
+                        throw new IllegalStateException("Attr constant collision for key '" + key + "'");
                     }
+                    sub.put(ov, nv);
                 }
             }
 
-            builder.add(node);
+            // 递归进入嵌套子节点列表属性（children、matchFlow、cases、onFailNodes 等）
+            for (Map.Entry<String, Object> entry : orig.attrs().entrySet()) {
+                Object origVal = entry.getValue();
+                Object newVal = repl.attrs().get(entry.getKey());
+                if (origVal instanceof List<?> origList && newVal instanceof List<?>
+                        && !origList.isEmpty() && origList.get(0) instanceof ScriptIR.FlowNode) {
+                    collectConstantDiffs(
+                            (ImmutableList<ScriptIR.FlowNode>) origVal,
+                            (ImmutableList<ScriptIR.FlowNode>) newVal,
+                            numericSubs, attrSubs);
+                } else if (origVal instanceof ScriptIR.FlowNode origChild
+                        && newVal instanceof ScriptIR.FlowNode newChild) {
+                    collectConstantDiffs(
+                            ImmutableList.of(origChild), ImmutableList.of(newChild),
+                            numericSubs, attrSubs);
+                }
+            }
+        }
+    }
+
+    /**
+     * 递归替换优化后 IR 节点流中的常量值。
+     * 若无任何替换发生，返回原列表引用（供调用方 {@code !=} 判断是否变化）。
+     */
+    private static ImmutableList<ScriptIR.FlowNode> substituteFlow(
+            ImmutableList<ScriptIR.FlowNode> flow,
+            Map<Double, Double> numericSubs,
+            Map<String, Map<Object, Object>> attrSubs) {
+        ImmutableList.Builder<ScriptIR.FlowNode> builder = null;
+        for (int i = 0; i < flow.size(); i++) {
+            ScriptIR.FlowNode orig = flow.get(i);
+            ScriptIR.FlowNode subst = substituteNode(orig, numericSubs, attrSubs);
+            if (subst != orig && builder == null) {
+                builder = ImmutableList.builder();
+                for (int j = 0; j < i; j++) builder.add(flow.get(j));
+            }
+            if (builder != null) builder.add(subst);
+        }
+        return builder != null ? builder.build() : flow;
+    }
+
+    /**
+     * 递归替换单个优化后 IR 节点的常量值（含嵌套子节点属性）。
+     */
+    @SuppressWarnings("unchecked")
+    private static ScriptIR.FlowNode substituteNode(
+            ScriptIR.FlowNode node,
+            Map<Double, Double> numericSubs,
+            Map<String, Map<Object, Object>> attrSubs) {
+
+        if (node.hasFlag(ScriptIR.FlowNode.FLAG_OPTIMIZER_INJECTED)
+                || node.hasFlag(ScriptIR.FlowNode.FLAG_FOLDED)) {
+            return node;
         }
 
-        return templateOptimized.withFlow(builder.build());
+        // 替换 numericValue
+        Double newNum = numericSubs.get(node.numericValue());
+        if (newNum != null) {
+            node = node.withNumericValue(newNum);
+        }
+
+        // 替换属性值
+        for (Map.Entry<String, Map<Object, Object>> sub : attrSubs.entrySet()) {
+            String attrKey = sub.getKey();
+            Object currentVal = node.attrs().get(attrKey);
+            if (currentVal != null) {
+                Object replacement = sub.getValue().get(currentVal);
+                if (replacement != null) {
+                    node = node.withAttr(attrKey, replacement);
+                }
+            }
+        }
+
+        // 递归进入嵌套子节点属性
+        for (Map.Entry<String, Object> entry : node.attrs().entrySet()) {
+            Object val = entry.getValue();
+            if (val instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof ScriptIR.FlowNode) {
+                ImmutableList<ScriptIR.FlowNode> children = (ImmutableList<ScriptIR.FlowNode>) val;
+                ImmutableList<ScriptIR.FlowNode> substituted = substituteFlow(children, numericSubs, attrSubs);
+                if (substituted != children) {
+                    node = node.withAttr(entry.getKey(), substituted);
+                }
+            } else if (val instanceof ScriptIR.FlowNode childNode) {
+                ScriptIR.FlowNode substituted = substituteNode(childNode, numericSubs, attrSubs);
+                if (substituted != childNode) {
+                    node = node.withAttr(entry.getKey(), substituted);
+                }
+            }
+        }
+
+        return node;
     }
 
 
@@ -306,15 +406,14 @@ public final class CompilationPipeline {
         Preconditions.checkNotNull(unit, "unit");
 
         int key = deepHash(unit) * 31 + expectedReturnType.hashCode();
-        WeakReference<CompiledScript> ref = CACHE.get(key);
-        CompiledScript cached = (ref != null) ? ref.get() : null;
+        CompiledScript cached = CACHE.getIfPresent(key);
         if (cached != null) {
             return new CompiledScript(unit, cached.handlerClass());
         }
 
         try {
             int structKey = structuralHash(unit) * 31 + expectedReturnType.hashCode();
-            TemplateRecord template = TEMPLATE_CACHE.get(structKey);
+            TemplateRecord template = TEMPLATE_CACHE.getIfPresent(structKey);
             if (template != null) {
                 return compileFromTemplate(unit, template, key);
             }
@@ -333,10 +432,10 @@ public final class CompilationPipeline {
             Class<?> clazz = defineHidden(bytecode);
 
             CompiledScript result = new CompiledScript(optimized, clazz);
-            CACHE.put(key, new WeakReference<>(result));
+            CACHE.put(key, result);
 
             // 注册结构模板（首次编译后缓存优化结果供后续快速路径复用）
-            TEMPLATE_CACHE.putIfAbsent(structKey, new TemplateRecord(unit, optimized, ctx, expectedReturnType));
+            TEMPLATE_CACHE.asMap().putIfAbsent(structKey, new TemplateRecord(unit, optimized, ctx, expectedReturnType));
 
             return result;
         } catch (ScriptCompileException e) {
@@ -361,8 +460,7 @@ public final class CompilationPipeline {
         Class<?> expectedReturnType = sam.getReturnType();
 
         int key = deepHash(unit) * 31 + expectedInterfaceType.hashCode();
-        WeakReference<CompiledScript> ref = CACHE.get(key);
-        CompiledScript cached = (ref != null) ? ref.get() : null;
+        CompiledScript cached = CACHE.getIfPresent(key);
         if (cached != null) {
             return cached.newInstance(unit.id());
         }
@@ -380,7 +478,7 @@ public final class CompilationPipeline {
             Class<?> clazz = defineHidden(bytecode);
 
             CompiledScript result = new CompiledScript(optimized, clazz);
-            CACHE.put(key, new WeakReference<>(result));
+            CACHE.put(key, result);
 
             return result.newInstance(unit.id());
         } catch (ScriptCompileException e) {
@@ -415,11 +513,11 @@ public final class CompilationPipeline {
             Class<?> clazz = defineHidden(bytecode);
 
             CompiledScript result = new CompiledScript(substituted, clazz);
-            CACHE.put(cacheKey, new WeakReference<>(result));
+            CACHE.put(cacheKey, result);
             return result;
         } catch (Exception e) {
             // 模板路径出错时安全回退到完整编译
-            TEMPLATE_CACHE.remove(structuralHash(newUnit) * 31
+            TEMPLATE_CACHE.invalidate(structuralHash(newUnit) * 31
                     + (template.expectedReturnType() != null ? template.expectedReturnType().hashCode() : 0));
             return compileFull(newUnit,
                     template.expectedReturnType() != null ? template.expectedReturnType() : Object.class);
@@ -470,19 +568,11 @@ public final class CompilationPipeline {
             // 自动为所有会产生局部变量的节点（如 Action, Math 等 VariableProducer）开辟存储槽位，免去显式声明的麻烦
             Map<String, ScriptIR.IRType> producerTypes = new LinkedHashMap<>();
             for (ScriptIR.FlowNode node : unit.flow()) {
-                ScriptIR.FlowNodeHandler handler = node.type().handler();
+                ScriptIR.FlowNodeHandler handler = node.handler();
                 if (handler instanceof ScriptIR.VariableProducer producer) {
                     String store = producer.getProducedVariable(node);
                     if (store != null && !registeredVars.contains(store)) {
-                        ScriptIR.IRType type;
-                        if (node.type() == gloomlib.script.core.ScriptIR.FlowNodeType.ACTION) {
-                            type = node.getRequiredAttr("returnType");
-                        } else if (node.type() == gloomlib.script.core.ScriptIR.FlowNodeType.MATH) {
-                            type = gloomlib.script.core.ScriptIR.IRType.DOUBLE;
-                        } else {
-                            type = node.getAttrOrDefault("returnType",
-                                    gloomlib.script.core.ScriptIR.IRType.OBJECT);
-                        }
+                        ScriptIR.IRType type = producer.resolveProducedType(node, payloadClass, unit);
                         // 多路径类型合并：同名变量在不同分支中产出时，取宽类型
                         producerTypes.merge(store, type, ScriptIR.IRType::merge);
                     }
@@ -577,7 +667,7 @@ public final class CompilationPipeline {
     }
 
     private void validateNodeVarRefs(ScriptIR.FlowNode node, CompilationContext ctx, String scriptId) {
-        ScriptIR.FlowNodeHandler handler = node.type().handler();
+        ScriptIR.FlowNodeHandler handler = node.handler();
 
         // 1. 统一处理所有节点汇报的消费变量引用
         if (handler instanceof ScriptIR.VariableConsumer consumer) {
@@ -603,7 +693,7 @@ public final class CompilationPipeline {
     }
 
     private void validateActionTypesInNode(ScriptIR.FlowNode node, CompilationContext ctx) {
-        ScriptIR.FlowNodeHandler handler = node.type().handler();
+        ScriptIR.FlowNodeHandler handler = node.handler();
 
         // 1. 委托节点处理器进行自己的类型匹配校验
         if (handler instanceof ScriptIR.TypeValidator validator) {
@@ -657,7 +747,7 @@ public final class CompilationPipeline {
             }
         }
 
-        ScriptIR.FlowNodeHandler handler = node.type().handler();
+        ScriptIR.FlowNodeHandler handler = node.handler();
         if (handler instanceof ScriptIR.NodeTraverser traverser) {
             for (ScriptIR.FlowNode child : traverser.traverseChildren(node)) {
                 found |= checkReturnNodesRecursive(child, ctx, expectedIR, expectedJavaType, scriptId);

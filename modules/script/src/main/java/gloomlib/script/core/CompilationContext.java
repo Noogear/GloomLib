@@ -83,9 +83,17 @@ public final class CompilationContext {
      * 当某变量通过 {@code check: op: instanceof} 后，编译器在成功路径上将目标类写入此表，
      * 后续节点 emit 时可利用窄化类型发射更精确的 CHECKCAST 并解析子类属性链。
      * <p>
-     * 使用 {@link #snapshotNarrowed()} / {@link #restoreNarrowed} 在 any/all 分支边界做快照隔离。
+     * 使用 {@link #snapshotTypeState()} / {@link #restoreTypeState} 在 any/all 分支边界做快照隔离。
      */
     private final Map<String, Class<?>> narrowedClasses = new HashMap<>();
+    /**
+     * emit 阶段维护的变量 non-null 事实集合。
+     * 当某变量通过 {@code check: op: !null} 或 {@code check: op: instanceof} 后，
+     * 编译器在成功路径上将其标记为 non-null，后续安全访问模式（{@code ?.}）可省略 null 守卫。
+     * <p>
+     * 与 narrowedClasses 共享同一快照生命周期，通过 {@link TypeSnapshot} 统一管理。
+     */
+    private final Set<String> nonNullVars = new HashSet<>();
     /**
      * 谓词模式的失败跳转标签。
      * <p>
@@ -333,20 +341,41 @@ public final class CompilationContext {
     /**
      * 返回当前窄化表的副本，供 any/all 分支进入前保存快照。
      */
-    public Map<String, Class<?>> snapshotNarrowed() {
-        return new HashMap<>(narrowedClasses);
+    public TypeSnapshot snapshotTypeState() {
+        return new TypeSnapshot(new HashMap<>(narrowedClasses), new HashSet<>(nonNullVars));
     }
 
 
     /**
      * 从快照恢复窄化表，用于 any/all 分支退出时还原作用域。
      *
-     * @param snapshot 由 {@link #snapshotNarrowed()} 返回的副本
+     * @param snapshot 由 {@link #snapshotTypeState()} 返回的副本
      */
-    public void restoreNarrowed(Map<String, Class<?>> snapshot) {
+    public void restoreTypeState(TypeSnapshot snapshot) {
         narrowedClasses.clear();
-        narrowedClasses.putAll(snapshot);
+        narrowedClasses.putAll(snapshot.narrowedClasses());
+        nonNullVars.clear();
+        nonNullVars.addAll(snapshot.nonNullVars());
     }
+
+    /**
+     * 标记变量为已知 non-null（在 {@code !null} / {@code instanceof} 检查通过后调用）。
+     */
+    public void markNonNull(String varName) {
+        nonNullVars.add(varName);
+    }
+
+    /**
+     * 查询变量是否已知 non-null。
+     */
+    public boolean isNonNull(String varName) {
+        return nonNullVars.contains(varName);
+    }
+
+    /**
+     * emit 阶段类型状态快照，封装窄化表和 non-null 集合。
+     */
+    public record TypeSnapshot(Map<String, Class<?>> narrowedClasses, Set<String> nonNullVars) {}
 
     public void setHoistedConstants(ImmutableList<ConstantDef> constants) {
         this.hoistedConstants = constants;
