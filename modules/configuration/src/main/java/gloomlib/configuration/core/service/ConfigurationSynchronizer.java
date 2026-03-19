@@ -10,6 +10,7 @@ import gloomlib.configuration.api.util.ConfigurationLogger;
 import gloomlib.configuration.core.model.FieldMeta;
 import gloomlib.configuration.core.util.ConfigurationCache;
 import gloomlib.configuration.core.util.ReflectionUtils;
+import gloomlib.configuration.core.util.TypeConverter;
 import gloomlib.configuration.core.util.TypeInference;
 import org.bukkit.configuration.ConfigurationSection;
 
@@ -122,6 +123,10 @@ public final class ConfigurationSynchronizer {
 
         Object loadedVal = deserializationService.deserialize(section.get(key), meta.getType(), meta.getGenericType());
 
+        if (loadedVal == null && meta.getType().isPrimitive()) {
+            loadedVal = TypeConverter.getPrimitiveDefault(meta.getType());
+        }
+
         if (meta.hasCheck()) {
             loadedVal = runCheck(meta, loadedVal);
         }
@@ -177,9 +182,9 @@ public final class ConfigurationSynchronizer {
             writeSection(sub, part);
         } else if (val instanceof Map<?, ?> map) {
             ConfigurationSection sub = section.createSection(key);
-            writeMap(sub, map);
+            writeMap(sub, map, meta.getGenericType());
         } else {
-            section.set(key, serializationService.serialize(val));
+            section.set(key, serializationService.serialize(val, meta.getGenericType()));
         }
 
         if (meta.hasComment()) {
@@ -193,19 +198,21 @@ public final class ConfigurationSynchronizer {
     /**
      * Writes a map to a ConfigurationSection.
      *
-     * @param section the YAML section
-     * @param map     the map to write
+     * @param section     the YAML section
+     * @param map         the map to write
+     * @param genericType the generic type of the map field (may be null)
      * @throws Exception if writing fails
      */
-    private void writeMap(ConfigurationSection section, Map<?, ?> map) throws Exception {
+    private void writeMap(ConfigurationSection section, Map<?, ?> map, Type genericType) throws Exception {
+        Type valueGenericType = TypeInference.extractGenericType(genericType, 1);
         for (Map.Entry<?, ?> entry : map.entrySet()) {
             Object keyObj = entry.getKey();
             String k = (keyObj instanceof Enum<?> e) ? e.name() : keyObj.toString();
 
-            Object serializedVal = serializationService.serialize(entry.getValue());
+            Object serializedVal = serializationService.serialize(entry.getValue(), valueGenericType);
             if (serializedVal instanceof Map<?, ?> subMap) {
                 ConfigurationSection sub = section.createSection(k);
-                writeMap(sub, subMap);
+                writeMap(sub, subMap, null);
             } else {
                 section.set(k, serializedVal);
             }
@@ -281,7 +288,8 @@ public final class ConfigurationSynchronizer {
      * @param instance the configuration instance
      * @throws Exception if template processing fails
      */
-    void processTemplates(Object instance) throws Exception {
+    boolean processTemplates(Object instance) throws Exception {
+        boolean modified = false;
         for (FieldMeta meta : ConfigurationCache.getCachedMeta(instance.getClass())) {
             Field field = meta.field();
             if (!Map.class.isAssignableFrom(field.getType())) {
@@ -295,12 +303,15 @@ public final class ConfigurationSynchronizer {
                 continue;
             }
 
-            processTemplateField(meta, instance, valueType);
+            if (processTemplateField(meta, instance, valueType)) {
+                modified = true;
+            }
         }
+        return modified;
     }
 
     @SuppressWarnings("unchecked")
-    private void processTemplateField(FieldMeta meta, Object instance, Class<?> valueType) throws Exception {
+    private boolean processTemplateField(FieldMeta meta, Object instance, Class<?> valueType) throws Exception {
         Template template = valueType.getAnnotation(Template.class);
         String defaultKey = template.name();
 
@@ -311,13 +322,15 @@ public final class ConfigurationSynchronizer {
         }
 
         if (!shouldAddTemplateDefault(template, map, defaultKey)) {
-            return;
+            return false;
         }
 
         try {
             map.put(defaultKey, ReflectionUtils.createInstance(valueType));
+            return true;
         } catch (Exception e) {
             ConfigurationLogger.warn("Failed to create template for " + valueType.getSimpleName() + ": " + e.getMessage());
+            return false;
         }
     }
 

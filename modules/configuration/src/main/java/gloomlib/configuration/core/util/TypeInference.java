@@ -48,4 +48,26 @@ public final class TypeInference {
         }
         return TypeToken.of(arg).getRawType();
     }
+
+    /**
+     * Extracts the full generic Type of the Nth type argument, preserving nested generics.
+     *
+     * @param type  the generic type
+     * @param index parameter index (0-based)
+     * @return the full generic type, or {@code Object.class} if resolution fails
+     */
+    @NotNull
+    public static Type extractGenericType(@Nullable Type type, int index) {
+        if (!(type instanceof ParameterizedType pt)) {
+            return Object.class;
+        }
+
+        Type[] args = pt.getActualTypeArguments();
+        if (index < 0 || index >= args.length) {
+            return Object.class;
+        }
+
+        Type arg = args[index];
+        return arg != null ? arg : Object.class;
+    }
 }

@@ -15,22 +15,19 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Service for loading, saving, and reloading configuration files.
  * <p>
- * Uses {@link FileCache} for file-level freshness tracking and content caching,
- * with a separate cache for parsed {@link YamlConfiguration} objects.
+ * Uses {@link FileCache} for file-level freshness tracking and content caching.
+ * Each load operation parses a fresh {@link YamlConfiguration} from cached file content.
  * </p>
  */
 public final class ConfigurationLoader {
 
     private static final int YAML_MAX_WIDTH = 250;
     private static final FileCache FILE_CACHE = new FileCache();
-    private static final Map<String, YamlConfiguration> YAML_CACHE = new ConcurrentHashMap<>();
 
     private final ConfigurationSynchronizer synchronizer;
     private final VersionManager versionManager;
@@ -145,7 +142,6 @@ public final class ConfigurationLoader {
             throw e;
         }
 
-        YAML_CACHE.put(file.getAbsolutePath(), yaml);
         instance.setYaml(yaml);
         populateInstance(instance, yaml, file);
     }
@@ -163,16 +159,14 @@ public final class ConfigurationLoader {
             yaml.options().setHeader(List.of(instance.getClass().getAnnotation(Header.class).value()));
         }
 
-        ReflectionUtils.runHooks(instance, PreLoad.class);
         synchronizer.writeSection(yaml, instance);
 
         yaml.options().width(YAML_MAX_WIDTH);
         yaml.save(file);
-        // Update caches after save
+        // Update file cache after save
         String savedContent = yaml.saveToString();
         FILE_CACHE.put(file,
                 new FileCache.Entry(file.lastModified(), file.length(), savedContent));
-        YAML_CACHE.put(file.getAbsolutePath(), yaml);
     }
 
     /**
@@ -183,15 +177,11 @@ public final class ConfigurationLoader {
      * @throws Exception if loading fails
      */
     YamlConfiguration loadYaml(File file) throws Exception {
-        String path = file.getAbsolutePath();
-        if (FILE_CACHE.isFresh(file)) {
-            YamlConfiguration cached = YAML_CACHE.get(path);
-            if (cached != null) return cached;
-        }
-
         String content;
         try {
-            content = FILE_CACHE.read(file);
+            // Use cached content if file hasn't changed, otherwise re-read from disk
+            String cached = FILE_CACHE.isFresh(file) ? FILE_CACHE.getCachedContent(file) : null;
+            content = cached != null ? cached : FILE_CACHE.read(file);
         } catch (IOException e) {
             throw new IOException("Failed to read config file: " + file.getName(), e);
         }
@@ -203,7 +193,6 @@ public final class ConfigurationLoader {
             ConfigurationLogger.error("YAML Syntax Error in '" + file.getName() + "': " + e.getMessage(), e);
             throw e;
         }
-        YAML_CACHE.put(path, yaml);
         return yaml;
     }
 
@@ -216,7 +205,6 @@ public final class ConfigurationLoader {
      * @throws Exception if population fails
      */
     private void populateInstance(ConfigurationFile instance, YamlConfiguration yaml, File file) throws Exception {
-        synchronizer.processTemplates(instance);
         ReflectionUtils.runHooks(instance, PreLoad.class);
 
         AtomicBoolean isDirty = new AtomicBoolean(false);
@@ -231,6 +219,10 @@ public final class ConfigurationLoader {
             throw e;
         } finally {
             LoadContext.clear();
+        }
+
+        if (synchronizer.processTemplates(instance)) {
+            isDirty.set(true);
         }
 
         if (isDirty.get()) {

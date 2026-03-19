@@ -81,6 +81,10 @@ public abstract class ConfigurationFile extends ConfigurationPart {
     /**
      * Reloads the configuration asynchronously.
      *
+     * <p><b>Thread safety:</b> During async reload, field values may be
+     * inconsistent if read from another thread. Use the returned future
+     * to ensure completion before accessing fields.</p>
+     *
      * @return a CompletableFuture that completes when the reload finishes
      * @throws IllegalStateException if the file path has not been set
      */

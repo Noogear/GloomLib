@@ -3,6 +3,7 @@ package gloomlib.configuration.api;
 import gloomlib.configuration.api.util.FileCache;
 import gloomlib.configuration.core.service.ConfigurationSynchronizer;
 import gloomlib.configuration.core.service.DeserializationService;
+import gloomlib.configuration.core.service.DirectoryLoadSpec;
 import gloomlib.configuration.core.service.DirectoryLoader;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -13,88 +14,34 @@ import java.util.Map;
 
 /**
  * Directory-based configuration that merges all {@code .yml}/{@code .yaml} files
- * into a single {@code Map<String, V>}. Last-write-wins on duplicate keys (alphabetical file order).
+ * into a single {@code Map<String, V>}. Last-write-wins on duplicate keys (path-ordered).
  *
- * <p>Supports smart reload via {@link FileCache}: only files that have actually changed
- * on disk will be re-parsed. Unchanged files carry forward their previous entries.</p>
+ * <p>Obtain via {@link ConfigurationManager#directory(Class, File)} (reflection mode) or
+ * {@link ConfigurationManager#directory(File, EntryFactory)} (factory mode), configure the
+ * returned {@link Builder}, then call {@link Builder#load()} to get a loaded instance.</p>
  *
- * @param <V> value type for each top-level key
- * @see ConfigurationManager#loadDirectory(Class, File)
+ * @param <V> value type for each entry
  */
 public final class DirectoryConfiguration<V> {
 
-    private final Class<V> valueType;
-    private final File directory;
-    private final ResourceProvider resourceProvider;
+    private final DirectoryLoadSpec<V> spec;
     private final ConfigurationSynchronizer synchronizer;
     private final DeserializationService deserializationService;
     private final FileCache fileCache = new FileCache();
-    private Object context;
 
     private volatile Map<String, V> entries = Collections.emptyMap();
 
-    DirectoryConfiguration(Class<V> valueType, File directory, @Nullable ResourceProvider resourceProvider,
-                           ConfigurationSynchronizer synchronizer, DeserializationService deserializationService) {
-        this.valueType = valueType;
-        this.directory = directory;
-        this.resourceProvider = resourceProvider;
+    private DirectoryConfiguration(DirectoryLoadSpec<V> spec,
+                                   ConfigurationSynchronizer synchronizer,
+                                   DeserializationService deserializationService) {
+        this.spec = spec;
         this.synchronizer = synchronizer;
         this.deserializationService = deserializationService;
     }
 
-    /**
-     * Sets a context object passed to {@code @PostLoad} hook methods accepting a single parameter.
-     */
-    @NotNull
-    public DirectoryConfiguration<V> withContext(@Nullable Object context) {
-        this.context = context;
-        return this;
-    }
+    // ── Results ──────────────────────────────────────────────────────────────
 
-    /**
-     * Full load — clears cache and re-reads every file from disk.
-     * <p>Use this for the initial load or when you want to force a complete refresh.</p>
-     */
-    public void load() throws Exception {
-        fileCache.clear();
-        this.entries = DirectoryLoader.load(valueType, directory, resourceProvider, context,
-                synchronizer, deserializationService, fileCache, null);
-    }
-
-    /**
-     * Smart reload — only re-parses files that have changed on disk since the last load.
-     * Unchanged files carry forward their previously deserialized entries.
-     *
-     * @return {@code true} if any file was re-parsed (i.e., something actually changed),
-     *         {@code false} if the directory was completely fresh and no work was done
-     */
-    public boolean reload() throws Exception {
-        if (fileCache.isDirectoryFresh(directory)) {
-            return false;
-        }
-        this.entries = DirectoryLoader.load(valueType, directory, resourceProvider, context,
-                synchronizer, deserializationService, fileCache, entries);
-        return true;
-    }
-
-    /**
-     * Returns {@code true} if no file in the directory has been modified since the last load.
-     */
-    public boolean isFresh() {
-        return fileCache.isDirectoryFresh(directory);
-    }
-
-    /**
-     * Returns the underlying {@link FileCache} used for change detection.
-     * <p>Callers can use this to inspect per-file freshness or integrate
-     * with their own caching logic.</p>
-     */
-    @NotNull
-    public FileCache fileCache() {
-        return fileCache;
-    }
-
-    /** Returns the unmodifiable merged map of all entries. */
+    /** Returns all entries as an unmodifiable map. */
     @NotNull
     public Map<String, V> all() {
         return entries;
@@ -115,13 +62,146 @@ public final class DirectoryConfiguration<V> {
     /** Retrieves an entry by key, falling back to the specified fallback key. */
     @Nullable
     public V getOrDefault(@Nullable String key, @NotNull String fallbackKey) {
-        V result = (key != null) ? entries.get(key) : null;
+        V result = key != null ? entries.get(key) : null;
         return result != null ? result : entries.get(fallbackKey);
     }
 
-    /** Returns the target directory. */
+    // ── Freshness ─────────────────────────────────────────────────────────────
+
+    /**
+     * Returns {@code true} if no file in the directory has been added, removed, or
+     * modified since the last load (recursively, if configured with {@link Builder#recursive()}).
+     */
+    public boolean isFresh() {
+        return fileCache.isDirectoryFresh(spec.directory(), spec.recursive());
+    }
+
+    /** Returns the underlying {@link FileCache} for advanced use cases. */
     @NotNull
-    public File directory() {
-        return directory;
+    public FileCache fileCache() {
+        return fileCache;
+    }
+
+    // ── Reload ───────────────────────────────────────────────────────────────
+
+    /**
+     * Smart reload — only re-parses files that have changed since the last load.
+     * Unchanged files carry forward their previously deserialized entries.
+     *
+     * @return {@code true} if any file was re-parsed
+     */
+    public boolean reload() throws Exception {
+        if (isFresh()) return false;
+        this.entries = DirectoryLoader.load(spec, synchronizer, deserializationService, fileCache, entries);
+        return true;
+    }
+
+    // ── Package-private Builder factories ────────────────────────────────────
+
+    /** Called by {@link ConfigurationManager#directory(Class, File)}. */
+    static <V extends ConfigurationPart> Builder<V> reflection(
+            @NotNull Class<V> type, @NotNull File directory,
+            @NotNull ConfigurationSynchronizer synchronizer,
+            @NotNull DeserializationService deserializationService) {
+        return new Builder<>(type, null, directory, synchronizer, deserializationService);
+    }
+
+    /** Called by {@link ConfigurationManager#directory(File, EntryFactory)}. */
+    static <V> Builder<V> factory(
+            @NotNull EntryFactory<V> factory, @NotNull File directory,
+            @NotNull ConfigurationSynchronizer synchronizer,
+            @NotNull DeserializationService deserializationService) {
+        return new Builder<>(null, factory, directory, synchronizer, deserializationService);
+    }
+
+    // ── Builder ──────────────────────────────────────────────────────────────
+
+    /**
+     * Fluent builder for {@link DirectoryConfiguration}.
+     * Obtain via {@link ConfigurationManager#directory}.
+     */
+    public static final class Builder<V> {
+
+        private final Class<V> valueType;
+        private final EntryFactory<V> entryFactory;
+        private final File directory;
+        private final ConfigurationSynchronizer synchronizer;
+        private final DeserializationService deserializationService;
+
+        private boolean recursive = false;
+        private @Nullable String rootKey = null;
+        private @Nullable ResourceProvider resourceProvider = null;
+        private @Nullable String[] defaultResourcePaths = null;
+        private @Nullable Object context = null;
+
+        private Builder(@Nullable Class<V> valueType, @Nullable EntryFactory<V> entryFactory,
+                        @NotNull File directory, @NotNull ConfigurationSynchronizer synchronizer,
+                        @NotNull DeserializationService deserializationService) {
+            this.valueType = valueType;
+            this.entryFactory = entryFactory;
+            this.directory = directory;
+            this.synchronizer = synchronizer;
+            this.deserializationService = deserializationService;
+        }
+
+        /** Recursively scans sub-directories for YAML files. */
+        @NotNull
+        public Builder<V> recursive() {
+            this.recursive = true;
+            return this;
+        }
+
+        /**
+         * Filters files by a top-level discriminator key (e.g. {@code "animation"}).
+         * Files that do not contain this key are silently skipped, and entries are read
+         * from the section under this key rather than the file's top level.
+         */
+        @NotNull
+        public Builder<V> rootKey(@NotNull String key) {
+            this.rootKey = key;
+            return this;
+        }
+
+        /**
+         * Copies default resources from the JAR into the directory when it is empty.
+         * Preferred over {@link #resources(ResourceProvider)} when both the provider
+         * and file paths are known at build time.
+         */
+        @NotNull
+        public Builder<V> defaults(@NotNull ResourceProvider provider, @NotNull String... paths) {
+            this.resourceProvider = provider;
+            this.defaultResourcePaths = paths;
+            return this;
+        }
+
+        /**
+         * Sets the resource provider only; default paths are taken from the
+         * {@code @DefaultResources} annotation on the value type (reflection mode only).
+         */
+        @NotNull
+        public Builder<V> resources(@NotNull ResourceProvider provider) {
+            this.resourceProvider = provider;
+            return this;
+        }
+
+        /** Sets a context object forwarded to {@code @PostLoad} hook methods. */
+        @NotNull
+        public Builder<V> context(@Nullable Object ctx) {
+            this.context = ctx;
+            return this;
+        }
+
+        /**
+         * Performs a full load and returns the populated {@link DirectoryConfiguration}.
+         */
+        @NotNull
+        public DirectoryConfiguration<V> load() throws Exception {
+            DirectoryLoadSpec<V> spec = new DirectoryLoadSpec<>(
+                    directory, valueType, entryFactory, recursive, rootKey,
+                    resourceProvider, defaultResourcePaths, context);
+            DirectoryConfiguration<V> cfg = new DirectoryConfiguration<>(spec, synchronizer, deserializationService);
+            cfg.entries = DirectoryLoader.load(spec, synchronizer, deserializationService, cfg.fileCache, null);
+            return cfg;
+        }
     }
 }

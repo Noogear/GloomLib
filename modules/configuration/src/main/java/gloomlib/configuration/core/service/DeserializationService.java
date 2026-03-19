@@ -197,6 +197,7 @@ public final class DeserializationService {
         Map<Object, Object> map = new LinkedHashMap<>();
         Class<?> kType = TypeInference.extractGenericParameter(genericType, 0);
         Class<?> vType = TypeInference.extractGenericParameter(genericType, 1);
+        Type vGenericType = TypeInference.extractGenericType(genericType, 1);
 
         if (raw instanceof ConfigurationSection cs) {
             for (String k : cs.getKeys(false)) {
@@ -205,7 +206,7 @@ public final class DeserializationService {
 
                 List<String> valuePath = new ArrayList<>(nodePath);
                 valuePath.add(k);
-                map.put(keyVal, deserializeWithPath(val, vType, vType, valuePath));
+                map.put(keyVal, deserializeWithPath(val, vType, vGenericType, valuePath));
             }
         } else if (raw instanceof Map<?, ?> rawMap) {
             for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
@@ -215,7 +216,7 @@ public final class DeserializationService {
 
                 List<String> valuePath = new ArrayList<>(nodePath);
                 valuePath.add(k);
-                map.put(keyVal, deserializeWithPath(val, vType, vType, valuePath));
+                map.put(keyVal, deserializeWithPath(val, vType, vGenericType, valuePath));
             }
         } else {
             return raw;
@@ -239,12 +240,13 @@ public final class DeserializationService {
 
         List<Object> newList = new ArrayList<>();
         Class<?> iType = TypeInference.extractGenericParameter(genericType, 0);
+        Type iGenericType = TypeInference.extractGenericType(genericType, 0);
         int index = 0;
 
         for (Object o : list) {
             List<String> indexPath = new ArrayList<>(nodePath);
             indexPath.add("[" + index + "]");
-            newList.add(deserializeWithPath(o, iType, iType, indexPath));
+            newList.add(deserializeWithPath(o, iType, iGenericType, indexPath));
             index++;
         }
         return newList;

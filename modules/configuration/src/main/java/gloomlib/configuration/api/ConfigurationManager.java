@@ -146,35 +146,54 @@ public class ConfigurationManager {
     // ── Directory-based configuration loading ────────────────────────────────
 
     /**
-     * Creates a {@link DirectoryConfiguration} that loads all YAML files from a directory
-     * and merges their top-level keys into a single {@code Map<String, V>}.
+     * Returns a {@link DirectoryConfiguration.Builder} for loading YAML files into instances
+     * of {@code valueType} via reflection (reflection mode).
      *
-     * <p>Call {@link DirectoryConfiguration#load()} after creation to trigger loading.</p>
+     * <p>Chain builder methods for additional options, then call
+     * {@link DirectoryConfiguration.Builder#load()} to trigger loading.</p>
      *
-     * @param valueType the class of each top-level entry value
+     * <h3>Example</h3>
+     * <pre>{@code
+     * var indicators = ConfigurationManager
+     *     .directory(IndicatorEntry.class, dir)
+     *     .defaults(plugin::getResource, "indicator/damage.yml")
+     *     .load();
+     * }</pre>
+     *
+     * @param valueType the {@link ConfigurationPart} subclass for each entry
      * @param directory the directory containing YAML files
-     * @param <V>       the value type
-     * @return a new directory configuration (not yet loaded)
+     * @param <V>       the entry value type
      */
-    public static <V> DirectoryConfiguration<V> loadDirectory(Class<V> valueType, File directory) {
-        return new DirectoryConfiguration<>(valueType, directory, null, synchronizer, deserializationService);
+    public static <V extends ConfigurationPart> DirectoryConfiguration.Builder<V> directory(
+            Class<V> valueType, File directory) {
+        return DirectoryConfiguration.reflection(valueType, directory, synchronizer, deserializationService);
     }
 
     /**
-     * Creates a {@link DirectoryConfiguration} with a {@link ResourceProvider} for
-     * automatic default resource copying when the directory is empty.
+     * Returns a {@link DirectoryConfiguration.Builder} for loading YAML files using a custom
+     * {@link EntryFactory} (factory mode), bypassing reflection entirely.
      *
-     * <p>Call {@link DirectoryConfiguration#load()} after creation to trigger loading.</p>
+     * <p>Suitable when entries require custom parsing logic, multi-type dispatch, or
+     * cross-entry references (e.g. multi-pass loading). Combine with
+     * {@link DirectoryConfiguration.Builder#rootKey(String)} and
+     * {@link DirectoryConfiguration.Builder#recursive()} as needed.</p>
      *
-     * @param valueType the class of each top-level entry value
+     * <h3>Example</h3>
+     * <pre>{@code
+     * var animations = ConfigurationManager
+     *     .directory(dir, (name, sec) -> AnimationParser.parse(name, sec, registry))
+     *     .rootKey("animation")
+     *     .recursive()
+     *     .load();
+     * }</pre>
+     *
      * @param directory the directory containing YAML files
-     * @param resources provider for copying default resources from the JAR
-     * @param <V>       the value type
-     * @return a new directory configuration (not yet loaded)
+     * @param factory   factory used to create each entry from its YAML section
+     * @param <V>       the entry value type
      */
-    public static <V> DirectoryConfiguration<V> loadDirectory(
-            Class<V> valueType, File directory, ResourceProvider resources) {
-        return new DirectoryConfiguration<>(valueType, directory, resources, synchronizer, deserializationService);
+    public static <V> DirectoryConfiguration.Builder<V> directory(
+            File directory, EntryFactory<V> factory) {
+        return DirectoryConfiguration.factory(factory, directory, synchronizer, deserializationService);
     }
 }
 

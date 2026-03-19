@@ -10,6 +10,7 @@ import gloomlib.configuration.core.util.ReflectionUtils;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.function.Supplier;
 
@@ -81,7 +82,7 @@ public final class VersionManager {
         // Read actual version from file
         YamlConfiguration yaml = loaderSupplier.get().loadYaml(file);
         String versionKey = CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_HYPHEN, versionField.getName());
-        int actualVersion = yaml.getInt(versionKey, -1);
+        int actualVersion = yaml.contains(versionKey) ? yaml.getInt(versionKey) : 0;
 
         return new VersionCheckResult(versionField, expectedVersion, actualVersion, autoBackup, migrate);
     }
@@ -115,7 +116,8 @@ public final class VersionManager {
 
         // Delete old file and create new one
         if (!file.delete()) {
-            ConfigurationLogger.warn("Failed to delete old configuration file");
+            throw new IOException("Cannot upgrade config: failed to delete old file '"
+                    + file.getName() + "'. It may be locked by another process.");
         }
 
         // Create new configuration with defaults (skip version check)

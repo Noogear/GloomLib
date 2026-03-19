@@ -7,6 +7,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -100,31 +102,59 @@ public final class FileCache {
     /**
      * Checks if a directory is "fresh" — none of its {@code .yml}/{@code .yaml} files
      * have been added, removed, or modified since the last load.
+     *
+     * @param directory the directory to check
+     * @param recursive if {@code true}, sub-directories are also checked
      */
-    public boolean isDirectoryFresh(@NotNull File directory) {
-        File[] files = directory.listFiles(
-                (d, name) -> name.endsWith(".yml") || name.endsWith(".yaml"));
-        if (files == null) return cache.isEmpty();
-
+    public boolean isDirectoryFresh(@NotNull File directory, boolean recursive) {
+        List<File> files = collectYamlFiles(directory, recursive);
         String dirPrefix = directory.getAbsolutePath() + File.separator;
         long cachedCount = cache.keySet().stream()
                 .filter(k -> k.startsWith(dirPrefix))
                 .count();
-        if (files.length != cachedCount) return false;
-
+        if (files.size() != cachedCount) return false;
         for (File f : files) {
             if (!isFresh(f)) return false;
         }
         return true;
     }
 
+    /** @see #isDirectoryFresh(File, boolean) */
+    public boolean isDirectoryFresh(@NotNull File directory) {
+        return isDirectoryFresh(directory, false);
+    }
+
     /**
      * Removes cache entries for files that no longer exist under the given directory.
+     *
+     * @param recursive if {@code true}, sub-directory entries are also purged
      */
-    public void purgeStale(@NotNull File directory) {
+    public void purgeStale(@NotNull File directory, boolean recursive) {
+        List<File> liveFiles = collectYamlFiles(directory, recursive);
         String dirPrefix = directory.getAbsolutePath() + File.separator;
-        cache.keySet().removeIf(key ->
-                key.startsWith(dirPrefix) && !new File(key).exists());
+        cache.keySet().removeIf(key -> key.startsWith(dirPrefix)
+                && liveFiles.stream().noneMatch(f -> f.getAbsolutePath().equals(key)));
+    }
+
+    /** @see #purgeStale(File, boolean) */
+    public void purgeStale(@NotNull File directory) {
+        purgeStale(directory, false);
+    }
+
+    private static List<File> collectYamlFiles(@NotNull File directory, boolean recursive) {
+        List<File> result = new ArrayList<>();
+        doCollect(directory, result, recursive);
+        return result;
+    }
+
+    private static void doCollect(@NotNull File dir, @NotNull List<File> out, boolean recursive) {
+        File[] children = dir.listFiles();
+        if (children == null) return;
+        for (File f : children) {
+            if (f.isDirectory() && recursive) doCollect(f, out, true);
+            else if (f.isFile() && (f.getName().endsWith(".yml") || f.getName().endsWith(".yaml")))
+                out.add(f);
+        }
     }
 
     /** Clears all entries from the cache. */

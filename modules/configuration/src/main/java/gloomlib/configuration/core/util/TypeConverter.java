@@ -37,6 +37,10 @@ public final class TypeConverter {
                 throw new IllegalArgumentException("Invalid UUID: " + s);
             }
         }
+        if (type == boolean.class || type == Boolean.class) {
+            if (raw instanceof Boolean) return raw;
+            return Boolean.parseBoolean(raw.toString());
+        }
         if (Number.class.isAssignableFrom(Primitives.wrap(type)) || type.isPrimitive()) {
             String s = raw.toString();
             try {
@@ -46,17 +50,15 @@ public final class TypeConverter {
                 if (type == double.class || type == Double.class) {
                     return Double.parseDouble(s);
                 }
-                if (type == boolean.class || type == Boolean.class) {
-                    return Boolean.parseBoolean(s);
-                }
                 if (type == long.class || type == Long.class) {
                     return (long) Double.parseDouble(s);
                 }
                 if (type == float.class || type == Float.class) {
                     return Float.parseFloat(s);
                 }
-            } catch (Exception ignored) {
-                // Ignore parsing errors for numbers
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException(
+                        "Cannot convert '" + s + "' to " + type.getSimpleName(), e);
             }
         }
         return raw;
