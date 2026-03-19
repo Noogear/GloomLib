@@ -143,6 +143,39 @@ public enum Operator {
         this.opcode = opcode;
     }
 
+    // ── 运算符分类 ────────────────────────────────────────────────────────────
+
+    public enum Category { ARITHMETIC, COMPARISON, BOOLEAN }
+
+    /**
+     * 基于优先级层级派生分类：{@code >0} 算术、{@code ==0} 比较、{@code <0} 布尔。
+     */
+    public Category category() {
+        if (precedence > 0) return Category.ARITHMETIC;
+        if (precedence == 0) return Category.COMPARISON;
+        return Category.BOOLEAN;
+    }
+
+    public boolean isArithmetic() { return precedence > 0; }
+
+    /**
+     * 判断字符是否为算术运算符符号（{@code + - * / ^ %}）。
+     * 作为运算符字符集的<b>单一事实来源</b>，供外部模块复用。
+     */
+    public static boolean isArithmeticSymbolChar(char c) {
+        return c == '+' || c == '-' || c == '*' || c == '/' || c == '^' || c == '%';
+    }
+
+    /**
+     * 检查字符串中是否包含算术运算符字符。
+     */
+    public static boolean containsArithmeticOperator(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (isArithmeticSymbolChar(s.charAt(i))) return true;
+        }
+        return false;
+    }
+
     // ── Public API ───────────────────────────────────────────────────────────
 
     /**

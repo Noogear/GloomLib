@@ -4,7 +4,11 @@ import java.lang.invoke.CallSite;
 import java.lang.invoke.ConstantCallSite;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 /**
  * 脚本常量引导器（外置常量池）。
@@ -29,6 +33,12 @@ public final class ScriptConstantBootstrap {
      */
     private static final ConcurrentHashMap<String, Object> REGISTRY = new ConcurrentHashMap<>();
 
+    /**
+     * 引用计数：每个 key 被多少个活跃 CompiledScript 引用。
+     * 配合 CACHE 的 softValues 回收，计数归零时从 REGISTRY 移除。
+     */
+    private static final ConcurrentHashMap<String, AtomicInteger> REF_COUNTS = new ConcurrentHashMap<>();
+
     private ScriptConstantBootstrap() {
     }
 
@@ -41,26 +51,20 @@ public final class ScriptConstantBootstrap {
      * @param constants 由优化器提升的常量定义列表
      */
     @SuppressWarnings("unchecked")
-    static void registerAll(java.util.List<gloomlib.script.core.CompilationContext.ConstantDef> constants) {
+    static void registerAll(List<gloomlib.script.core.CompilationContext.ConstantDef> constants) {
         for (var def : constants) {
             Object instance = switch (def.kind()) {
-                case PATTERN -> java.util.regex.Pattern.compile((String) def.value());
+                case PATTERN -> Pattern.compile((String) def.value());
                 case STRING_SET -> {
                     com.google.common.collect.ImmutableList<Object> vals =
                             (com.google.common.collect.ImmutableList<Object>) def.value();
-                    yield java.util.Set.of(vals.stream().map(Object::toString).toArray());
+                    yield Set.of(vals.stream().map(Object::toString).toArray());
                 }
                 case DOUBLE_ARRAY, INT_ARRAY -> def.value();
             };
             REGISTRY.putIfAbsent(def.key(), instance);
+            REF_COUNTS.computeIfAbsent(def.key(), k -> new AtomicInteger()).incrementAndGet();
         }
-    }
-
-    /**
-     * 注册单个常量（仅供测试使用）。生产代码统一走 {@link #registerAll}。
-     */
-    public static void register(String key, Object value) {
-        REGISTRY.putIfAbsent(key, value);
     }
 
     /**
@@ -73,7 +77,7 @@ public final class ScriptConstantBootstrap {
      * @param lookup 调用点的查找对象（JVM 自动传入）
      * @param name   调用点名称（即 {@code invokedynamic} 的方法名，调试用）
      * @param type   方法类型，返回值为常量的实际类型
-     * @param key    常量键，与 {@link #register} 使用的 key 一致
+     * @param key    常量键，与 {@link #registerAll} 注册的 key 一致
      * @return 绑定到常量的 {@link ConstantCallSite}
      * @throws BootstrapMethodError 若 key 未注册（属于编译器内部错误）
      */
@@ -87,31 +91,23 @@ public final class ScriptConstantBootstrap {
 
 
     /**
-     * 返回当前注册表条目数，供单元测试断言跨脚本共享行为。
-     */
-    public static int registrySizeForTest() {
-        return REGISTRY.size();
-    }
-
-    /**
-     * 清空注册表，供单元测试隔离。
-     */
-    public static void clearForTest() {
-        REGISTRY.clear();
-    }
-
-
-    /**
-     * 返回当前注册表中的常量条目数。
-     * <p>
-     * 可用于运行时监控和诊断，检查常量池增长趋势，
-     * 判断是否需要在插件 reload 时调用 {@link #purge()} 回收旧常量。
+     * 减引用计数，计数归零时从 REGISTRY 移除。
+     * 配合编译缓存的 softValues RemovalListener 调用，实现增量清理。
      *
-     * @return 注册表条目数
+     * @param constantKeys 被驱逐的 CompiledScript 所引用的常量键列表
      */
-    public static int registrySize() {
-        return REGISTRY.size();
+    public static void release(List<String> constantKeys) {
+        for (String key : constantKeys) {
+            REF_COUNTS.computeIfPresent(key, (k, count) -> {
+                if (count.decrementAndGet() <= 0) {
+                    REGISTRY.remove(k);
+                    return null; // 从 REF_COUNTS 移除
+                }
+                return count;
+            });
+        }
     }
+
 
     /**
      * 清除注册表中的所有常量条目。
@@ -128,5 +124,19 @@ public final class ScriptConstantBootstrap {
      */
     public static void purge() {
         REGISTRY.clear();
+        REF_COUNTS.clear();
+    }
+
+    // ── Test Support ─────────────────────────────────────────────────────────
+
+    /** 单条注册，仅供测试使用。生产代码应使用 {@link #registerAll}。 */
+    public static void register(String key, Object value) {
+        REGISTRY.putIfAbsent(key, value);
+        REF_COUNTS.computeIfAbsent(key, k -> new AtomicInteger()).incrementAndGet();
+    }
+
+    /** 返回当前注册表条目数，仅供测试断言使用。 */
+    public static int registrySizeForTest() {
+        return REGISTRY.size();
     }
 }

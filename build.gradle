@@ -5,7 +5,7 @@ plugins {
 
 allprojects {
     group = 'gloomlib'
-    version = '1.2.7.0'
+    version = '1.2.9.1'
 
     repositories {
         mavenCentral()

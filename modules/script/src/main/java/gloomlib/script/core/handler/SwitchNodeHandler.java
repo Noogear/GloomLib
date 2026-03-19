@@ -216,7 +216,7 @@ public final class SwitchNodeHandler
                 emitTableIntSwitch(mv, slot, cases, ctx);
                 break;
             case "TABLE_ENUM":
-                emitTableEnumSwitch(mv, slot, resolvedEnumClass, cases, ctx);
+                emitTableEnumSwitch(mv, slot, resolvedEnumClass, cases, ctx, node);
                 break;
             case "LOOKUP_INT":
             case "LOOKUP_STRING":
@@ -429,7 +429,7 @@ public final class SwitchNodeHandler
      */
     private void emitTableEnumSwitch(MethodVisitor mv, int slot, Class<?> enumClass,
                                      ImmutableMap<String, ImmutableList<FlowNode>> cases,
-                                     CompilationContext ctx) {
+                                     CompilationContext ctx, FlowNode switchNode) {
         Label defaultLabel = new Label();
         Label endLabel = new Label();
 
@@ -437,7 +437,16 @@ public final class SwitchNodeHandler
         java.util.Map<String, Integer> nameToOrd = new java.util.HashMap<>(constants.length);
         for (Enum<?> e : constants) nameToOrd.put(e.name(), e.ordinal());
 
+        // 校验所有 case 键是否为目标枚举类的有效常量名，防止 unboxing NPE
         String[] caseNames = cases.keySet().toArray(new String[0]);
+        for (String key : caseNames) {
+            if (!nameToOrd.containsKey(key)) {
+                throw gloomlib.script.api.ScriptCompileException.create(ctx.scriptId(), switchNode,
+                        String.format("SWITCH case '%s' is not a valid constant of enum %s. Valid values: %s",
+                                key, enumClass.getSimpleName(), nameToOrd.keySet()));
+            }
+        }
+
         int minOrd = Integer.MAX_VALUE, maxOrd = Integer.MIN_VALUE;
         for (String key : caseNames) {
             int ord = nameToOrd.get(key);

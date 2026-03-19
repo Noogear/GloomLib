@@ -564,16 +564,18 @@ public final class CheckOpEmitters {
 
 
     /**
-     * boolean：无 value → 直接检测；有 value → 调整
+     * boolean：无 value → 直接检测；有 value → 调整。
+     * NEQ 通过 {@link ASMUtils#invertJump} 翻转跳转方向。
      */
     private static int emitBooleanComparison(MethodVisitor mv, int slot, FlowNode node, CheckOp op) {
         mv.visitVarInsn(Opcodes.ILOAD, slot);
         Object value = node.getAttrOrDefault("value", null);
-        if (value == null || Boolean.TRUE.equals(value)) {
-            return Opcodes.IFNE;
-        } else {
-            return Opcodes.IFEQ;
-        }
+        // 基准跳转：IFNE 表示"为 true 则条件成立"（EQ 语义）；value=false 时取 IFEQ。
+        int baseJump = (value == null || Boolean.TRUE.equals(value))
+                ? Opcodes.IFNE
+                : Opcodes.IFEQ;
+        // NEQ 相对于 EQ 翻转跳转方向。
+        return (op == CheckOp.NEQ) ? ASMUtils.invertJump(baseJump) : baseJump;
     }
 
     /**

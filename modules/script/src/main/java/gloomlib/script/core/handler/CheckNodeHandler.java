@@ -45,12 +45,21 @@ public final class CheckNodeHandler
     }
 
     /**
-     * 操作符是否为数值类比较（决定 value 字段是否可尝试作为数学表达式解析）。
+     * 判断是否应尝试将 value 作为数学表达式解析。
+     * 严格数值操作符（GT/GTE/LT/LTE/BETWEEN）无条件进入数学路径；
+     * EQ/NEQ 仅在值包含运算符时进入（排除纯变量引用如 "{name}"）。
      */
-    private static boolean isNumericOp(String rawOp) {
+    private static boolean shouldAttemptMathParse(String rawOp, String value) {
         if (rawOp == null) return false;
         CheckOp op = CheckOp.resolve(rawOp).op();
-        return op.isNumeric();
+        if (op == CheckOp.GT || op == CheckOp.GTE || op == CheckOp.LT
+                || op == CheckOp.LTE || op == CheckOp.BETWEEN) {
+            return true;
+        }
+        if (op == CheckOp.EQ || op == CheckOp.NEQ) {
+            return gloomlib.math.core.Operator.containsArithmeticOperator(value);
+        }
+        return false;
     }
 
 
@@ -110,10 +119,12 @@ public final class CheckNodeHandler
 
             // 缺口2：若 value 仍为字符串且操作符为数值类，尝试作为数学表达式解析
             // 跳过 ENUM 字面量（ALL_CAPS 标识符），避免被误识别为数学变量引用
-            if (value instanceof String mathStr && isNumericOp(op)
+            // EQ/NEQ 仅在值含运算符时进入数学路径，避免纯变量引用（如 "{name}"）被误解析
+            if (value instanceof String mathStr && shouldAttemptMathParse(op, mathStr)
                     && ScriptParser.ValueParser.inferType(value) != IRType.ENUM) {
                 try {
-                    gloomlib.math.api.MathNode mathNode = gloomlib.math.api.MathParser.parse(mathStr);
+                    gloomlib.math.api.MathNode mathNode = gloomlib.math.api.MathParser.parse(
+                            mathStr, gloomlib.math.api.MathParser.ParseMode.ARITHMETIC_ONLY);
                     if (mathNode instanceof gloomlib.math.api.MathNode.LiteralNode(double value1)) {
                         // 纯常量表达式（如 "5*3+2"）——直接折叠为数值
                         value = value1;
@@ -146,7 +157,9 @@ public final class CheckNodeHandler
             nodeAttrs.put("onFailNodes", ScriptParser.parseFlow(onFailRaw));
         }
 
-        return new FlowNode(FlowNodeType.CHECK, "check", nodeAttrs.build(), numericValue, 0);
+        // 显式设置了数值时标记 FLAG_HAS_EXPLICIT_NUMERIC，用于区分默认 0.0 与用户显式 value: 0
+        int flags = (value instanceof Number) ? FlowNode.FLAG_HAS_EXPLICIT_NUMERIC : 0;
+        return new FlowNode(FlowNodeType.CHECK, "check", nodeAttrs.build(), numericValue, flags);
     }
 
     @Override

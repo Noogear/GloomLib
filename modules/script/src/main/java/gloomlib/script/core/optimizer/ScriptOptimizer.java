@@ -411,6 +411,14 @@ public final class ScriptOptimizer {
         return node;
     }
 
+    /**
+     * 仅执行常量提升 Pass（供模板快速路径在常量替换后重建 hoistedConstants）。
+     * 已优化的 IR 不需要重跑全部 Pass，只需重新提升常量以生成正确的键和值。
+     */
+    public ScriptUnit constantHoistingOnly(ScriptUnit unit, CompilationContext ctx) {
+        return constantHoisting(unit, ctx);
+    }
+
 
     /**
      * 扫描 flow 节点引用的变量集合。

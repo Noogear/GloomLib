@@ -113,42 +113,44 @@ public final class BytecodeCompiler implements Opcodes {
      * 窄化点链要求目标变量已经通过 {@code check: instanceof} 完成窄化。
      */
     public static void emitStringConcat(MethodVisitor mv, String template, CompilationContext ctx) {
-        List<String> parts = ScriptIR.parseTemplate(template);
+        List<ScriptIR.TemplatePart> parts = ScriptIR.parseTemplateParts(template);
         StringBuilder recipe = new StringBuilder();
         StringBuilder descriptor = new StringBuilder("(");
 
-        for (String part : parts) {
-            // ---- 纯文本段：转义 recipe 保留字符后原样追加 ----
-            if (!isTemplatePart(template, part)) {
-                for (char c : part.toCharArray()) {
-                    if (c == '\u0001' || c == '\u0002') recipe.append('\u0002');
-                    recipe.append(c);
+        for (ScriptIR.TemplatePart part : parts) {
+            switch (part) {
+                case ScriptIR.TemplatePart.Literal(String text) -> {
+                    // 纯文本段：转义 recipe 保留字符后原样追加
+                    for (char c : text.toCharArray()) {
+                        if (c == '\u0001' || c == '\u0002') recipe.append('\u0002');
+                        recipe.append(c);
+                    }
                 }
-                continue;
-            }
-
-            // ---- 占位符段：发射 LOAD + 追加描述符 ----
-            recipe.append('\u0001');
-            if (ScriptIR.isDottedPart(part)) {
-                // 窄化点链：ALOAD slot + CHECKCAST + accessor 链，返回末端类型
-                Class<?> propRaw = emitNarrowedPropertyLoad(mv, ctx, part).getRawType();
-                descriptor.append(concatDescriptorOf(propRaw));
-            } else if (ScriptIR.isIndexedRef(part)) {
-                // 索引访问：ALOAD base + accessor 链（List[n]、Map[key]、Array[i] 等）
-                String baseName = part.substring(0, part.indexOf('['));
-                String indexPath = part.substring(part.indexOf('['));
-                mv.visitVarInsn(ALOAD, ctx.getSlot(baseName));
-                java.util.List<PropertyAccessor> accessors =
-                        ScriptParser.PropertyResolver.resolveAccessors(
-                                ctx.getType(baseName).getToken(), indexPath, ctx.scriptId());
-                emitAccessorChain(accessors, mv, ctx);
-                Class<?> endRaw = accessors.isEmpty()
-                        ? ctx.getType(baseName).getToken().getRawType()
-                        : accessors.get(accessors.size() - 1).returnType().getRawType();
-                descriptor.append(concatDescriptorOf(endRaw));
-            } else {
-                // 普通变量槽：类型感知 LOAD
-                descriptor.append(emitSlotLoad(mv, ctx.getSlot(part), ctx.getType(part)));
+                case ScriptIR.TemplatePart.Variable(String name) -> {
+                    // 占位符段：发射 LOAD + 追加描述符
+                    recipe.append('\u0001');
+                    if (ScriptIR.isDottedPart(name)) {
+                        // 窄化点链：ALOAD slot + CHECKCAST + accessor 链，返回末端类型
+                        Class<?> propRaw = emitNarrowedPropertyLoad(mv, ctx, name).getRawType();
+                        descriptor.append(concatDescriptorOf(propRaw));
+                    } else if (ScriptIR.isIndexedRef(name)) {
+                        // 索引访问：ALOAD base + accessor 链（List[n]、Map[key]、Array[i] 等）
+                        String baseName = name.substring(0, name.indexOf('['));
+                        String indexPath = name.substring(name.indexOf('['));
+                        mv.visitVarInsn(ALOAD, ctx.getSlot(baseName));
+                        List<PropertyAccessor> accessors =
+                                ScriptParser.PropertyResolver.resolveAccessors(
+                                        ctx.getType(baseName).getToken(), indexPath, ctx.scriptId());
+                        emitAccessorChain(accessors, mv, ctx);
+                        Class<?> endRaw = accessors.isEmpty()
+                                ? ctx.getType(baseName).getToken().getRawType()
+                                : accessors.get(accessors.size() - 1).returnType().getRawType();
+                        descriptor.append(concatDescriptorOf(endRaw));
+                    } else {
+                        // 普通变量槽：类型感知 LOAD
+                        descriptor.append(emitSlotLoad(mv, ctx.getSlot(name), ctx.getType(name)));
+                    }
+                }
             }
         }
 
@@ -269,6 +271,17 @@ public final class BytecodeCompiler implements Opcodes {
                             propPath, ctx.scriptId());
             emitAccessorChain(accessors, mv, ctx);
 
+            // 末端返回类型（若存在 accessor 链）
+            com.google.common.reflect.TypeToken<?> endType = accessors.isEmpty()
+                    ? null : accessors.get(accessors.size() - 1).returnType();
+
+            // 若 accessor 链末端返回基本类型，正常路径需装箱使其与 null 路径的引用类型兼容，
+            // 否则 COMPUTE_FRAMES 在合流点无法合并 int 与 reference → VerifyError
+            boolean endsWithPrimitive = endType != null && endType.getRawType().isPrimitive();
+            if (endsWithPrimitive && !knownNonNull) {
+                ASMUtils.emitBox(mv, ScriptIR.IRType.fromToken(endType));
+            }
+
             if (!knownNonNull) {
                 mv.visitJumpInsn(GOTO, endLabel);
 
@@ -280,9 +293,11 @@ public final class BytecodeCompiler implements Opcodes {
                 mv.visitLabel(endLabel);
             }
 
-            return accessors.isEmpty()
+            return endType == null
                     ? com.google.common.reflect.TypeToken.of(narrowed != null ? narrowed : Object.class)
-                    : accessors.get(accessors.size() - 1).returnType();
+                    : (endsWithPrimitive && !knownNonNull)
+                            ? com.google.common.reflect.TypeToken.of(Object.class)
+                            : endType;
         }
 
         // 非安全访问：若 CheckNodeHandler 已将窄化值写回槽位（ALOAD+CHECKCAST+ASTORE），
@@ -299,10 +314,6 @@ public final class BytecodeCompiler implements Opcodes {
                 : accessors.get(accessors.size() - 1).returnType();
     }
 
-    private static boolean isTemplatePart(String fullTemplate, String part) {
-        // 支持安全访问语法：{entity?.name} → part = "entity?.name"
-        return fullTemplate.contains("{" + part + "}");
-    }
 
     /**
      * 若目标为基本类型但 Accessor 链末端返回的是装箱引用，则发射拆箱指令。

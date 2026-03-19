@@ -170,7 +170,13 @@ public final class DeserializationService {
             tmp = cs;
         } else if (raw instanceof Map map) {
             for (Object k : map.keySet()) {
-                tmp.set(k.toString(), map.get(k));
+                Object val = map.get(k);
+                String key = k.toString();
+                if (val instanceof Map<?, ?> nested) {
+                    tmp.createSection(key, nested);
+                } else {
+                    tmp.set(key, val);
+                }
             }
         }
 

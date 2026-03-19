@@ -3,6 +3,7 @@ package gloomlib.script.core;
 import com.google.common.base.Preconditions;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalNotification;
 import com.google.common.collect.ImmutableList;
 import gloomlib.diagnostic.DiagnosticCategory;
 import gloomlib.script.api.ScriptCompileException;
@@ -16,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -36,17 +38,39 @@ import java.util.function.Function;
 public final class CompilationPipeline {
 
     /**
-     * 编译缓存：ScriptUnit 深度 hash → 已编译结果。
+     * 结构化编译缓存键。record 的 equals/hashCode 做深度结构比较，消除裸 int 哈希碰撞。
      * <p>
-     * 使用 {@code softValues()} 确保：内存压力时 JVM 自动回收缓存条目，
-     * Hidden Class 可被从元空间 GC 卸载，无需手动 clearCache。
+     * 编译缓存使用 {@code softValues()} 确保内存压力时 JVM 自动回收，Hidden Class 可被元空间 GC 卸载。
      */
-    private static final Cache<Integer, CompiledScript> CACHE = CacheBuilder.newBuilder()
+    private record CacheKey(
+            String payloadClass,
+            ImmutableList<ScriptIR.VarDecl> vars,
+            ImmutableList<ScriptIR.FlowNode> flow,
+            Class<?> expectedReturnType
+    ) {}
+
+    /**
+     * 常量键追踪表：CacheKey → 该编译结果引用的常量键列表。
+     * 配合 CACHE 的 RemovalListener，在 CompiledScript 被驱逐时释放 REGISTRY 中的常量引用。
+     */
+    private static final ConcurrentHashMap<CacheKey, List<String>> CONSTANT_KEY_TRACKER =
+            new ConcurrentHashMap<>();
+
+    private static final Cache<CacheKey, CompiledScript> CACHE = CacheBuilder.newBuilder()
             .softValues()
+            .removalListener((RemovalNotification<CacheKey, CompiledScript> notification) -> {
+                CacheKey evictedKey = notification.getKey();
+                if (evictedKey != null) {
+                    List<String> keys = CONSTANT_KEY_TRACKER.remove(evictedKey);
+                    if (keys != null && !keys.isEmpty()) {
+                        ScriptConstantBootstrap.release(keys);
+                    }
+                }
+            })
             .build();
 
     /**
-     * 结构模板缓存：structural hash → 已优化的 IR 模板。
+     * 结构模板缓存：结构化键 → 已优化的 IR 模板。
      * <p>
      * 结构相同但常量值不同的脚本共享同一优化结果，
      * 仅需替换常量后重新运行 BytecodeCompiler（跳过全部验证和优化 Pass）。
@@ -69,7 +93,13 @@ public final class CompilationPipeline {
      * 清除指定脚本的编译缓存。
      */
     public static void invalidate(ScriptIR.ScriptUnit unit) {
-        CACHE.invalidate(deepHash(unit));
+        // 收集匹配键后调用 CACHE.invalidate()，确保 RemovalListener 被触发从而清理 CONSTANT_KEY_TRACKER
+        CACHE.asMap().keySet().stream()
+                .filter(k -> k.payloadClass().equals(unit.payloadClass())
+                        && k.vars().equals(unit.vars())
+                        && k.flow().equals(unit.flow()))
+                .collect(java.util.stream.Collectors.toList())
+                .forEach(CACHE::invalidate);
     }
 
     /**
@@ -80,6 +110,7 @@ public final class CompilationPipeline {
      */
     public static void clearCache() {
         CACHE.invalidateAll();
+        CONSTANT_KEY_TRACKER.clear();
         TEMPLATE_CACHE.invalidateAll();
         ScriptConstantBootstrap.purge();
     }
@@ -98,12 +129,6 @@ public final class CompilationPipeline {
         return (int) TEMPLATE_CACHE.size();
     }
 
-    private static int deepHash(ScriptIR.ScriptUnit unit) {
-        int h = unit.payloadClass().hashCode();
-        h = 31 * h + unit.vars().hashCode();
-        h = 31 * h + unit.flow().hashCode();
-        return h;
-    }
 
     /**
      * 计算脚本的"结构哈希"——只哈希节点类型、变量名、操作符等结构信息，
@@ -208,9 +233,9 @@ public final class CompilationPipeline {
             ScriptIR.FlowNode orig = origNodes.get(i);
             ScriptIR.FlowNode repl = newNodes.get(i);
 
-            // 数值差异（跳过默认 0 值，避免误替换非显式常量的节点）
+            // 数值差异（仅当节点显式设置了数值时才替换，通过 FLAG 区分默认 0.0 与用户显式 value: 0）
             if (Double.compare(orig.numericValue(), repl.numericValue()) != 0
-                    && orig.numericValue() != 0.0) {
+                    && orig.hasFlag(ScriptIR.FlowNode.FLAG_HAS_EXPLICIT_NUMERIC)) {
                 Double existing = numericSubs.get(orig.numericValue());
                 if (existing != null && Double.compare(existing, repl.numericValue()) != 0) {
                     throw new IllegalStateException("Numeric constant collision: "
@@ -405,7 +430,7 @@ public final class CompilationPipeline {
     public CompiledScript compile(ScriptIR.ScriptUnit unit, Class<?> expectedReturnType) {
         Preconditions.checkNotNull(unit, "unit");
 
-        int key = deepHash(unit) * 31 + expectedReturnType.hashCode();
+        CacheKey key = new CacheKey(unit.payloadClass(), unit.vars(), unit.flow(), expectedReturnType);
         CompiledScript cached = CACHE.getIfPresent(key);
         if (cached != null) {
             return new CompiledScript(unit, cached.handlerClass());
@@ -433,6 +458,7 @@ public final class CompilationPipeline {
 
             CompiledScript result = new CompiledScript(optimized, clazz);
             CACHE.put(key, result);
+            trackConstantKeys(key, ctx);
 
             // 注册结构模板（首次编译后缓存优化结果供后续快速路径复用）
             TEMPLATE_CACHE.asMap().putIfAbsent(structKey, new TemplateRecord(unit, optimized, ctx, expectedReturnType));
@@ -459,7 +485,7 @@ public final class CompilationPipeline {
         Method sam = findSAM(expectedInterfaceType, unit.id());
         Class<?> expectedReturnType = sam.getReturnType();
 
-        int key = deepHash(unit) * 31 + expectedInterfaceType.hashCode();
+        CacheKey key = new CacheKey(unit.payloadClass(), unit.vars(), unit.flow(), expectedInterfaceType);
         CompiledScript cached = CACHE.getIfPresent(key);
         if (cached != null) {
             return cached.newInstance(unit.id());
@@ -479,6 +505,7 @@ public final class CompilationPipeline {
 
             CompiledScript result = new CompiledScript(optimized, clazz);
             CACHE.put(key, result);
+            trackConstantKeys(key, ctx);
 
             return result.newInstance(unit.id());
         } catch (ScriptCompileException e) {
@@ -494,7 +521,7 @@ public final class CompilationPipeline {
     /**
      * 从模板快速编译：用新脚本的常量值替换模板 IR 中的常量，跳过全部验证和优化。
      */
-    private CompiledScript compileFromTemplate(ScriptIR.ScriptUnit newUnit, TemplateRecord template, int cacheKey) {
+    private CompiledScript compileFromTemplate(ScriptIR.ScriptUnit newUnit, TemplateRecord template, CacheKey cacheKey) {
         try {
             // 1. 将新脚本的常量值替换进已优化的 IR
             ScriptIR.ScriptUnit substituted = substituteConstants(template.optimizedUnit(), template.originalUnit(),
@@ -502,9 +529,12 @@ public final class CompilationPipeline {
 
             // 2. 重建编译上下文（使用与模板相同的 expectedReturnType）
             CompilationContext freshCtx = buildContext(newUnit, template.expectedReturnType());
-            // 复制分析 Pass 结果
-            freshCtx.setHoistedConstants(template.ctx().hoistedConstants());
+            // 复制活跃变量分析结果（结构相同，活跃变量集合不变）
             freshCtx.setLiveVars(template.ctx().liveVars());
+
+            // 对替换后的 IR 重新运行常量提升，重建正确的 ConstantDef 键和值，
+            // 避免复用模板的 hoistedConstants 导致 REGISTRY 中 putIfAbsent 引用过时常量
+            substituted = optimizer.constantHoistingOnly(substituted, freshCtx);
 
             // 3. 直接生成字节码（跳过 8 个优化 Pass + 全部验证）
             byte[] bytecode = compiler.compile(substituted, freshCtx);
@@ -514,6 +544,7 @@ public final class CompilationPipeline {
 
             CompiledScript result = new CompiledScript(substituted, clazz);
             CACHE.put(cacheKey, result);
+            trackConstantKeys(cacheKey, freshCtx);
             return result;
         } catch (Exception e) {
             // 模板路径出错时安全回退到完整编译
@@ -521,6 +552,19 @@ public final class CompilationPipeline {
                     + (template.expectedReturnType() != null ? template.expectedReturnType().hashCode() : 0));
             return compileFull(newUnit,
                     template.expectedReturnType() != null ? template.expectedReturnType() : Object.class);
+        }
+    }
+
+    /**
+     * 将编译上下文中的常量键列表注册到追踪表，
+     * 配合 CACHE RemovalListener 实现增量清理。
+     */
+    private static void trackConstantKeys(CacheKey key, CompilationContext ctx) {
+        List<String> keys = ctx.hoistedConstants().stream()
+                .map(CompilationContext.ConstantDef::key)
+                .toList();
+        if (!keys.isEmpty()) {
+            CONSTANT_KEY_TRACKER.put(key, keys);
         }
     }
 

@@ -52,6 +52,7 @@ public final class ScriptBuilder {
         attrs.put("op", op);
 
         double numericValue = 0.0;
+        boolean hasExplicitNumeric = false;
         if (value != null) {
             Object normalizedValue = value;
             if (value instanceof String s) {
@@ -64,9 +65,11 @@ public final class ScriptBuilder {
             attrs.put("valueType", ValueParsing.inferType(normalizedValue));
             if (normalizedValue instanceof Number n) {
                 numericValue = n.doubleValue();
+                hasExplicitNumeric = true;
             }
         }
-        return new FlowNode(FlowNodeType.CHECK, "check", attrs.build(), numericValue, 0);
+        int flags = hasExplicitNumeric ? FlowNode.FLAG_HAS_EXPLICIT_NUMERIC : 0;
+        return new FlowNode(FlowNodeType.CHECK, "check", attrs.build(), numericValue, flags);
     }
 
     /**
@@ -235,7 +238,7 @@ public final class ScriptBuilder {
         attrs.putAll(baseNode.attrs());
         appendOnFailNodes(attrs, onFail);
 
-        return new FlowNode(FlowNodeType.CHECK, "check", attrs.build(), baseNode.numericValue(), 0);
+        return new FlowNode(FlowNodeType.CHECK, "check", attrs.build(), baseNode.numericValue(), baseNode.flags());
     }
 
     /**

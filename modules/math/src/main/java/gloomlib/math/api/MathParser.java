@@ -28,6 +28,16 @@ import static java.util.Map.entry;
 public class MathParser {
 
     /**
+     * 解析模式：控制接受的运算符范围。
+     */
+    public enum ParseMode {
+        /** 接受所有运算符（算术 + 比较 + 布尔），默认模式。 */
+        FULL,
+        /** 仅接受算术运算符（{@code + - * / % ^}），比较和布尔运算符视为非法。 */
+        ARITHMETIC_ONLY
+    }
+
+    /**
      * 预定义常量名称 → 值映射（在标识符识别时优先匹配）。
      */
     private static final Map<String, Double> NAMED_CONSTANTS = Map.ofEntries(
@@ -38,23 +48,32 @@ public class MathParser {
     );
 
     private final String input;
+    private final ParseMode mode;
     private int pos = 0;
     private Token prevToken = null;
 
-    /**
-     * 自定义函数在操作符栈中的标记。
-     */
-
-
     public MathParser(String input) {
+        this(input, ParseMode.FULL);
+    }
+
+    private MathParser(String input, ParseMode mode) {
         this.input = input;
+        this.mode = mode;
     }
 
     /**
      * 解析表达式，变量节点使用名称（脚本内置路径）。
      */
     public static MathNode parse(String expression) {
-        return new MathParser(expression).parseExpression();
+        return new MathParser(expression, ParseMode.FULL).parseExpression();
+    }
+
+    /**
+     * 以指定模式解析表达式。{@link ParseMode#ARITHMETIC_ONLY} 模式下
+     * 比较 / 布尔运算符（{@code ==, !=, >, <, >=, <=, &&, ||}）将被拒绝。
+     */
+    public static MathNode parse(String expression, ParseMode mode) {
+        return new MathParser(expression, mode).parseExpression();
     }
 
     /**
@@ -605,10 +624,12 @@ public class MathParser {
 
     /**
      * 判断字符是否可能是运算符的起始字符（含双字符运算符的首字符）。
+     * {@link ParseMode#ARITHMETIC_ONLY} 模式下仅接受算术运算符字符。
      */
     private boolean isOperatorStartChar(char c) {
-        return c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '^'
-                || c == '=' || c == '!' || c == '>' || c == '<' || c == '|' || c == '&';
+        if (Operator.isArithmeticSymbolChar(c)) return true;
+        if (mode == ParseMode.ARITHMETIC_ONLY) return false;
+        return c == '=' || c == '!' || c == '>' || c == '<' || c == '|' || c == '&';
     }
 
     /**

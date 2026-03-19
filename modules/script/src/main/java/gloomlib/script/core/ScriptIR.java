@@ -147,22 +147,30 @@ public final class ScriptIR {
     }
 
     /**
-     * 解析模板字符串，提取交替的字面量和变量名列表。
-     * 例如 "HP:{hp}!" → ["HP:", "hp", "!"]
+     * 模板段：区分字面量文本和变量引用，消除 {@code isTemplatePart} 的假阳性问题。
      */
-    public static List<String> parseTemplate(String template) {
-        List<String> parts = new ArrayList<>();
+    public sealed interface TemplatePart {
+        record Literal(String text) implements TemplatePart {}
+        record Variable(String name) implements TemplatePart {}
+    }
+
+    /**
+     * 解析模板字符串，返回带类型标签的段列表（字面量 vs 变量引用）。
+     * 例如 "HP:{hp}!" → [Literal("HP:"), Variable("hp"), Literal("!")]
+     */
+    public static List<TemplatePart> parseTemplateParts(String template) {
+        List<TemplatePart> parts = new ArrayList<>();
         Matcher matcher = TEMPLATE_PATTERN.matcher(template);
         int last = 0;
         while (matcher.find()) {
             if (matcher.start() > last) {
-                parts.add(template.substring(last, matcher.start()));
+                parts.add(new TemplatePart.Literal(template.substring(last, matcher.start())));
             }
-            parts.add(matcher.group(1));
+            parts.add(new TemplatePart.Variable(matcher.group(1)));
             last = matcher.end();
         }
         if (last < template.length()) {
-            parts.add(template.substring(last));
+            parts.add(new TemplatePart.Literal(template.substring(last)));
         }
         return parts;
     }
@@ -487,6 +495,10 @@ public final class ScriptIR {
          * 标记：由优化器自动注入，非用户显式定义
          */
         public static final int FLAG_OPTIMIZER_INJECTED = 1 << 5;
+        /**
+         * 标记：节点显式设置了数值（含 value: 0 场景），用于区分默认 0.0 与用户显式 0
+         */
+        public static final int FLAG_HAS_EXPLICIT_NUMERIC = 1 << 6;
 
         /**
          * 无行号的 5-arg 构造。
